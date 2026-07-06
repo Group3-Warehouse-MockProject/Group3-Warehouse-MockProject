@@ -2,17 +2,10 @@ package com.fpt.sccw.entity;
 
 import java.util.*;
 
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
 
 @Entity
 @Table(name = "categories")
@@ -23,6 +16,7 @@ import lombok.Setter;
 @Builder
 public class Category extends BaseEntity{
     
+    @NotBlank(message = "Category name is required")
     @Column(name = "category_name", nullable = false, unique = true)
     private String name;
 
@@ -32,15 +26,12 @@ public class Category extends BaseEntity{
     @Column(name = "image_url")
     private String imageUrl;
 
-    @Column(name = "is_featured", nullable = false)
-    @Builder.Default
-    private Boolean isFeatured = false;
-
+    @NotNull(message = "Status deleted cannot be null")
     @Column(name = "is_deleted", nullable = false)
     @Builder.Default
     private Boolean isDeleted = false;
 
-    @OneToMany(mappedBy = "category", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "category", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private List<Product> products = new ArrayList<>();
 }

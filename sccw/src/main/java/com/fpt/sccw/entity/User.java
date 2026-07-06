@@ -1,10 +1,6 @@
 package com.fpt.sccw.entity;
 
-import java.util.List;
-import java.util.ArrayList;
-
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import java.util.*;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
@@ -12,11 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
 @Entity
-@Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_users_email",    columnNames = "email"),
-        @UniqueConstraint(name = "uk_users_username", columnNames = "username")
-    }
-)
+@Table(name = "users")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,33 +17,29 @@ import lombok.*;
 public class User extends BaseEntity{
 
     @NotBlank(message = "Username is required")
-    @Column(nullable = false, unique = true)
+    @Column(name = "username", nullable = false, length = 50, unique = true)
     private String username;
 
     @NotBlank(message = "Password is required")
-    @Column(nullable = false)
+    @Column(name = "password", nullable = false)
     private String password;
 
     @NotBlank(message = "Email is required")
-    @Column(nullable = false, unique = true)
+    @Column(name = "email", nullable = false, length = 100, unique = true)
     @Email(message = "Invalid email format")
     private String email;
 
-    @NotBlank(message = "First name is required")
-    @Column(name = "first_name", nullable = false)
-    private String firstName;
-
-    @NotBlank(message = "Last name is required")
-    @Column(name = "last_name", nullable = false)
-    private String lastName;
-
-    @NotBlank(message = "Address is required")
-    @Column(nullable = false)
-    private String address;
+    @NotBlank(message = "Fullname is required")
+    @Column(name = "full_name", length = 100, nullable = false)
+    private String fullName;
 
     @NotBlank(message = "Phone number is required")
-    @Column(name = "phone_number", nullable = false)
+    @Column(name = "phone_number", nullable = false, length = 15)
     private String phone;
+
+    @NotBlank(message = "Department is required")
+    @Column(name = "department", nullable = false)
+    private String department;
 
     @Column(name = "avatar_url")
     private String avatar;
@@ -60,14 +48,28 @@ public class User extends BaseEntity{
     @Builder.Default
     private Boolean isDeleted = false;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role_id", nullable = false)
+    private Role role;
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
-    private Role.RoleName role = Role.RoleName.STAFF;
-    
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<WarehouseReceipt> receipts = new ArrayList<>();
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
-    @JsonIgnore
-    private List<Order> orders = new ArrayList<>();
+    private List<InventoryCheck> inventoryChecks = new ArrayList<>();
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @Builder.Default
+    private List<Transfer> transfers = new ArrayList<>();
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @Builder.Default
+    private List<ApprovalHistory> approvalHistories = new ArrayList<>();
 
 }
