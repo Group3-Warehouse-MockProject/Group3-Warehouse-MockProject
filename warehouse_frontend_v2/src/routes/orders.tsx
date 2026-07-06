@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { orders, formatVND, warehouseCode } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
+import { ClipboardList, TrendingUp, Clock, Truck } from "lucide-react";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — TechStock" }] }),
@@ -18,6 +19,9 @@ const statusTone: Record<string, string> = {
 function OrdersPage() {
   const { activeWarehouseId } = useApp();
   const list = activeWarehouseId ? orders.filter((o) => o.warehouseId === activeWarehouseId) : orders;
+  const revenue = list.filter((o) => o.status !== "Cancelled").reduce((s, o) => s + o.total, 0);
+  const pending = list.filter((o) => o.status === "Pending").length;
+  const shipping = list.filter((o) => o.status === "Shipping").length;
 
   return (
     <AppShell>
@@ -25,6 +29,13 @@ function OrdersPage() {
         <div>
           <h1 className="text-3xl font-bold">Orders</h1>
           <p className="text-sm text-muted-foreground mt-1">B2B & retail orders fulfillment</p>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon={ClipboardList} label="Total orders" value={list.length} tone="primary" />
+          <Kpi icon={TrendingUp} label="Revenue" value={formatVND(revenue)} tone="accent" />
+          <Kpi icon={Clock} label="Pending" value={pending} tone="warning" />
+          <Kpi icon={Truck} label="Shipping" value={shipping} tone="primary" />
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -65,5 +76,20 @@ function OrdersPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: number | string; tone: "primary" | "accent" | "warning" }) {
+  const color = tone === "warning" ? "var(--warning)" : tone === "accent" ? "var(--accent)" : "var(--primary)";
+  return (
+    <div className="surface-card p-5">
+      <div className="flex items-start justify-between">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
+          <Icon className="size-4" />
+        </div>
+      </div>
+      <div className="mt-3 text-2xl font-bold">{value}</div>
+    </div>
   );
 }

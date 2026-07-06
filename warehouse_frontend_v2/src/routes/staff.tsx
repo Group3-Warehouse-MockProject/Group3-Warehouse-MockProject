@@ -2,12 +2,19 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { users, warehouseName, warehouseCode } from "@/lib/warehouse-data";
 import { useApp, roleLabels } from "@/lib/app-context";
-import { Info } from "lucide-react";
+import { Info, Users, Shield, Building2, UserCheck } from "lucide-react";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({ meta: [{ title: "Staff — TechStock" }] }),
   component: StaffPage,
 });
+
+const roleTone: Record<string, string> = {
+  Admin: "bg-destructive/15 text-destructive",
+  Manager: "bg-primary/15 text-primary",
+  Warehouse_Manager: "bg-accent/15 text-accent",
+  Staff: "bg-muted text-muted-foreground",
+};
 
 function StaffPage() {
   const { currentUser, activeWarehouseId } = useApp();
@@ -30,6 +37,10 @@ function StaffPage() {
       ? `Filtered: ${warehouseName(activeWarehouseId)}`
       : "All warehouses";
 
+  const managers = list.filter((u) => u.role === "Warehouse_Manager").length;
+  const staffCount = list.filter((u) => u.role === "Staff").length;
+  const warehouseSet = new Set(list.map((u) => u.warehouseId)).size;
+
   return (
     <AppShell>
       <div className="space-y-6">
@@ -44,37 +55,74 @@ function StaffPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {list.map((s) => (
-            <div key={s.id} className="surface-card p-5">
-              <div className="flex items-center gap-3">
-                <div className="size-12 rounded-full grid place-items-center font-semibold" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
-                  {s.initials}
-                </div>
-                <div className="min-w-0">
-                  <div className="font-semibold truncate">{s.name}</div>
-                  <div className="text-xs text-muted-foreground">{s.title}</div>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="p-3 rounded-lg bg-secondary/40">
-                  <div className="text-xs text-muted-foreground">Role</div>
-                  <div className="font-medium">{roleLabels[s.role]}</div>
-                </div>
-                <div className="p-3 rounded-lg bg-secondary/40">
-                  <div className="text-xs text-muted-foreground">Warehouse</div>
-                  <div className="font-medium font-mono text-xs">{s.warehouseId ? warehouseCode(s.warehouseId) : "—"}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-          {list.length === 0 && (
-            <div className="surface-card p-8 text-center text-muted-foreground text-sm md:col-span-2 lg:col-span-3">
-              No staff assigned to this warehouse yet.
-            </div>
-          )}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon={Users} label="Total people" value={list.length} tone="primary" />
+          <Kpi icon={UserCheck} label="Warehouse managers" value={managers} tone="accent" />
+          <Kpi icon={Shield} label="Staff members" value={staffCount} tone="primary" />
+          <Kpi icon={Building2} label="Warehouses covered" value={warehouseSet} tone="warning" />
+        </div>
+
+        <div className="surface-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
+                <tr>
+                  <th className="text-left p-4">Employee</th>
+                  <th className="text-left p-4">Title</th>
+                  <th className="text-left p-4">Role</th>
+                  <th className="text-left p-4">Warehouse</th>
+                  <th className="text-left p-4">Location</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((s) => (
+                  <tr key={s.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="size-9 rounded-full grid place-items-center text-xs font-semibold" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
+                          {s.initials}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{s.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{s.id}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 text-muted-foreground">{s.title}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${roleTone[s.role]}`}>{roleLabels[s.role]}</span>
+                    </td>
+                    <td className="p-4 font-mono text-xs">{s.warehouseId ? warehouseCode(s.warehouseId) : "—"}</td>
+                    <td className="p-4 text-muted-foreground">{s.warehouseId ? warehouseName(s.warehouseId) : "All warehouses"}</td>
+                  </tr>
+                ))}
+                {list.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground text-sm">
+                      No staff assigned to this warehouse yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: number | string; tone: "primary" | "accent" | "warning" }) {
+  const color = tone === "warning" ? "var(--warning)" : tone === "accent" ? "var(--accent)" : "var(--primary)";
+  return (
+    <div className="surface-card p-5">
+      <div className="flex items-start justify-between">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
+          <Icon className="size-4" />
+        </div>
+      </div>
+      <div className="mt-3 text-2xl font-bold">{value}</div>
+    </div>
   );
 }

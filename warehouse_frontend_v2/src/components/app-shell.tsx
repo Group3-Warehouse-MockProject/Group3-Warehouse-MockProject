@@ -14,6 +14,8 @@ import {
   ClipboardCheck,
   ChevronDown,
   Shield,
+  UserCircle,
+  LogOut,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
@@ -144,6 +146,32 @@ export function AppShell({ children }: { children: ReactNode }) {
 
               {roleOpen && (
                 <div className="absolute right-0 mt-2 w-72 rounded-xl surface-card p-2 shadow-xl z-50">
+                  <Link
+                    to="/profile"
+                    onClick={() => setRoleOpen(false)}
+                    className="w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 hover:bg-secondary"
+                  >
+                    <div className="size-8 rounded-full grid place-items-center" style={{ background: "color-mix(in oklab, var(--primary) 15%, transparent)", color: "var(--primary)" }}>
+                      <UserCircle className="size-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">My profile</div>
+                      <div className="text-[11px] text-muted-foreground">View & edit account</div>
+                    </div>
+                  </Link>
+                  <Link
+                    to="/login"
+                    onClick={() => setRoleOpen(false)}
+                    className="w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 hover:bg-secondary"
+                  >
+                    <div className="size-8 rounded-full grid place-items-center bg-destructive/15 text-destructive">
+                      <LogOut className="size-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">Sign out</div>
+                    </div>
+                  </Link>
+                  <div className="my-1 h-px bg-border" />
                   <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Switch user / role</div>
                   {users.map((u) => (
                     <button

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { suppliers } from "@/lib/warehouse-data";
-import { Star, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe } from "lucide-react";
 
 export const Route = createFileRoute("/suppliers")({
   head: () => ({ meta: [{ title: "Suppliers — TechStock" }] }),
@@ -36,6 +36,13 @@ function SuppliersPage() {
           <button className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
             <Plus className="size-4" />Add supplier
           </button>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon={Truck} label="Suppliers" value={suppliers.length} tone="primary" />
+          <Kpi icon={Award} label="Avg rating" value={(suppliers.reduce((s, x) => s + x.rating, 0) / suppliers.length).toFixed(2)} tone="accent" />
+          <Kpi icon={Clock} label="Avg on-time" value={`${Math.round(suppliers.reduce((s, x) => s + x.onTime, 0) / suppliers.length)}%`} tone="primary" />
+          <Kpi icon={Globe} label="Countries" value={new Set(suppliers.map((s) => s.country)).size} tone="warning" />
         </div>
 
         <div className="relative max-w-md">
@@ -135,5 +142,20 @@ function SuppliersPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: number | string; tone: "primary" | "accent" | "warning" }) {
+  const color = tone === "warning" ? "var(--warning)" : tone === "accent" ? "var(--accent)" : "var(--primary)";
+  return (
+    <div className="surface-card p-5">
+      <div className="flex items-start justify-between">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
+          <Icon className="size-4" />
+        </div>
+      </div>
+      <div className="mt-3 text-2xl font-bold">{value}</div>
+    </div>
   );
 }

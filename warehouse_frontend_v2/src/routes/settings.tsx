@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { warehouses } from "@/lib/warehouse-data";
-import { MapPin, Building2, Plus } from "lucide-react";
+import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — TechStock" }] }),
@@ -9,6 +9,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
+  const totalCap = warehouses.reduce((s, w) => s + w.capacity, 0);
   return (
     <AppShell>
       <div className="space-y-6 max-w-5xl">
@@ -20,6 +21,13 @@ function SettingsPage() {
           <button className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
             <Plus className="size-4" />Add warehouse
           </button>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon={Building2} label="Warehouses" value={warehouses.length} tone="primary" />
+          <Kpi icon={Package} label="Total capacity" value={totalCap.toLocaleString()} tone="accent" />
+          <Kpi icon={TrendingUp} label="Utilization" value="68%" tone="primary" />
+          <Kpi icon={AlertTriangle} label="Low-stock rule" value="20 units" tone="warning" />
         </div>
 
         <div className="surface-card p-6">
@@ -61,6 +69,15 @@ function SettingsPage() {
           </div>
         </div>
 
+        <div className="surface-card p-6 space-y-4">
+          <h2 className="font-semibold">System info</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div><div className="text-xs text-muted-foreground">Version</div><div className="font-semibold mt-1">TechStock 1.4.2</div></div>
+            <div><div className="text-xs text-muted-foreground">Region</div><div className="font-semibold mt-1">ap-southeast-1</div></div>
+            <div><div className="text-xs text-muted-foreground">Support</div><div className="font-semibold mt-1">ops@techstock.vn</div></div>
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2">
           <button className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm">Cancel</button>
           <button className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>
@@ -69,5 +86,20 @@ function SettingsPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: number | string; tone: "primary" | "accent" | "warning" }) {
+  const color = tone === "warning" ? "var(--warning)" : tone === "accent" ? "var(--accent)" : "var(--primary)";
+  return (
+    <div className="surface-card p-5">
+      <div className="flex items-start justify-between">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
+          <Icon className="size-4" />
+        </div>
+      </div>
+      <div className="mt-3 text-2xl font-bold">{value}</div>
+    </div>
   );
 }
