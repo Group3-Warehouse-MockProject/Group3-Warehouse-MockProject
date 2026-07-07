@@ -48,10 +48,10 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/auth/login",
-                    "/api/auth/register",
                     "/api/auth/logout",
                     "/error"
                 ).permitAll()
+                .requestMatchers("/api/auth/register").hasAnyAuthority("ADMIN", "MANAGER")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

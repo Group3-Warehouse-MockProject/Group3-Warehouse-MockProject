@@ -26,4 +26,14 @@ public class RegisterRequest {
     
     private String fullName;
     
+    @NotBlank(message = "Phone number is required")
+    private String phone;
+    
+    @NotBlank(message = "Department is required")
+    private String department;
+    
+    private String role;
+    
+    private Long warehouseId;
+    
 }

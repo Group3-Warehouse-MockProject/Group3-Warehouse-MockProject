@@ -108,5 +108,15 @@ public class JwtTokenProvider {
         }
         return null;
     }
+
+    /**
+     * Extract role from JWT token
+     * @param token JWT token
+     * @return role from token
+     */
+    public String getRoleFromToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        return (String) claims.get("role");
+    }
     
 }

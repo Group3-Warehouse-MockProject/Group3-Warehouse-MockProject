@@ -7,8 +7,12 @@ import com.fpt.sccw.service.*;
 import com.fpt.sccw.dto.request.LoginRequest;
 import com.fpt.sccw.dto.request.RegisterRequest;
 import com.fpt.sccw.dto.response.AuthResponse;
-import com.fpt.sccw.entity.*;
-import com.fpt.sccw.repository.*;
+import com.fpt.sccw.entity.Role;
+import com.fpt.sccw.entity.User;
+import com.fpt.sccw.entity.Warehouse;
+import com.fpt.sccw.repository.RoleRepository;
+import com.fpt.sccw.repository.UserRepository;
+import com.fpt.sccw.repository.WarehouseRepository;
 import com.fpt.sccw.security.JwtTokenProvider;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +30,7 @@ public class UserServiceImpl implements UserService {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
     private final RoleRepository roleRepository;
+    private final WarehouseRepository warehouseRepository;
 
     @Override
     public AuthResponse login(LoginRequest loginRequest) {
@@ -118,14 +123,33 @@ public class UserServiceImpl implements UserService {
         }
 
         // Create new user 
-        Role role = roleRepository.findByRoleName(Role.RoleName.STAFF)
-              .orElseThrow(() -> new RuntimeException("Default role not found"));
+        Role.RoleName roleNameEnum = Role.RoleName.STAFF;
+        if (registerRequest.getRole() != null && !registerRequest.getRole().isEmpty()) {
+            try {
+                roleNameEnum = Role.RoleName.valueOf(registerRequest.getRole().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // Keep STAFF as default if invalid
+            }
+        }
+        
+        Role role = roleRepository.findByRoleName(roleNameEnum)
+              .orElseThrow(() -> new RuntimeException("Role not found"));
+              
+        Warehouse warehouse = null;
+        if (registerRequest.getWarehouseId() != null) {
+            warehouse = warehouseRepository.findById(registerRequest.getWarehouseId())
+                  .orElseThrow(() -> new RuntimeException("Warehouse not found"));
+        }
+
         User newUser = User.builder()
                 .username(registerRequest.getUsername())
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .fullName(registerRequest.getFullName())
-                .role(role) // Default role
+                .phone(registerRequest.getPhone())
+                .department(registerRequest.getDepartment())
+                .role(role)
+                .warehouse(warehouse)
                 .isDeleted(false)
                 .build();
 
