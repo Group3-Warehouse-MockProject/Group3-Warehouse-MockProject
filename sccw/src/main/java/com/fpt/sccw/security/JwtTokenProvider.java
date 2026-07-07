@@ -25,13 +25,15 @@ public class JwtTokenProvider {
      * @param email user email
      * @param username user username
      * @param role user role
+     * @param warehouseId user warehouse ID
      * @return JWT token
      */
-    public String generateToken(Long userId, String email, String username, String role) {
+    public String generateToken(Long userId, String email, String username, String role, Long warehouseId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
         claims.put("role", role);
+        claims.put("warehouseId", warehouseId);
 
         return createToken(claims, email);
     }
@@ -91,6 +93,30 @@ public class JwtTokenProvider {
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+    }
+    
+    /**
+     * Extract warehouse ID from JWT token
+     * @param token JWT token
+     * @return warehouse ID from token, or null if not present
+     */
+    public Long getWarehouseIdFromToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        Object warehouseIdObj = claims.get("warehouseId");
+        if (warehouseIdObj != null) {
+            return ((Number) warehouseIdObj).longValue();
+        }
+        return null;
+    }
+
+    /**
+     * Extract role from JWT token
+     * @param token JWT token
+     * @return role from token
+     */
+    public String getRoleFromToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        return (String) claims.get("role");
     }
     
 }

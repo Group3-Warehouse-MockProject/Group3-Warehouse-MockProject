@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Cpu, Eye, EyeOff, Lock, Mail, User, ShieldCheck , CircleUser} from "lucide-react";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/register")({
   head: () => ({ meta: [{ title: "Create account — TechStock" }] }),
@@ -12,11 +13,22 @@ function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [department, setDepartment] = useState("");
+  const [role, setRole] = useState("Staff");
+  const [warehouseId, setWarehouseId] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [accept, setAccept] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get("/warehouses")
+      .then(res => setDbWarehouses(res.data))
+      .catch(err => console.error("Failed to fetch warehouses", err));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,12 +38,16 @@ function RegisterPage() {
     if (!accept) return setError("You must accept the terms to continue.");
     setError(null);
     try {
-      const { api } = await import("@/lib/api");
       const res = await api.post("/auth/register", {
         username: userName,
         email: email,
         password: password,
-        fullName: fullName
+        confirmPassword: confirm,
+        fullName: fullName,
+        phone: phone,
+        department: department,
+        role: role,
+        warehouseId: (role !== "Admin" && role !== "Manager") && warehouseId ? parseInt(warehouseId) : null
       });
       if (res.data.success) {
         navigate({ to: "/login" });
@@ -91,6 +107,62 @@ function RegisterPage() {
                 required
               />
             </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Phone number">
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="input px-3"
+                  placeholder="0987654321"
+                  required
+                />
+              </Field>
+              <Field label="Department">
+                <input
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="input px-3"
+                  placeholder="IT, HR, etc."
+                  required
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block relative">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Role</div>
+                <select 
+                  value={role} 
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                >
+                  <option value="Admin">Admin</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Warehouse_Manager">Warehouse Manager</option>
+                  <option value="Staff">Staff</option>
+                </select>
+              </label>
+              
+              {(role !== "Admin" && role !== "Manager") ? (
+                <label className="block relative">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Warehouse</div>
+                  <select 
+                    value={warehouseId} 
+                    onChange={(e) => setWarehouseId(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    required
+                  >
+                    <option value="" disabled>Select a warehouse</option>
+                    {dbWarehouses.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div />
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Password" icon={<Lock className="size-4" />}>
@@ -157,31 +229,53 @@ function RegisterPage() {
         </div>
       </div>
 
-      {/* Brand panel */}
-      <div className="hidden lg:flex relative overflow-hidden p-12 flex-col justify-between order-1 lg:order-2" style={{ background: "var(--gradient-primary)" }}>
-        <div className="flex items-center gap-3 text-primary-foreground">
-          <div className="size-11 rounded-xl grid place-items-center bg-white/15 backdrop-blur">
+      {/* Brand panel — bootstrap-style */}
+      <div className="hidden lg:flex bs-panel flex-col justify-between p-12 order-1 lg:order-2">
+        <div style={{ display: "flex", alignItems: "center", gap: ".75rem" }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, display: "grid", placeItems: "center", background: "#0d6efd", color: "#fff" }}>
             <Cpu className="size-6" />
           </div>
           <div>
-            <div className="text-lg font-semibold leading-tight">TechStock</div>
-            <div className="text-xs opacity-80">Smart Computer Warehouse</div>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "#212529" }}>TechStock</div>
+            <div style={{ fontSize: ".75rem", color: "#6c757d" }}>Smart Computer Warehouse</div>
           </div>
         </div>
-        <div className="relative text-primary-foreground max-w-md">
-          <h1 className="text-4xl font-bold leading-tight">Join the operations team.</h1>
-          <p className="mt-4 text-sm opacity-90">
+
+        <div className="bs-card" style={{ padding: "2rem", backgroundColor: "#fff", borderRadius: "0.75rem", border: "1px solid rgba(0,0,0,.125)", boxShadow: "0 0.5rem 1rem rgba(0,0,0,.05)" }}>
+          <span className="bs-badge bs-badge-success" style={{ fontSize: ".7rem", backgroundColor: "#198754", color: "white", padding: "0.25rem 0.5rem", borderRadius: "0.25rem", fontWeight: 700 }}>NEW ACCOUNT</span>
+          <h1 style={{ fontSize: "2.25rem", fontWeight: 700, lineHeight: 1.15, margin: "1rem 0 .75rem", color: "#212529" }}>
+            Join the operations team.
+          </h1>
+          <p style={{ color: "#495057", fontSize: ".95rem", marginBottom: "1.25rem" }}>
             Get scoped access to the warehouses you operate. Managers see everything;
             staff see only their own site. Zero guesswork.
           </p>
-          <div className="mt-8 flex items-center gap-2 text-sm opacity-90">
-            <ShieldCheck className="size-4" /> Role approvals handled by your Admin
+          <ul className="bs-list-check" style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
+            <li style={{ paddingLeft: "1.5rem", position: "relative", marginBottom: "0.5rem", color: "#495057" }}>
+              <span style={{ position: "absolute", left: 0, color: "#198754" }}>✓</span>
+              Instant onboarding — approved by your Admin
+            </li>
+            <li style={{ paddingLeft: "1.5rem", position: "relative", marginBottom: "0.5rem", color: "#495057" }}>
+              <span style={{ position: "absolute", left: 0, color: "#198754" }}>✓</span>
+              Auto-scoped warehouse visibility
+            </li>
+            <li style={{ paddingLeft: "1.5rem", position: "relative", marginBottom: "0.5rem", color: "#495057" }}>
+              <span style={{ position: "absolute", left: 0, color: "#198754" }}>✓</span>
+              Personal audit log for every action
+            </li>
+            <li style={{ paddingLeft: "1.5rem", position: "relative", marginBottom: "0.5rem", color: "#495057" }}>
+              <span style={{ position: "absolute", left: 0, color: "#198754" }}>✓</span>
+              Access from web & mobile
+            </li>
+          </ul>
+          <div className="bs-alert" style={{ marginTop: "1.25rem", fontSize: ".85rem", backgroundColor: "#cff4fc", color: "#055160", padding: "1rem", borderRadius: "0.375rem", border: "1px solid #b6effb" }}>
+            Role approvals handled by your Admin.
           </div>
         </div>
-        <div className="text-xs text-primary-foreground/70">
+
+        <div style={{ fontSize: ".78rem", color: "#6c757d" }}>
           © {new Date().getFullYear()} TechStock
         </div>
-        <div className="pointer-events-none absolute -bottom-40 -left-40 size-[520px] rounded-full bg-white/10 blur-3xl" />
       </div>
 
       <style>{`

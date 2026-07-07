@@ -12,7 +12,7 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const { setUserId } = useApp();
-  const [email, setEmail] = useState("alex.tran@techstock.vn");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
@@ -155,12 +155,7 @@ function LoginPage() {
 
           </form>
 
-          <p className="mt-6 text-sm text-muted-foreground">
-            New to TechStock?{" "}
-            <Link to="/register" className="text-primary hover:underline font-medium">
-              Create an account
-            </Link>
-          </p>
+
         </div>
       </div>
     </div>

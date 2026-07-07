@@ -26,6 +26,7 @@ public class AuthResponse {
         private String fullName;
         private String avatarUrl;
         private String role;
+        private Long warehouseId;
     
         public static UserDTO fromEntity(User user) {
             return UserDTO.builder()
@@ -35,6 +36,7 @@ public class AuthResponse {
                     .fullName(user.getFullName())
                     .avatarUrl(user.getAvatar())
                     .role(user.getRole().getRoleName().toString())
+                    .warehouseId(user.getWarehouse() != null ? user.getWarehouse().getId() : null)
                     .build();
         }
     }
