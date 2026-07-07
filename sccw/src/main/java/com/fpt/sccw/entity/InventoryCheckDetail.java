@@ -27,7 +27,8 @@ public class InventoryCheckDetail extends BaseEntity {
 
     @Column(name = "difference", nullable = false, insertable = false, updatable = false)
     @Formula("CASE WHEN actual_quantity - system_quantity > 0 THEN actual_quantity - system_quantity ELSE system_quantity - actual_quantity END")
-    private Long difference;
+    @Builder.Default
+    private Long difference = 0L;
 
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark;

@@ -18,16 +18,24 @@ function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError("Please enter your email and password.");
       return;
     }
     setError(null);
-    // UI-only: sign in as first user
-    setUserId(users[0].id);
-    navigate({ to: "/" });
+    try {
+      const { api } = await import("@/lib/api");
+      const res = await api.post("/auth/login", { emailOrUsername: email, password });
+      if (res.data.success) {
+        localStorage.setItem("token", res.data.token);
+        // Force context to re-evaluate or reload window
+        window.location.href = "/";
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Invalid credentials. Please try again.");
+    }
   };
 
   return (
@@ -145,35 +153,6 @@ function LoginPage() {
               Sign in
             </button>
 
-            <div className="flex items-center gap-3 my-1">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">or continue with</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setUserId(users[0].id);
-                  navigate({ to: "/" });
-                }}
-                className="h-11 rounded-lg border border-border bg-secondary hover:bg-muted text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <GoogleIcon /> Google
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUserId(users[0].id);
-                  navigate({ to: "/" });
-                }}
-                className="h-11 rounded-lg text-sm font-medium flex items-center justify-center gap-2 text-white"
-                style={{ background: "#1877F2" }}
-              >
-                <FacebookIcon /> Facebook
-              </button>
-            </div>
           </form>
 
           <p className="mt-6 text-sm text-muted-foreground">
@@ -185,24 +164,5 @@ function LoginPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
-      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.2 29.4 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.9 29 5 24 5 13.5 5 5 13.5 5 24s8.5 19 19 19 19-8.5 19-19c0-1.2-.1-2.3-.4-3.5z"/>
-      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.6 19 13 24 13c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.9 29 5 24 5 16.3 5 9.7 9.4 6.3 14.7z"/>
-      <path fill="#4CAF50" d="M24 43c5.1 0 9.7-1.9 13.2-5l-6.1-5c-2 1.4-4.5 2.2-7.1 2.2-5.3 0-9.8-2.7-11.3-6.9l-6.5 5C9.6 38.5 16.2 43 24 43z"/>
-      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.5l6.1 5c-.4.4 6.7-4.9 6.7-14.5 0-1.2-.1-2.3-.4-3.5z"/>
-    </svg>
-  );
-}
-
-function FacebookIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M22 12a10 10 0 1 0-11.6 9.9v-7H8v-2.9h2.4V9.8c0-2.4 1.4-3.7 3.6-3.7 1 0 2.1.2 2.1.2v2.3h-1.2c-1.2 0-1.5.7-1.5 1.5v1.8h2.6l-.4 2.9h-2.2v7A10 10 0 0 0 22 12z"/>
-    </svg>
   );
 }

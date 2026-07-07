@@ -36,7 +36,8 @@ public class Warehouse extends BaseEntity{
     private List<Inventory> inventories = new ArrayList<>();
 
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
-    private User manager;
+    @Builder.Default
+    private List<User> managers = new ArrayList<>();
 
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default

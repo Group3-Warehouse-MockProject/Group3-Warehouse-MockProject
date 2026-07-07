@@ -1,5 +1,7 @@
 package com.fpt.sccw.repository;
 
+import java.util.*;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -8,4 +10,24 @@ import com.fpt.sccw.entity.Product;
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
     
+    List<Product> findByNameContainingIgnoreCase(String name);
+
+    List<Product> findByCategoryId(Long categoryId);
+
+    List<Product> findBySupplierId(Long supplierId);
+
+    List<Product> findByStatus(String status);
+
+    boolean existsByName(String name);
+
+    boolean existsByCode(String code);
+    
+    List<Product> findByIsDeletedFalse();
+
+    List<Product> findByIsDeletedTrue();
+
+    Optional<Product> findByCode(String code);
+
+    Optional<Product> findByName(String name);
+
 }

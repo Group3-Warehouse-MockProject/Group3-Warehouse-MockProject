@@ -16,7 +16,6 @@ import lombok.*;
 @Builder
 public class User extends BaseEntity{
 
-    @NotBlank(message = "Username is required")
     @Column(name = "username", nullable = false, length = 50, unique = true)
     private String username;
 
@@ -68,7 +67,7 @@ public class User extends BaseEntity{
     @Builder.Default
     private List<Transfer> transfers = new ArrayList<>();
 
-    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @OneToMany(mappedBy = "approver", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private List<ApprovalHistory> approvalHistories = new ArrayList<>();
 
