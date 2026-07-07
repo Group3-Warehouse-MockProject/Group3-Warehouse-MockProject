@@ -18,15 +18,27 @@ function RegisterPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName || !email || !password) return setError("Please fill in all required fields.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
     if (password !== confirm) return setError("Passwords do not match.");
     if (!accept) return setError("You must accept the terms to continue.");
     setError(null);
-    // UI-only demo
-    navigate({ to: "/login" });
+    try {
+      const { api } = await import("@/lib/api");
+      const res = await api.post("/auth/register", {
+        username: userName,
+        email: email,
+        password: password,
+        fullName: fullName
+      });
+      if (res.data.success) {
+        navigate({ to: "/login" });
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Registration failed. Please try again.");
+    }
   };
 
   return (

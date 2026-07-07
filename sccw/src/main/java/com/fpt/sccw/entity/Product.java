@@ -36,6 +36,10 @@ public class Product extends BaseEntity {
     @Column(name = "image_url")
     private String imageUrl;
 
+    @Column(name = "is_deleted", nullable = false)
+    @Builder.Default
+    private Boolean isDeleted = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     @Builder.Default

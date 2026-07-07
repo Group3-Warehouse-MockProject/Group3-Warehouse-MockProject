@@ -14,6 +14,7 @@ import { Route as StocktakeRouteImport } from './routes/stocktake'
 import { Route as StaffRouteImport } from './routes/staff'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as OutboundRouteImport } from './routes/outbound'
 import { Route as OrdersRouteImport } from './routes/orders'
@@ -44,6 +45,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/orders': typeof OrdersRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
+  '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
   '/staff': typeof StaffRoute
@@ -97,6 +104,7 @@ export interface FileRoutesByTo {
   '/orders': typeof OrdersRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
+  '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
   '/staff': typeof StaffRoute
@@ -111,6 +119,7 @@ export interface FileRoutesById {
   '/orders': typeof OrdersRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
+  '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
   '/settings': typeof SettingsRoute
   '/staff': typeof StaffRoute
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/outbound'
     | '/products'
+    | '/profile'
     | '/register'
     | '/settings'
     | '/staff'
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/outbound'
     | '/products'
+    | '/profile'
     | '/register'
     | '/settings'
     | '/staff'
@@ -152,6 +163,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/outbound'
     | '/products'
+    | '/profile'
     | '/register'
     | '/settings'
     | '/staff'
@@ -166,6 +178,7 @@ export interface RootRouteChildren {
   OrdersRoute: typeof OrdersRoute
   OutboundRoute: typeof OutboundRoute
   ProductsRoute: typeof ProductsRoute
+  ProfileRoute: typeof ProfileRoute
   RegisterRoute: typeof RegisterRoute
   SettingsRoute: typeof SettingsRoute
   StaffRoute: typeof StaffRoute
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -262,6 +282,7 @@ const rootRouteChildren: RootRouteChildren = {
   OrdersRoute: OrdersRoute,
   OutboundRoute: OutboundRoute,
   ProductsRoute: ProductsRoute,
+  ProfileRoute: ProfileRoute,
   RegisterRoute: RegisterRoute,
   SettingsRoute: SettingsRoute,
   StaffRoute: StaffRoute,

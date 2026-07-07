@@ -35,6 +35,10 @@ public class Supplier extends BaseEntity{
     @Column(name = "status", nullable = false)
     private String status;
 
+    @NotBlank(message = "Supplier country is required")
+    @Column(name = "country", nullable = false)
+    private String country;
+
     @OneToMany(mappedBy = "supplier", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private List<Product> products = new ArrayList<>();

@@ -14,6 +14,8 @@ import {
   ClipboardCheck,
   ChevronDown,
   Shield,
+  UserCircle,
+  LogOut,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
@@ -40,8 +42,16 @@ const roleTone: Record<string, string> = {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { currentUser, setUserId, activeWarehouseId, setActiveWarehouseId, canSwitchWarehouse } = useApp();
+  const { currentUser, activeWarehouseId, setActiveWarehouseId, canSwitchWarehouse, logout } = useApp();
   const [roleOpen, setRoleOpen] = useState(false);
+
+  // Auto redirect to login if no valid session
+  if (!currentUser) {
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -144,29 +154,33 @@ export function AppShell({ children }: { children: ReactNode }) {
 
               {roleOpen && (
                 <div className="absolute right-0 mt-2 w-72 rounded-xl surface-card p-2 shadow-xl z-50">
-                  <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Switch user / role</div>
-                  {users.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        setUserId(u.id);
-                        setRoleOpen(false);
-                      }}
-                      className={`w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 hover:bg-secondary ${
-                        u.id === currentUser.id ? "bg-secondary/60" : ""
-                      }`}
-                    >
-                      <div className="size-8 rounded-full grid place-items-center text-xs font-semibold" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
-                        {u.initials}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{u.name}</div>
-                        <div className="text-[11px] text-muted-foreground truncate">
-                          {roleLabels[u.role]}{u.warehouseId ? ` • ${u.warehouseId}` : ""}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                  <Link
+                    to="/profile"
+                    onClick={() => setRoleOpen(false)}
+                    className="w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 hover:bg-secondary"
+                  >
+                    <div className="size-8 rounded-full grid place-items-center" style={{ background: "color-mix(in oklab, var(--primary) 15%, transparent)", color: "var(--primary)" }}>
+                      <UserCircle className="size-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">My profile</div>
+                      <div className="text-[11px] text-muted-foreground">View & edit account</div>
+                    </div>
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setRoleOpen(false);
+                      logout();
+                    }}
+                    className="w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 hover:bg-secondary"
+                  >
+                    <div className="size-8 rounded-full grid place-items-center bg-destructive/15 text-destructive">
+                      <LogOut className="size-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">Sign out</div>
+                    </div>
+                  </button>
                 </div>
               )}
             </div>

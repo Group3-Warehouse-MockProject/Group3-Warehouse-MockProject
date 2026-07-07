@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { products, formatVND, warehouseCode } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
-import { Filter, Plus, Download } from "lucide-react";
+import { Filter, Plus, Download, Package, Boxes, AlertTriangle, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/products")({
   head: () => ({ meta: [{ title: "Products — TechStock" }] }),
@@ -12,6 +12,9 @@ export const Route = createFileRoute("/products")({
 function ProductsPage() {
   const { activeWarehouseId } = useApp();
   const list = activeWarehouseId ? products.filter((p) => p.warehouseId === activeWarehouseId) : products;
+  const units = list.reduce((s, p) => s + p.stock, 0);
+  const low = list.filter((p) => p.stock < p.reorder).length;
+  const value = list.reduce((s, p) => s + p.stock * p.cost, 0);
   return (
     <AppShell>
       <div className="space-y-6">
@@ -27,6 +30,13 @@ function ProductsPage() {
               <Plus className="size-4" />Add SKU
             </button>
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon={Package} label="Total SKUs" value={list.length} tone="primary" />
+          <Kpi icon={Boxes} label="Units in stock" value={units.toLocaleString()} tone="accent" />
+          <Kpi icon={TrendingUp} label="Inventory value" value={formatVND(value)} tone="primary" />
+          <Kpi icon={AlertTriangle} label="Low stock" value={low} tone="warning" />
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -80,5 +90,20 @@ function ProductsPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: number | string; tone: "primary" | "accent" | "warning" }) {
+  const color = tone === "warning" ? "var(--warning)" : tone === "accent" ? "var(--accent)" : "var(--primary)";
+  return (
+    <div className="surface-card p-5">
+      <div className="flex items-start justify-between">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
+          <Icon className="size-4" />
+        </div>
+      </div>
+      <div className="mt-3 text-2xl font-bold">{value}</div>
+    </div>
   );
 }

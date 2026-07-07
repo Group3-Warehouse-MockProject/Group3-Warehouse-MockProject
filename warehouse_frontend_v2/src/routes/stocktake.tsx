@@ -9,7 +9,7 @@ import {
   warehouseName,
 } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
-import { ClipboardCheck, Plus, X, Save } from "lucide-react";
+import { ClipboardCheck, Plus, X, Save, ListChecks, AlertTriangle, CheckCircle2, Boxes } from "lucide-react";
 
 export const Route = createFileRoute("/stocktake")({
   head: () => ({ meta: [{ title: "Stocktake — TechStock" }] }),
@@ -44,6 +44,11 @@ function StocktakePage() {
   const countingTake = counting ? stocktakes.find((s) => s.id === counting) : null;
   const countingProducts = countingTake ? products.filter((p) => p.warehouseId === countingTake.warehouseId) : [];
 
+  const totalItems = list.reduce((s, x) => s + x.items, 0);
+  const totalVar = list.reduce((s, x) => s + x.variance, 0);
+  const inProgress = list.filter((s) => s.status === "In Progress").length;
+  const completed = list.filter((s) => s.status === "Completed").length;
+
   return (
     <AppShell>
       <div className="space-y-6">
@@ -65,10 +70,11 @@ function StocktakePage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <KpiCard label="Total sheets" value={list.length.toString()} />
-          <KpiCard label="In progress" value={list.filter((s) => s.status === "In Progress").length.toString()} tone="warning" />
-          <KpiCard label="Total variance" value={list.reduce((s, x) => s + x.variance, 0).toString()} tone="accent" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon={ListChecks} label="Total sheets" value={list.length} tone="primary" />
+          <Kpi icon={AlertTriangle} label="In progress" value={inProgress} tone="warning" />
+          <Kpi icon={CheckCircle2} label="Completed" value={completed} tone="accent" />
+          <Kpi icon={Boxes} label="Items / variance" value={`${totalItems} / ${totalVar}`} tone="primary" />
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -210,11 +216,17 @@ function StocktakePage() {
   );
 }
 
-function KpiCard({ label, value, tone = "primary" }: { label: string; value: string; tone?: "primary" | "warning" | "accent" }) {
+function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: number | string; tone: "primary" | "accent" | "warning" }) {
+  const color = tone === "warning" ? "var(--warning)" : tone === "accent" ? "var(--accent)" : "var(--primary)";
   return (
     <div className="surface-card p-5">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`mt-2 text-3xl font-bold ${tone === "warning" ? "text-warning" : tone === "accent" ? "text-accent" : ""}`}>{value}</div>
+      <div className="flex items-start justify-between">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
+          <Icon className="size-4" />
+        </div>
+      </div>
+      <div className="mt-3 text-2xl font-bold">{value}</div>
     </div>
   );
 }

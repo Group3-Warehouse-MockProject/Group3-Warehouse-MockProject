@@ -18,16 +18,24 @@ function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError("Please enter your email and password.");
       return;
     }
     setError(null);
-    // UI-only: sign in as first user
-    setUserId(users[0].id);
-    navigate({ to: "/" });
+    try {
+      const { api } = await import("@/lib/api");
+      const res = await api.post("/auth/login", { emailOrUsername: email, password });
+      if (res.data.success) {
+        localStorage.setItem("token", res.data.token);
+        // Force context to re-evaluate or reload window
+        window.location.href = "/";
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Invalid credentials. Please try again.");
+    }
   };
 
   return (
@@ -144,6 +152,7 @@ function LoginPage() {
             >
               Sign in
             </button>
+
           </form>
 
           <p className="mt-6 text-sm text-muted-foreground">

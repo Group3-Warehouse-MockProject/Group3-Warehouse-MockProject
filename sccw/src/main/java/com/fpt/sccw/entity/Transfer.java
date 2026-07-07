@@ -3,7 +3,6 @@ package com.fpt.sccw.entity;
 import java.util.*;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
 import lombok.*;
 
 @Entity
