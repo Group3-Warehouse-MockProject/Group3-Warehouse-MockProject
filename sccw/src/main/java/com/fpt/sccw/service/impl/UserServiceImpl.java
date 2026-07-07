@@ -71,7 +71,8 @@ public class UserServiceImpl implements UserService {
                 user.getId(),
                 user.getEmail(),
                 user.getUsername(),
-                user.getRole().getRoleName().name()
+                user.getRole().getRoleName().name(),
+                user.getWarehouse() != null ? user.getWarehouse().getId() : null
         );
 
         log.info("Login successful for user: {}", user.getEmail());
@@ -136,7 +137,8 @@ public class UserServiceImpl implements UserService {
                 savedUser.getId(),
                 savedUser.getEmail(),
                 savedUser.getUsername(),
-                savedUser.getRole().getRoleName().name()
+                savedUser.getRole().getRoleName().name(),
+                savedUser.getWarehouse() != null ? savedUser.getWarehouse().getId() : null
         );
 
         log.info("Registration successful for user: {}", savedUser.getEmail());
@@ -152,8 +154,6 @@ public class UserServiceImpl implements UserService {
     @Override
     public String logout(String token) {
         log.info("User logout");
-        // In a real application, you might add the token to a blacklist
-        // For now, logout is handled on the client side by removing the token
         return "Logout successful";
     }
 

@@ -4,11 +4,11 @@ import {
   weeklyFlow,
   categoryShare,
   movements,
-  products,
   formatVND,
-  warehouseCode,
 } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { Package, TrendingUp, TrendingDown, AlertTriangle, Boxes, ArrowUpRight } from "lucide-react";
 import {
   Area,
@@ -34,19 +34,42 @@ export const Route = createFileRoute("/")({
 
 function Dashboard() {
   const { activeWarehouseId } = useApp();
-  const scopedProducts = activeWarehouseId
-    ? products.filter((p) => p.warehouseId === activeWarehouseId)
-    : products;
+  
+  const { data: inventoryData, isLoading } = useQuery({
+    queryKey: ["inventory", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/inventory", {
+        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+      });
+      return res.data;
+    }
+  });
+
+  const { data: warehousesData } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get("/warehouses");
+      return res.data;
+    }
+  });
+  const warehouses = warehousesData || [];
+
+  const getWarehouseCode = (id: string) => {
+    return warehouses.find((w: any) => w.id === id)?.code || id;
+  };
+
+  const scopedProducts = inventoryData || [];
+    
   const scopedMovements = activeWarehouseId
     ? movements.filter((m) => m.warehouseId === activeWarehouseId)
     : movements;
-  const lowStock = scopedProducts.filter((p) => p.stock < p.reorder).slice(0, 5);
+  const lowStock = scopedProducts.filter((p: any) => p.stock < p.reorder).slice(0, 5);
 
   const kpis = [
     { label: "Total SKUs", value: scopedProducts.length.toString(), delta: "+3 this week", icon: Package, tone: "primary" },
-    { label: "Units in stock", value: scopedProducts.reduce((s, p) => s + p.stock, 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" },
-    { label: "Inventory value", value: formatVND(scopedProducts.reduce((s, p) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" },
-    { label: "Low stock", value: scopedProducts.filter((p) => p.stock < p.reorder).length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" },
+    { label: "Units in stock", value: scopedProducts.reduce((s: number, p: any) => s + p.stock, 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" },
+    { label: "Inventory value", value: formatVND(scopedProducts.reduce((s: number, p: any) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" },
+    { label: "Low stock", value: scopedProducts.filter((p: any) => p.stock < p.reorder).length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" },
   ];
 
   return (
@@ -56,7 +79,7 @@ function Dashboard() {
           <div>
             <h1 className="text-3xl font-bold">Warehouse overview</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Smart computers & components warehouse — {activeWarehouseId ? warehouseCode(activeWarehouseId) : "All warehouses"} • Updated Jun 24, 2026
+              Smart computers & components warehouse — {activeWarehouseId ? getWarehouseCode(activeWarehouseId) : "All warehouses"} • Updated Jun 24, 2026
             </p>
           </div>
         </div>
@@ -168,7 +191,7 @@ function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{m.product}</div>
-                    <div className="text-xs text-muted-foreground">{m.partner} • {m.staff} • {warehouseCode(m.warehouseId)}</div>
+                    <div className="text-xs text-muted-foreground">{m.partner} • {m.staff} • {getWarehouseCode(m.warehouseId)}</div>
                   </div>
                   <div className="text-right">
                     <div className={`text-sm font-semibold ${m.type === "Inbound" ? "text-primary" : "text-accent"}`}>
@@ -190,7 +213,7 @@ function Dashboard() {
               <span className="text-xs px-2 py-1 rounded-md bg-warning/15 text-warning font-medium">{lowStock.length}</span>
             </div>
             <div className="space-y-3">
-              {lowStock.map((p) => (
+              {lowStock.map((p: any) => (
                 <div key={p.sku} className="p-3 rounded-lg border border-border/60">
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0">

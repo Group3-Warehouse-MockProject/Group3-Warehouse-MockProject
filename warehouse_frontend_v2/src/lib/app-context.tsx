@@ -39,7 +39,7 @@ function getUserFromToken(): AppUser | null {
     id: String(payload.userId),
     name: name,
     role: role,
-    warehouseId: null, // Mặc định null cho backend user
+    warehouseId: payload.warehouseId ? String(payload.warehouseId) : null,
     initials: initials,
     title: roleLabels[role],
   };

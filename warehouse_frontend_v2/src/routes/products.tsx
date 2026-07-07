@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { products, formatVND, warehouseCode } from "@/lib/warehouse-data";
+import { formatVND, warehouseCode } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { Filter, Plus, Download, Package, Boxes, AlertTriangle, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/products")({
@@ -11,10 +13,26 @@ export const Route = createFileRoute("/products")({
 
 function ProductsPage() {
   const { activeWarehouseId } = useApp();
-  const list = activeWarehouseId ? products.filter((p) => p.warehouseId === activeWarehouseId) : products;
-  const units = list.reduce((s, p) => s + p.stock, 0);
-  const low = list.filter((p) => p.stock < p.reorder).length;
-  const value = list.reduce((s, p) => s + p.stock * p.cost, 0);
+  
+  const { data: inventoryData, isLoading, error } = useQuery({
+    queryKey: ["inventory", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/inventory", {
+        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+      });
+      return res.data;
+    }
+  });
+
+  const list = inventoryData || [];
+  
+  const units = list.reduce((s: number, p: any) => s + p.stock, 0);
+  const low = list.filter((p: any) => p.stock < p.reorder).length;
+  const value = list.reduce((s: number, p: any) => s + p.stock * p.cost, 0);
+
+  if (isLoading) return <AppShell><div className="p-8">Loading data...</div></AppShell>;
+  if (error) return <AppShell><div className="p-8 text-destructive">Error loading data</div></AppShell>;
+
   return (
     <AppShell>
       <div className="space-y-6">
@@ -55,7 +73,7 @@ function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((p) => {
+                {list.map((p: any) => {
                   const low = p.stock < p.reorder;
                   const out = p.stock === 0;
                   return (

@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
-import { users, warehouses } from "@/lib/warehouse-data";
+import { users } from "@/lib/warehouse-data";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -44,6 +46,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { currentUser, activeWarehouseId, setActiveWarehouseId, canSwitchWarehouse, logout } = useApp();
   const [roleOpen, setRoleOpen] = useState(false);
+
+  const { data: warehousesData } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get("/warehouses");
+      return res.data;
+    }
+  });
+  
+  const warehouses = warehousesData || [];
 
   // Auto redirect to login if no valid session
   if (!currentUser) {
@@ -75,7 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="mt-1 w-full h-9 px-2 rounded-lg bg-input border border-border text-sm disabled:opacity-70"
           >
             {canSwitchWarehouse && <option value="ALL">All warehouses</option>}
-            {warehouses.map((w) => (
+            {warehouses.map((w: any) => (
               <option key={w.id} value={w.id}>
                 {w.code} — {w.city}
               </option>
