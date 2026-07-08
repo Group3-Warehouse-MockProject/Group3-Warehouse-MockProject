@@ -24,6 +24,9 @@ public class Product extends BaseEntity {
     @Column(name = "product_name", nullable = false)
     private String name;
 
+    @Column(name = "image_product")
+    private String imgProduct;
+
     @NotBlank(message = "Specification is required")
     @Column(name = "specification", columnDefinition = "TEXT")
     private String specification;
