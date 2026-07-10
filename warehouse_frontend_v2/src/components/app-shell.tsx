@@ -16,10 +16,11 @@ import {
   Shield,
   UserCircle,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
-import { users } from "@/lib/warehouse-data";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
@@ -46,6 +47,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { currentUser, activeWarehouseId, setActiveWarehouseId, canSwitchWarehouse, logout } = useApp();
   const [roleOpen, setRoleOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const saved = (localStorage.getItem("ts-theme") as "dark" | "light") || "dark";
+    setTheme(saved);
+    document.documentElement.classList.toggle("light", saved === "light");
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.classList.toggle("light", nextTheme === "light");
+    localStorage.setItem("ts-theme", nextTheme);
+  };
 
   const { data: warehousesData } = useQuery({
     queryKey: ["warehouses"],
@@ -143,6 +158,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Shield className="size-3" />
               {roleLabels[currentUser.role]}
             </span>
+
+            <button 
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="size-10 rounded-lg bg-secondary border border-border grid place-items-center hover:bg-muted transition-colors relative">
+              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </button>
 
             <button className="size-10 rounded-lg bg-secondary border border-border grid place-items-center hover:bg-muted transition-colors relative">
               <Bell className="size-4" />
