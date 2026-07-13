@@ -49,9 +49,12 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/auth/login",
                     "/api/auth/logout",
+                    "/api/ai/**",
+                    "/oauth2/**",
+                    "/login/oauth2/**",
                     "/error"
                 ).permitAll()
-                .requestMatchers("/api/auth/register").hasAnyAuthority("ADMIN", "MANAGER")
+                .requestMatchers("/api/auth/register").hasAnyRole("ADMIN", "MANAGER")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
