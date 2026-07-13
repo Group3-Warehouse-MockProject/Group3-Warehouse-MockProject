@@ -145,7 +145,7 @@ function Dashboard() {
                 <CartesianGrid stroke="oklch(0.3 0.025 252)" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="day" stroke="oklch(0.68 0.02 250)" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="oklch(0.68 0.02 250)" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ background: "oklch(0.21 0.025 252)", border: "1px solid oklch(0.3 0.025 252)", borderRadius: 8 }} />
+                <Tooltip contentStyle={{ background: "var(--background)", border: "1px solid oklch(0.3 0.025 252)", borderRadius: 8 }} />
                 <Area type="monotone" dataKey="in" stroke="oklch(0.78 0.16 195)" fill="url(#gIn)" strokeWidth={2} />
                 <Area type="monotone" dataKey="out" stroke="oklch(0.72 0.18 155)" fill="url(#gOut)" strokeWidth={2} />
               </AreaChart>
@@ -160,7 +160,7 @@ function Dashboard() {
                 <CartesianGrid stroke="oklch(0.3 0.025 252)" strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" stroke="oklch(0.68 0.02 250)" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis type="category" dataKey="name" stroke="oklch(0.68 0.02 250)" fontSize={12} tickLine={false} axisLine={false} width={70} />
-                <Tooltip contentStyle={{ background: "oklch(0.21 0.025 252)", border: "1px solid oklch(0.3 0.025 252)", borderRadius: 8 }} />
+                <Tooltip contentStyle={{ background: "var(--background)", border: "1px solid oklch(0.3 0.025 252)", borderRadius: 8 }} />
                 <Bar dataKey="value" fill="oklch(0.78 0.16 195)" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>

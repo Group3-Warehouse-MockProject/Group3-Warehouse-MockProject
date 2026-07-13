@@ -13,20 +13,10 @@ function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
   useEffect(() => {
-    const saved = (localStorage.getItem("ts-theme") as "dark" | "light") || "dark";
-    setTheme(saved);
+    const saved = localStorage.getItem("ts-theme") || "dark";
     document.documentElement.classList.toggle("light", saved === "light");
   }, []);
-
-  const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    document.documentElement.classList.toggle("light", nextTheme === "light");
-    localStorage.setItem("ts-theme", nextTheme);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
