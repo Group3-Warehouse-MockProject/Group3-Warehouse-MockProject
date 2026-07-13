@@ -63,9 +63,13 @@ public class User extends BaseEntity{
     @Builder.Default
     private List<InventoryCheck> inventoryChecks = new ArrayList<>();
 
-    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @OneToMany(mappedBy = "createdByUser", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
-    private List<Transfer> transfers = new ArrayList<>();
+    private List<Transfer> createdTransfers = new ArrayList<>();
+
+    @OneToMany(mappedBy = "assignedByUser", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @Builder.Default
+    private List<Transfer> assignedTransfers = new ArrayList<>();
 
     @OneToMany(mappedBy = "approver", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default

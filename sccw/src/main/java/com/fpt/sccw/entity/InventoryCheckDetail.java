@@ -1,7 +1,5 @@
 package com.fpt.sccw.entity;
 
-import org.hibernate.annotations.Formula;
-
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
@@ -25,8 +23,7 @@ public class InventoryCheckDetail extends BaseEntity {
     @Column(name = "system_quantity", nullable = false)
     private Long systemQuantity;
 
-    @Column(name = "difference", nullable = false, insertable = false, updatable = false)
-    @Formula("CASE WHEN actual_quantity - system_quantity > 0 THEN actual_quantity - system_quantity ELSE system_quantity - actual_quantity END")
+    @Column(name = "difference", nullable = false)
     @Builder.Default
     private Long difference = 0L;
 
@@ -40,4 +37,12 @@ public class InventoryCheckDetail extends BaseEntity {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "inventory_check_id", nullable = false)
     private InventoryCheck inventoryCheck;
+
+    @PrePersist
+    @PreUpdate
+    public void calculateDifference() {
+        if (this.actualQuantity != null && this.systemQuantity != null) {
+            this.difference = Math.abs(this.actualQuantity - this.systemQuantity);
+        }
+    }
 }

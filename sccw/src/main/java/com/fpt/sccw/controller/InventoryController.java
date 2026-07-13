@@ -4,7 +4,6 @@ import com.fpt.sccw.dto.response.InventoryDTO;
 import com.fpt.sccw.entity.Inventory;
 import com.fpt.sccw.repository.InventoryRepository;
 import com.fpt.sccw.repository.UserRepository;
-import com.fpt.sccw.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
