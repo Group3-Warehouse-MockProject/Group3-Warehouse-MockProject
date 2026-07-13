@@ -1,8 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import { Cpu, Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
-import { useApp } from "@/lib/app-context";
-import { users } from "@/lib/warehouse-data";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — TechStock" }] }),
@@ -10,13 +8,15 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const navigate = useNavigate();
-  const { setUserId } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const saved = localStorage.getItem("ts-theme") || "dark";
+    document.documentElement.classList.toggle("light", saved === "light");
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +66,7 @@ function LoginPage() {
         <div className="text-xs text-primary-foreground/70">
           © {new Date().getFullYear()} TechStock — Ho Chi Minh City · Hanoi · Da Nang
         </div>
-        <div className="pointer-events-none absolute -bottom-40 -right-40 size-[520px] rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-40 -right-40 size-130 rounded-full bg-white/10 blur-3xl" />
       </div>
 
       {/* Form panel */}
