@@ -1,57 +1,119 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { products, users, warehouses, warehouseCode } from "@/lib/warehouse-data";
+import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
-import { ArrowRightLeft, MapPin, Search, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRightLeft, MapPin, Search, Plus, Trash2, ChevronLeft, ChevronRight, CheckCircle2, Truck } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/components/modal-shell";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarcodeScanner } from "@/components/barcode-scanner";
 
 export const Route = createFileRoute("/transfer")({
-  head: () => ({ meta: [{ title: "Transfers — TechStock" }] }),
+  head: () => ({ meta: [{ title: "Transfers - TechStock" }] }),
   component: TransferPage,
 });
 
-const statusTone: Record<string, string> = {
+type TransferLine = {
+  sku: string;
+  productName: string;
+  quantity: number;
+};
+
+type Transfer = {
+  id: number;
+  code: string;
+  type: "Cross-Warehouse" | "Internal Movement";
+  status: "Pending" | "InTransit" | "Completed" | "Cancelled";
+  remark?: string;
+  date: string;
+  sourceWarehouseId: number;
+  sourceWarehouseCode: string;
+  sourceWarehouseName: string;
+  destinationWarehouseId?: number | null;
+  destinationWarehouseCode?: string;
+  destinationWarehouseName?: string;
+  createdBy: string;
+  assignedBy?: string;
+  totalQuantity: number;
+  lines: TransferLine[];
+};
+
+const statusTone: Record<Transfer["status"], string> = {
   Pending: "bg-warning/15 text-warning",
   InTransit: "bg-primary/15 text-primary",
   Completed: "bg-success/15 text-success",
   Cancelled: "bg-destructive/15 text-destructive",
 };
 
-// Mock transfers
-const mockTransfers = [
-  {
-    id: "TRF-2026-001",
-    type: "Cross-Warehouse",
-    from: "W01",
-    to: "W02",
-    date: "2026-07-14",
-    items: 45,
-    status: "Completed",
-    createdBy: "Admin User"
-  },
-  {
-    id: "TRF-2026-002",
-    type: "Internal Movement",
-    from: "Zone A - Rack 1",
-    to: "Zone C - Rack 4",
-    date: "2026-07-14",
-    items: 120,
-    status: "Pending",
-    createdBy: "Staff User"
-  }
-];
-
 function TransferPage() {
+  const { activeWarehouseId } = useApp();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [q, setQ] = useState("");
   const limit = 15;
-  const totalPages = Math.max(1, Math.ceil(mockTransfers.length / limit));
-  const safePage = Math.min(page, totalPages);
-  const paginatedList = mockTransfers.slice((safePage - 1) * limit, safePage * limit);
 
-  const pending = mockTransfers.filter(t => t.status === "Pending").length;
+  const { data: transfers = [], isLoading, error } = useQuery({
+    queryKey: ["transfers", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/transfers", {
+        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {},
+      });
+      return res.data as Transfer[];
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: Transfer["status"] }) => {
+      const res = await api.put(`/transfers/${id}/status`, { status });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["warehouses"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || err.message || "Could not update transfer status.");
+    },
+  });
+
+  const list = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return transfers;
+    return transfers.filter((t) =>
+      [
+        t.code,
+        t.type,
+        t.status,
+        t.sourceWarehouseCode,
+        t.destinationWarehouseCode,
+        t.createdBy,
+        t.assignedBy,
+        t.remark,
+        ...(t.lines || []).flatMap((line) => [line.sku, line.productName]),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle))
+    );
+  }, [q, transfers]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, activeWarehouseId]);
+
+  const totalPages = Math.max(1, Math.ceil(list.length / limit));
+  const safePage = Math.min(page, totalPages);
+  const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
+
+  const pending = list.filter((t) => t.status === "Pending").length;
+  const inTransit = list.filter((t) => t.status === "InTransit").length;
+  const crossWarehouse = list.filter((t) => t.type === "Cross-Warehouse").length;
+  const internal = list.filter((t) => t.type === "Internal Movement").length;
+
+  if (isLoading) return <AppShell><div className="p-8">Loading transfers...</div></AppShell>;
+  if (error) return <AppShell><div className="p-8 text-destructive">Error loading transfers</div></AppShell>;
 
   return (
     <AppShell>
@@ -67,10 +129,20 @@ function TransferPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={ArrowRightLeft} label="Total Transfers" value={mockTransfers.length} tone="primary" />
+          <Kpi icon={ArrowRightLeft} label="Total transfers" value={list.length} tone="primary" />
           <Kpi icon={Search} label="Pending" value={pending} tone="warning" />
-          <Kpi icon={MapPin} label="Cross-Warehouse" value={mockTransfers.filter(t => t.type === "Cross-Warehouse").length} tone="accent" />
-          <Kpi icon={MapPin} label="Internal" value={mockTransfers.filter(t => t.type === "Internal Movement").length} tone="primary" />
+          <Kpi icon={Truck} label="In transit" value={inTransit} tone="primary" />
+          <Kpi icon={MapPin} label="Cross / Internal" value={`${crossWarehouse} / ${internal}`} tone="accent" />
+        </div>
+
+        <div className="relative max-w-md w-full sm:w-96">
+          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search transfer, SKU, warehouse..."
+            className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
+          />
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -83,60 +155,86 @@ function TransferPage() {
                   <th className="text-left p-4">From</th>
                   <th className="text-left p-4">To</th>
                   <th className="text-left p-4">Date</th>
-                  <th className="text-right p-4">Items Qty</th>
+                  <th className="text-right p-4">Qty</th>
                   <th className="text-left p-4">Created by</th>
                   <th className="text-center p-4">Status</th>
+                  <th className="text-right p-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedList.map((t) => (
-                  <tr key={t.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                    <td className="p-4 font-mono text-xs">{t.id}</td>
+                  <tr key={t.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors align-top">
+                    <td className="p-4">
+                      <div className="font-mono text-xs">{t.code}</div>
+                      <div className="text-[11px] text-muted-foreground mt-1">{t.lines?.length || 0} SKU(s)</div>
+                    </td>
                     <td className="p-4 font-medium">{t.type}</td>
-                    <td className="p-4 font-mono text-xs">{t.from}</td>
-                    <td className="p-4 font-mono text-xs">{t.to}</td>
+                    <td className="p-4">
+                      <div className="font-mono text-xs">{t.sourceWarehouseCode}</div>
+                      <div className="text-[11px] text-muted-foreground">{t.sourceWarehouseName}</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="font-mono text-xs">{t.destinationWarehouseCode || "Internal"}</div>
+                      <div className="text-[11px] text-muted-foreground">{t.destinationWarehouseName || t.remark || "Same warehouse"}</div>
+                    </td>
                     <td className="p-4 text-muted-foreground">{t.date}</td>
-                    <td className="p-4 text-right font-semibold">{t.items}</td>
-                    <td className="p-4">{t.createdBy}</td>
+                    <td className="p-4 text-right font-semibold">{t.totalQuantity}</td>
+                    <td className="p-4">
+                      <div>{t.createdBy}</div>
+                      {t.assignedBy && <div className="text-[11px] text-muted-foreground">Assigned: {t.assignedBy}</div>}
+                    </td>
                     <td className="p-4 text-center">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[t.status]}`}>{t.status}</span>
                     </td>
+                    <td className="p-4">
+                      <div className="flex justify-end gap-2">
+                        {t.status === "Pending" && (
+                          <button
+                            onClick={() => statusMutation.mutate({ id: t.id, status: "InTransit" })}
+                            disabled={statusMutation.isPending}
+                            className="h-8 px-2 rounded-md bg-secondary border border-border text-xs hover:bg-muted inline-flex items-center gap-1"
+                          >
+                            <Truck className="size-3.5" />Dispatch
+                          </button>
+                        )}
+                        {(t.status === "Pending" || t.status === "InTransit") && (
+                          <button
+                            onClick={() => statusMutation.mutate({ id: t.id, status: "Completed" })}
+                            disabled={statusMutation.isPending}
+                            className="h-8 px-2 rounded-md bg-success/15 text-success text-xs hover:bg-success/20 inline-flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="size-3.5" />Complete
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
+                {paginatedList.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
+                      No transfers match your search.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
           {totalPages > 1 && (
             <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
               <div className="text-muted-foreground text-xs">
-                Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, mockTransfers.length)} of {mockTransfers.length} entries
+                Showing {(safePage - 1) * limit + 1}-{Math.min(safePage * limit, list.length)} of {list.length} entries
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
-                >
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40">
                   <ChevronLeft className="size-4" />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setPage(n)}
-                    className={`size-8 rounded-md text-xs font-medium ${
-                      n === safePage
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary border border-border hover:bg-muted"
-                    }`}
-                  >
+                  <button key={n} onClick={() => setPage(n)} className={`size-8 rounded-md text-xs font-medium ${n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"}`}>
                     {n}
                   </button>
                 ))}
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
-                >
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40">
                   <ChevronRight className="size-4" />
                 </button>
               </div>
@@ -150,41 +248,89 @@ function TransferPage() {
 }
 
 function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, canSwitchWarehouse } = useApp();
+  const queryClient = useQueryClient();
   const [type, setType] = useState<"cross" | "internal">("cross");
-  
-  const [sourceWarehouse, setSourceWarehouse] = useState<string>(activeWarehouseId ?? warehouses[0].id);
+  const [sourceWarehouse, setSourceWarehouse] = useState<string>(activeWarehouseId ?? "");
   const [destWarehouse, setDestWarehouse] = useState<string>("");
-
+  const [assignedById, setAssignedById] = useState<string>("");
   const [sourceZone, setSourceZone] = useState<string>("");
   const [destZone, setDestZone] = useState<string>("");
-
+  const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<{ sku: string; qty: number }[]>([]);
 
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => (await api.get("/warehouses")).data,
+    enabled: open,
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.get("/users")).data,
+    enabled: open,
+  });
+
+  const { data: products = [] } = useQuery({
+    queryKey: ["products", sourceWarehouse],
+    queryFn: async () => {
+      const res = await api.get("/products", {
+        params: sourceWarehouse ? { warehouseIdParam: sourceWarehouse } : {},
+      });
+      return res.data;
+    },
+    enabled: open && Boolean(sourceWarehouse),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const defaultWarehouse = activeWarehouseId ?? warehouses[0]?.id ?? "";
+    setSourceWarehouse(String(defaultWarehouse));
+  }, [activeWarehouseId, open, warehouses]);
+
+  const availableProducts = products.filter((p: any) => String(p.warehouseId) === String(sourceWarehouse) && p.stock > 0);
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const cleanLines = lines.filter((line) => line.sku && line.qty > 0);
+      if (!sourceWarehouse) throw new Error("Select a source warehouse.");
+      if (type === "cross" && !destWarehouse) throw new Error("Select a destination warehouse.");
+      if (type === "internal" && (!sourceZone || !destZone)) throw new Error("Enter source and destination locations.");
+      if (cleanLines.length === 0) throw new Error("Add at least one product.");
+
+      const payload = {
+        type,
+        sourceWarehouseId: Number(sourceWarehouse),
+        destinationWarehouseId: type === "cross" ? Number(destWarehouse) : null,
+        assignedById: assignedById ? Number(assignedById) : null,
+        sourceLocation: type === "internal" ? sourceZone : null,
+        destinationLocation: type === "internal" ? destZone : null,
+        remark,
+        lines: cleanLines.map((line) => ({ sku: line.sku, quantity: Number(line.qty) })),
+      };
+      const res = await api.post("/transfers", payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transfers"] });
+      handleClose();
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || err.message || "Could not create transfer.");
+    },
+  });
+
   const handleScan = (barcode: string) => {
-    const product = products.find(p => p.sku.toLowerCase() === barcode.toLowerCase());
+    const product = availableProducts.find((p: any) => p.sku.toLowerCase() === barcode.toLowerCase());
     if (!product) {
-      alert(`Barcode ${barcode} not found in catalog.`);
-      return;
-    }
-    
-    // For cross warehouse, ensure it exists in source
-    if (type === "cross" && product.warehouseId !== sourceWarehouse) {
-      alert(`Product ${barcode} does not belong to source warehouse.`);
+      alert(`Barcode ${barcode} not found in source warehouse stock.`);
       return;
     }
 
-    // For internal, ensure it exists in selected warehouse
-    if (type === "internal" && product.warehouseId !== sourceWarehouse) {
-      alert(`Product ${barcode} does not belong to the selected warehouse.`);
-      return;
-    }
-
-    setLines(prev => {
-      const existing = prev.find(l => l.sku === product.sku);
-      if (existing) return prev.map(l => l.sku === product.sku ? { ...l, qty: l.qty + 1 } : l);
-      
-      const emptyIdx = prev.findIndex(l => !l.sku);
+    setLines((prev) => {
+      const existing = prev.find((l) => l.sku === product.sku);
+      if (existing) return prev.map((l) => l.sku === product.sku ? { ...l, qty: l.qty + 1 } : l);
+      const emptyIdx = prev.findIndex((l) => !l.sku);
       if (emptyIdx >= 0) {
         const copy = [...prev];
         copy[emptyIdx] = { ...copy[emptyIdx], sku: product.sku, qty: 1 };
@@ -200,6 +346,11 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
     setLines((l) => l.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
 
   const handleClose = () => {
+    setDestWarehouse("");
+    setAssignedById("");
+    setSourceZone("");
+    setDestZone("");
+    setRemark("");
     setLines([]);
     onClose();
   };
@@ -214,8 +365,10 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
       maxWidth="52rem"
       footer={
         <>
-          <button onClick={handleClose} type="button" className="h-10 px-4 ml-auto rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
-          <button onClick={handleClose} type="button" className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>Confirm Transfer</button>
+          <button onClick={handleClose} type="button" disabled={createMutation.isPending} className="h-10 px-4 ml-auto rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+          <button onClick={() => createMutation.mutate()} type="button" disabled={createMutation.isPending} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>
+            {createMutation.isPending ? "Creating..." : "Confirm Transfer"}
+          </button>
         </>
       }
     >
@@ -234,37 +387,39 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
         {type === "cross" ? (
           <>
             <Field label="Source Warehouse" required>
-              <select className={selectCls} value={sourceWarehouse} onChange={e => setSourceWarehouse(e.target.value)}>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
+              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setLines([]); }}>
+                <option value="" disabled>Select source</option>
+                {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.city}</option>)}
               </select>
             </Field>
             <Field label="Destination Warehouse" required>
-              <select className={selectCls} value={destWarehouse} onChange={e => setDestWarehouse(e.target.value)}>
+              <select className={selectCls} value={destWarehouse} onChange={(e) => setDestWarehouse(e.target.value)}>
                 <option value="" disabled>Select destination</option>
-                {warehouses.filter(w => w.id !== sourceWarehouse).map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
+                {warehouses.filter((w: any) => String(w.id) !== String(sourceWarehouse)).map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.city}</option>)}
               </select>
             </Field>
           </>
         ) : (
           <>
             <Field label="Warehouse" required className="sm:col-span-2">
-              <select className={selectCls} value={sourceWarehouse} onChange={e => setSourceWarehouse(e.target.value)}>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
+              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setLines([]); }}>
+                <option value="" disabled>Select warehouse</option>
+                {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.city}</option>)}
               </select>
             </Field>
             <Field label="Source Location" required>
-              <input className={inputCls} placeholder="e.g. Zone A - Rack 1 - Bin 2" value={sourceZone} onChange={e => setSourceZone(e.target.value)} />
+              <input className={inputCls} placeholder="e.g. Zone A - Rack 1 - Bin 2" value={sourceZone} onChange={(e) => setSourceZone(e.target.value)} />
             </Field>
             <Field label="Destination Location" required>
-              <input className={inputCls} placeholder="e.g. Zone B - Rack 3 - Bin 1" value={destZone} onChange={e => setDestZone(e.target.value)} />
+              <input className={inputCls} placeholder="e.g. Zone B - Rack 3 - Bin 1" value={destZone} onChange={(e) => setDestZone(e.target.value)} />
             </Field>
           </>
         )}
-        <Field label="Date" required><input type="date" className={inputCls} defaultValue={new Date().toISOString().slice(0, 10)} /></Field>
-        <Field label="Created by" required>
-          <select className={selectCls} defaultValue="">
-            <option value="" disabled>Select staff</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name} — {u.role}</option>)}
+        <Field label="Date" required><input type="date" className={inputCls} value={new Date().toISOString().slice(0, 10)} readOnly /></Field>
+        <Field label="Assigned manager">
+          <select className={selectCls} value={assignedById} onChange={(e) => setAssignedById(e.target.value)}>
+            <option value="">No assignee</option>
+            {users.map((u: any) => <option key={u.id} value={u.id}>{u.fullName} - {u.role}</option>)}
           </select>
         </Field>
       </div>
@@ -290,15 +445,26 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
             </thead>
             <tbody>
               {lines.map((row, i) => {
+                const selected = availableProducts.find((p: any) => p.sku === row.sku);
+                const max = selected?.stock ?? undefined;
                 return (
                   <tr key={i} className="border-t border-border/60">
                     <td className="p-2">
                       <select className={selectCls} value={row.sku} onChange={(e) => updateLine(i, { sku: e.target.value })}>
                         <option value="">Select product</option>
-                        {products.filter(pr => pr.warehouseId === sourceWarehouse).map((pr) => <option key={pr.sku} value={pr.sku}>{pr.sku} — {pr.name}</option>)}
+                        {availableProducts.map((pr: any) => <option key={`${pr.sku}-${pr.warehouseId}`} value={pr.sku}>{pr.sku} - {pr.name} ({pr.stock} available)</option>)}
                       </select>
                     </td>
-                    <td className="p-2"><input type="number" min={1} className={inputCls + " text-right"} value={row.qty} onChange={(e) => updateLine(i, { qty: Math.max(1, Number(e.target.value)) })} /></td>
+                    <td className="p-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={max}
+                        className={inputCls + " text-right"}
+                        value={row.qty}
+                        onChange={(e) => updateLine(i, { qty: Math.max(1, Number(e.target.value)) })}
+                      />
+                    </td>
                     <td className="p-2 text-center">
                       <button type="button" onClick={() => removeLine(i)} className="size-8 grid place-items-center rounded-md hover:bg-destructive/15 hover:text-destructive disabled:opacity-30">
                         <Trash2 className="size-4" />
@@ -307,13 +473,18 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
                   </tr>
                 );
               })}
+              {lines.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="p-6 text-center text-sm text-muted-foreground">Add products by scanner or manual entry.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
       <div className="mt-4">
-        <Field label="Notes"><textarea className={textareaCls} placeholder="Reason for transfer, handling instructions..." /></Field>
+        <Field label="Notes"><textarea className={textareaCls} value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Reason for transfer, handling instructions..." /></Field>
       </div>
     </ModalShell>
   );
