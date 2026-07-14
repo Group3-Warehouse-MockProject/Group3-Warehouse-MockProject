@@ -7,16 +7,15 @@ public class Status{
         OUT
     }
 
-    public enum ProductStatus{
-        IN_STOCK,
-        LOW_STOCK,
-        OUT_STOCK
-    }
-
     public enum ReceiptStatus{
         PENDING,
         APPROVED,
         REJECTED
+    }
+
+    public enum TransferType{
+        Cross_Warehouse,
+        Internal_Warehouse,
     }
 
     public enum TransactionType{

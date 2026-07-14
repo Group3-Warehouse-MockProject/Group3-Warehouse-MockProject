@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TransferRouteImport } from './routes/transfer'
 import { Route as SuppliersRouteImport } from './routes/suppliers'
 import { Route as StocktakeRouteImport } from './routes/stocktake'
 import { Route as StaffRouteImport } from './routes/staff'
@@ -17,11 +18,15 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as OutboundRouteImport } from './routes/outbound'
-import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InboundRouteImport } from './routes/inbound'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TransferRoute = TransferRouteImport.update({
+  id: '/transfer',
+  path: '/transfer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuppliersRoute = SuppliersRouteImport.update({
   id: '/suppliers',
   path: '/suppliers',
@@ -62,11 +67,6 @@ const OutboundRoute = OutboundRouteImport.update({
   path: '/outbound',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OrdersRoute = OrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -87,7 +87,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/inbound': typeof InboundRoute
   '/login': typeof LoginRoute
-  '/orders': typeof OrdersRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
@@ -96,12 +95,12 @@ export interface FileRoutesByFullPath {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/transfer': typeof TransferRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/inbound': typeof InboundRoute
   '/login': typeof LoginRoute
-  '/orders': typeof OrdersRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
@@ -110,13 +109,13 @@ export interface FileRoutesByTo {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/transfer': typeof TransferRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/inbound': typeof InboundRoute
   '/login': typeof LoginRoute
-  '/orders': typeof OrdersRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
@@ -125,6 +124,7 @@ export interface FileRoutesById {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/transfer': typeof TransferRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -132,7 +132,6 @@ export interface FileRouteTypes {
     | '/'
     | '/inbound'
     | '/login'
-    | '/orders'
     | '/outbound'
     | '/products'
     | '/profile'
@@ -141,12 +140,12 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/transfer'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/inbound'
     | '/login'
-    | '/orders'
     | '/outbound'
     | '/products'
     | '/profile'
@@ -155,12 +154,12 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/transfer'
   id:
     | '__root__'
     | '/'
     | '/inbound'
     | '/login'
-    | '/orders'
     | '/outbound'
     | '/products'
     | '/profile'
@@ -169,13 +168,13 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/transfer'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   InboundRoute: typeof InboundRoute
   LoginRoute: typeof LoginRoute
-  OrdersRoute: typeof OrdersRoute
   OutboundRoute: typeof OutboundRoute
   ProductsRoute: typeof ProductsRoute
   ProfileRoute: typeof ProfileRoute
@@ -184,10 +183,18 @@ export interface RootRouteChildren {
   StaffRoute: typeof StaffRoute
   StocktakeRoute: typeof StocktakeRoute
   SuppliersRoute: typeof SuppliersRoute
+  TransferRoute: typeof TransferRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/transfer': {
+      id: '/transfer'
+      path: '/transfer'
+      fullPath: '/transfer'
+      preLoaderRoute: typeof TransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/suppliers': {
       id: '/suppliers'
       path: '/suppliers'
@@ -244,13 +251,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OutboundRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/orders': {
-      id: '/orders'
-      path: '/orders'
-      fullPath: '/orders'
-      preLoaderRoute: typeof OrdersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -279,7 +279,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   InboundRoute: InboundRoute,
   LoginRoute: LoginRoute,
-  OrdersRoute: OrdersRoute,
   OutboundRoute: OutboundRoute,
   ProductsRoute: ProductsRoute,
   ProfileRoute: ProfileRoute,
@@ -288,6 +287,7 @@ const rootRouteChildren: RootRouteChildren = {
   StaffRoute: StaffRoute,
   StocktakeRoute: StocktakeRoute,
   SuppliersRoute: SuppliersRoute,
+  TransferRoute: TransferRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

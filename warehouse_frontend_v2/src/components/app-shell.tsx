@@ -18,6 +18,7 @@ import {
   LogOut,
   Sun,
   Moon,
+  ArrowRightLeft
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
@@ -30,7 +31,7 @@ const nav = [
   { to: "/inbound", label: "Inbound", icon: ArrowDownToLine },
   { to: "/outbound", label: "Outbound", icon: ArrowUpFromLine },
   { to: "/stocktake", label: "Stocktake", icon: ClipboardCheck },
-  { to: "/orders", label: "Orders", icon: ClipboardList },
+  { to: "/transfer", label: "Transfer", icon: ArrowRightLeft },
   { to: "/suppliers", label: "Suppliers", icon: Truck },
   { to: "/staff", label: "Staff", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },

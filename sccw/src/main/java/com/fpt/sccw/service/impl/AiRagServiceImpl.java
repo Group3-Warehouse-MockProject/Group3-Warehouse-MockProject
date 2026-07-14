@@ -177,6 +177,15 @@ public class AiRagServiceImpl implements AiRagService {
 
     /** Tạo chuỗi mô tả cho một bản ghi inventory để lưu vào Vector Store */
     private String buildDescription(Inventory inv) {
+        String status = "Hết hàng";
+        if (inv.getQuantity() != null && inv.getQuantity() > 0) {
+            if (inv.getLowStockThreshold() != null && inv.getQuantity() <= inv.getLowStockThreshold()) {
+                status = "Sắp hết hàng";
+            } else {
+                status = "Còn hàng";
+            }
+        }
+
         return String.format(
                 "Sản phẩm: %s (mã: %s) | Danh mục: %s | Nhà cung cấp: %s | " +
                 "Giá: %s VNĐ | Thông số: %s | " +
@@ -190,7 +199,7 @@ public class AiRagServiceImpl implements AiRagService {
                 inv.getWarehouse().getWarehouseName(),
                 inv.getWarehouse().getLocation(),
                 inv.getQuantity(),
-                inv.getProduct().getStatus()
+                status
         );
     }
 

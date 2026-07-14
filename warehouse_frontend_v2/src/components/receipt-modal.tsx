@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X, Plus, Trash2, PackagePlus, PackageMinus } from "lucide-react";
 import { products, suppliers, warehouses, formatVND } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
+import { BarcodeScanner } from "./barcode-scanner";
 
 export type ReceiptType = "Inbound" | "Outbound";
 
@@ -26,9 +27,7 @@ export function ReceiptModal({ open, onClose, type }: Props) {
   const [reference, setReference] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState<string>("");
-  const [lines, setLines] = useState<LineItem[]>([
-    { id: crypto.randomUUID(), sku: "", qty: 1 },
-  ]);
+  const [lines, setLines] = useState<LineItem[]>([]);
 
   useEffect(() => {
     if (open) setWarehouseId(activeWarehouseId ?? warehouses[0].id);
@@ -48,18 +47,56 @@ export function ReceiptModal({ open, onClose, type }: Props) {
 
   if (!open) return null;
 
+  const handleScan = (barcode: string) => {
+    // Find product matching the scanned barcode (SKU code)
+    const product = products.find(p => p.sku.toLowerCase() === barcode.toLowerCase());
+    
+    if (!product) {
+      alert(`Barcode ${barcode} not found in catalog.`);
+      return;
+    }
+
+    // Check if it belongs to current warehouse scope
+    if (product.warehouseId !== warehouseId) {
+      alert(`Product ${barcode} does not belong to selected warehouse.`);
+      return;
+    }
+
+    setLines(prevLines => {
+      // Check if product already exists in lines
+      const existingLine = prevLines.find(l => l.sku === product.sku);
+      if (existingLine) {
+        return prevLines.map(l => l.sku === product.sku ? { ...l, qty: l.qty + 1 } : l);
+      }
+      
+      // Look for an empty line to replace, otherwise append new
+      const emptyLineIndex = prevLines.findIndex(l => !l.sku);
+      if (emptyLineIndex >= 0) {
+        const newLines = [...prevLines];
+        newLines[emptyLineIndex] = { ...newLines[emptyLineIndex], sku: product.sku, qty: 1 };
+        return newLines;
+      }
+
+      return [...prevLines, { id: crypto.randomUUID(), sku: product.sku, qty: 1 }];
+    });
+  };
+
   const addLine = () =>
     setLines((l) => [...l, { id: crypto.randomUUID(), sku: "", qty: 1 }]);
   const removeLine = (id: string) =>
-    setLines((l) => (l.length === 1 ? l : l.filter((x) => x.id !== id)));
+    setLines((l) => l.filter((x) => x.id !== id));
   const updateLine = (id: string, patch: Partial<LineItem>) =>
     setLines((l) => l.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (lines.length === 0 || lines.every(l => !l.sku)) {
+      alert("Please add at least one product line.");
+      return;
+    }
     // UI-only mock — close and reset
     onClose();
-    setLines([{ id: crypto.randomUUID(), sku: "", qty: 1 }]);
+    setLines([]);
     setPartner("");
     setReference("");
     setNote("");
@@ -161,15 +198,19 @@ export function ReceiptModal({ open, onClose, type }: Props) {
               </Field>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
+            <div className="space-y-4">
+              <div className="flex flex-col gap-2">
                 <div className="text-sm font-medium">Items</div>
+                <BarcodeScanner onScan={handleScan} />
+              </div>
+              
+              <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={addLine}
                   className="inline-flex items-center gap-1 text-xs px-2.5 h-8 rounded-md border border-border hover:bg-secondary"
                 >
-                  <Plus className="size-3.5" /> Add line
+                  <Plus className="size-3.5" /> Manual entry
                 </button>
               </div>
               <div className="rounded-lg border border-border overflow-hidden">

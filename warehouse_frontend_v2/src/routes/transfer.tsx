@@ -1,56 +1,76 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { orders, products, users, warehouses, formatVND, warehouseCode } from "@/lib/warehouse-data";
+import { products, users, warehouses, warehouseCode } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
-import { ClipboardList, TrendingUp, Clock, Truck, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRightLeft, MapPin, Search, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/components/modal-shell";
 import { useState } from "react";
 import { BarcodeScanner } from "@/components/barcode-scanner";
 
-export const Route = createFileRoute("/outbound")({
-  head: () => ({ meta: [{ title: "Outbound Orders — TechStock" }] }),
-  component: OutboundPage,
+export const Route = createFileRoute("/transfer")({
+  head: () => ({ meta: [{ title: "Transfers — TechStock" }] }),
+  component: TransferPage,
 });
 
 const statusTone: Record<string, string> = {
   Pending: "bg-warning/15 text-warning",
-  Shipping: "bg-primary/15 text-primary",
+  InTransit: "bg-primary/15 text-primary",
   Completed: "bg-success/15 text-success",
   Cancelled: "bg-destructive/15 text-destructive",
 };
 
-function OutboundPage() {
-  const { activeWarehouseId } = useApp();
-  const list = activeWarehouseId ? orders.filter((o) => o.warehouseId === activeWarehouseId) : orders;
+// Mock transfers
+const mockTransfers = [
+  {
+    id: "TRF-2026-001",
+    type: "Cross-Warehouse",
+    from: "W01",
+    to: "W02",
+    date: "2026-07-14",
+    items: 45,
+    status: "Completed",
+    createdBy: "Admin User"
+  },
+  {
+    id: "TRF-2026-002",
+    type: "Internal Movement",
+    from: "Zone A - Rack 1",
+    to: "Zone C - Rack 4",
+    date: "2026-07-14",
+    items: 120,
+    status: "Pending",
+    createdBy: "Staff User"
+  }
+];
+
+function TransferPage() {
+  const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 15;
-  const totalPages = Math.max(1, Math.ceil(list.length / limit));
+  const totalPages = Math.max(1, Math.ceil(mockTransfers.length / limit));
   const safePage = Math.min(page, totalPages);
-  const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
-  
-  const revenue = list.filter((o) => o.status !== "Cancelled").reduce((s, o) => s + o.total, 0);
-  const pending = list.filter((o) => o.status === "Pending").length;
-  const shipping = list.filter((o) => o.status === "Shipping").length;
-  const [open, setOpen] = useState(false);
+  const paginatedList = mockTransfers.slice((safePage - 1) * limit, safePage * limit);
+
+  const pending = mockTransfers.filter(t => t.status === "Pending").length;
 
   return (
     <AppShell>
       <div className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold">Outbound Orders</h1>
-            <p className="text-sm text-muted-foreground mt-1">B2B & retail orders fulfillment</p>
+            <h1 className="text-3xl font-bold">Transfers</h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage cross-warehouse and internal movements</p>
           </div>
           <button onClick={() => setOpen(true)} className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
-            <Plus className="size-4" />New order
+            <Plus className="size-4" />New transfer
           </button>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={ClipboardList} label="Total orders" value={list.length} tone="primary" />
-          <Kpi icon={TrendingUp} label="Revenue" value={formatVND(revenue)} tone="accent" />
-          <Kpi icon={Clock} label="Pending" value={pending} tone="warning" />
-          <Kpi icon={Truck} label="Shipping" value={shipping} tone="primary" />
+          <Kpi icon={ArrowRightLeft} label="Total Transfers" value={mockTransfers.length} tone="primary" />
+          <Kpi icon={Search} label="Pending" value={pending} tone="warning" />
+          <Kpi icon={MapPin} label="Cross-Warehouse" value={mockTransfers.filter(t => t.type === "Cross-Warehouse").length} tone="accent" />
+          <Kpi icon={MapPin} label="Internal" value={mockTransfers.filter(t => t.type === "Internal Movement").length} tone="primary" />
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -58,30 +78,28 @@ function OutboundPage() {
             <table className="w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                 <tr>
-                  <th className="text-left p-4">Order #</th>
-                  <th className="text-left p-4">Customer</th>
-                  <th className="text-left p-4">Warehouse</th>
+                  <th className="text-left p-4">Transfer #</th>
+                  <th className="text-left p-4">Type</th>
+                  <th className="text-left p-4">From</th>
+                  <th className="text-left p-4">To</th>
                   <th className="text-left p-4">Date</th>
+                  <th className="text-right p-4">Items Qty</th>
                   <th className="text-left p-4">Created by</th>
-                  <th className="text-left p-4">Assigned to</th>
-                  <th className="text-right p-4">Items</th>
-                  <th className="text-right p-4">Total</th>
                   <th className="text-center p-4">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedList.map((o) => (
-                  <tr key={o.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                    <td className="p-4 font-mono text-xs">{o.id}</td>
-                    <td className="p-4 font-medium">{o.customer}</td>
-                    <td className="p-4 font-mono text-xs">{warehouseCode(o.warehouseId)}</td>
-                    <td className="p-4 text-muted-foreground">{o.date}</td>
-                    <td className="p-4">{o.createdBy}</td>
-                    <td className="p-4">{o.assignedTo}</td>
-                    <td className="p-4 text-right">{o.items}</td>
-                    <td className="p-4 text-right font-semibold">{formatVND(o.total)}</td>
+                {paginatedList.map((t) => (
+                  <tr key={t.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
+                    <td className="p-4 font-mono text-xs">{t.id}</td>
+                    <td className="p-4 font-medium">{t.type}</td>
+                    <td className="p-4 font-mono text-xs">{t.from}</td>
+                    <td className="p-4 font-mono text-xs">{t.to}</td>
+                    <td className="p-4 text-muted-foreground">{t.date}</td>
+                    <td className="p-4 text-right font-semibold">{t.items}</td>
+                    <td className="p-4">{t.createdBy}</td>
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[o.status]}`}>{o.status}</span>
+                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[t.status]}`}>{t.status}</span>
                     </td>
                   </tr>
                 ))}
@@ -91,7 +109,7 @@ function OutboundPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
               <div className="text-muted-foreground text-xs">
-                Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, list.length)} of {list.length} entries
+                Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, mockTransfers.length)} of {mockTransfers.length} entries
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -126,20 +144,22 @@ function OutboundPage() {
           )}
         </div>
       </div>
-      <AddOrderModal open={open} onClose={() => setOpen(false)} />
+      <AddTransferModal open={open} onClose={() => setOpen(false)} />
     </AppShell>
   );
 }
 
-function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { activeWarehouseId } = useApp();
-  const [warehouseId, setWarehouseId] = useState<string>(activeWarehouseId ?? warehouses[0].id);
-  const [lines, setLines] = useState<{ sku: string; qty: number }[]>([]);
+  const [type, setType] = useState<"cross" | "internal">("cross");
   
-  const total = lines.reduce((s, l) => {
-    const p = products.find((x) => x.sku === l.sku);
-    return s + (p ? p.price * l.qty : 0);
-  }, 0);
+  const [sourceWarehouse, setSourceWarehouse] = useState<string>(activeWarehouseId ?? warehouses[0].id);
+  const [destWarehouse, setDestWarehouse] = useState<string>("");
+
+  const [sourceZone, setSourceZone] = useState<string>("");
+  const [destZone, setDestZone] = useState<string>("");
+
+  const [lines, setLines] = useState<{ sku: string; qty: number }[]>([]);
 
   const handleScan = (barcode: string) => {
     const product = products.find(p => p.sku.toLowerCase() === barcode.toLowerCase());
@@ -147,8 +167,16 @@ function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }
       alert(`Barcode ${barcode} not found in catalog.`);
       return;
     }
-    if (product.warehouseId !== warehouseId) {
-      alert(`Product ${barcode} does not belong to selected warehouse.`);
+    
+    // For cross warehouse, ensure it exists in source
+    if (type === "cross" && product.warehouseId !== sourceWarehouse) {
+      alert(`Product ${barcode} does not belong to source warehouse.`);
+      return;
+    }
+
+    // For internal, ensure it exists in selected warehouse
+    if (type === "internal" && product.warehouseId !== sourceWarehouse) {
+      alert(`Product ${barcode} does not belong to the selected warehouse.`);
       return;
     }
 
@@ -180,48 +208,63 @@ function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }
     <ModalShell
       open={open}
       onClose={handleClose}
-      title="New outbound order"
-      subtitle="Create a customer sales order"
-      icon={<ClipboardList className="size-5" />}
+      title="New Transfer"
+      subtitle="Record internal product movements"
+      icon={<ArrowRightLeft className="size-5" />}
       maxWidth="52rem"
       footer={
         <>
-          <div className="mr-auto text-sm">
-            <span className="text-muted-foreground">Total: </span>
-            <span className="font-bold text-lg">{formatVND(total)}</span>
-          </div>
-          <button onClick={handleClose} type="button" className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
-          <button onClick={handleClose} type="button" className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>Create order</button>
+          <button onClick={handleClose} type="button" className="h-10 px-4 ml-auto rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+          <button onClick={handleClose} type="button" className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>Confirm Transfer</button>
         </>
       }
     >
+      <div className="flex gap-4 mb-6">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" checked={type === "cross"} onChange={() => setType("cross")} className="accent-primary" />
+          <span className="text-sm font-medium">Cross-Warehouse</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" checked={type === "internal"} onChange={() => setType("internal")} className="accent-primary" />
+          <span className="text-sm font-medium">Internal Movement</span>
+        </label>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Customer" required className="sm:col-span-2"><input className={inputCls} placeholder="Customer / company name" /></Field>
-        <Field label="Warehouse" required>
-          <select className={selectCls} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>
-            <option value="" disabled>Select warehouse</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
-          </select>
-        </Field>
-        <Field label="Order date" required><input type="date" className={inputCls} defaultValue={new Date().toISOString().slice(0, 10)} /></Field>
+        {type === "cross" ? (
+          <>
+            <Field label="Source Warehouse" required>
+              <select className={selectCls} value={sourceWarehouse} onChange={e => setSourceWarehouse(e.target.value)}>
+                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
+              </select>
+            </Field>
+            <Field label="Destination Warehouse" required>
+              <select className={selectCls} value={destWarehouse} onChange={e => setDestWarehouse(e.target.value)}>
+                <option value="" disabled>Select destination</option>
+                {warehouses.filter(w => w.id !== sourceWarehouse).map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
+              </select>
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="Warehouse" required className="sm:col-span-2">
+              <select className={selectCls} value={sourceWarehouse} onChange={e => setSourceWarehouse(e.target.value)}>
+                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
+              </select>
+            </Field>
+            <Field label="Source Location" required>
+              <input className={inputCls} placeholder="e.g. Zone A - Rack 1 - Bin 2" value={sourceZone} onChange={e => setSourceZone(e.target.value)} />
+            </Field>
+            <Field label="Destination Location" required>
+              <input className={inputCls} placeholder="e.g. Zone B - Rack 3 - Bin 1" value={destZone} onChange={e => setDestZone(e.target.value)} />
+            </Field>
+          </>
+        )}
+        <Field label="Date" required><input type="date" className={inputCls} defaultValue={new Date().toISOString().slice(0, 10)} /></Field>
         <Field label="Created by" required>
           <select className={selectCls} defaultValue="">
             <option value="" disabled>Select staff</option>
             {users.map((u) => <option key={u.id} value={u.id}>{u.name} — {u.role}</option>)}
-          </select>
-        </Field>
-        <Field label="Assigned to" required>
-          <select className={selectCls} defaultValue="">
-            <option value="" disabled>Select assignee</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name} — {u.role}</option>)}
-          </select>
-        </Field>
-        <Field label="Status" className="sm:col-span-2">
-          <select className={selectCls} defaultValue="Pending">
-            <option>Pending</option>
-            <option>Shipping</option>
-            <option>Completed</option>
-            <option>Cancelled</option>
           </select>
         </Field>
       </div>
@@ -241,26 +284,21 @@ function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }
             <thead className="bg-secondary/40 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="text-left p-3">Product</th>
-                <th className="text-right p-3 w-24">Qty</th>
-                <th className="text-right p-3 w-32">Price</th>
-                <th className="text-right p-3 w-36">Subtotal</th>
+                <th className="text-right p-3 w-32">Qty</th>
                 <th className="w-10"></th>
               </tr>
             </thead>
             <tbody>
               {lines.map((row, i) => {
-                const p = products.find((x) => x.sku === row.sku);
                 return (
                   <tr key={i} className="border-t border-border/60">
                     <td className="p-2">
                       <select className={selectCls} value={row.sku} onChange={(e) => updateLine(i, { sku: e.target.value })}>
                         <option value="">Select product</option>
-                        {products.filter(pr => pr.warehouseId === warehouseId).map((pr) => <option key={pr.sku} value={pr.sku}>{pr.sku} — {pr.name}</option>)}
+                        {products.filter(pr => pr.warehouseId === sourceWarehouse).map((pr) => <option key={pr.sku} value={pr.sku}>{pr.sku} — {pr.name}</option>)}
                       </select>
                     </td>
                     <td className="p-2"><input type="number" min={1} className={inputCls + " text-right"} value={row.qty} onChange={(e) => updateLine(i, { qty: Math.max(1, Number(e.target.value)) })} /></td>
-                    <td className="p-3 text-right text-muted-foreground">{p ? formatVND(p.price) : "—"}</td>
-                    <td className="p-3 text-right font-semibold">{p ? formatVND(p.price * row.qty) : "—"}</td>
                     <td className="p-2 text-center">
                       <button type="button" onClick={() => removeLine(i)} className="size-8 grid place-items-center rounded-md hover:bg-destructive/15 hover:text-destructive disabled:opacity-30">
                         <Trash2 className="size-4" />
@@ -275,7 +313,7 @@ function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }
       </div>
 
       <div className="mt-4">
-        <Field label="Notes"><textarea className={textareaCls} placeholder="Delivery instructions, PO reference, ..." /></Field>
+        <Field label="Notes"><textarea className={textareaCls} placeholder="Reason for transfer, handling instructions..." /></Field>
       </div>
     </ModalShell>
   );

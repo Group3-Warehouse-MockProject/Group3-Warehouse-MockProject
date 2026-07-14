@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { users, warehouseName, warehouseCode } from "@/lib/warehouse-data";
 import { useApp, roleLabels } from "@/lib/app-context";
-import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff } from "lucide-react";
+import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff, ChevronLeft, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({ meta: [{ title: "Staff — TechStock" }] }),
@@ -42,6 +42,12 @@ function StaffPage() {
   const managers = list.filter((u) => u.role === "Warehouse_Manager").length;
   const staffCount = list.filter((u) => u.role === "Staff").length;
   const warehouseSet = new Set(list.map((u) => u.warehouseId)).size;
+
+  const [page, setPage] = useState(1);
+  const limit = 15;
+  const totalPages = Math.max(1, Math.ceil(list.length / limit));
+  const safePage = Math.min(page, totalPages);
+  const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
 
   return (
     <AppShell>
@@ -88,7 +94,7 @@ function StaffPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((s) => (
+                {paginatedList.map((s) => (
                   <tr key={s.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
@@ -119,6 +125,42 @@ function StaffPage() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
+              <div className="text-muted-foreground text-xs">
+                Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, list.length)} of {list.length} entries
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    className={`size-8 rounded-md text-xs font-medium ${
+                      n === safePage
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary border border-border hover:bg-muted"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {registerOpen && <RegisterModal onClose={() => setRegisterOpen(false)} />}

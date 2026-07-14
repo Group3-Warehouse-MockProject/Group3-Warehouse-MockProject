@@ -5,11 +5,12 @@ import {
   categoryShare,
   movements,
   formatVND,
+  orders,
 } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Package, TrendingUp, TrendingDown, AlertTriangle, Boxes, ArrowUpRight } from "lucide-react";
+import { Package, TrendingUp, TrendingDown, AlertTriangle, Boxes, ArrowUpRight, ClipboardList } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -33,7 +34,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, currentUser } = useApp();
   
   const { data: inventoryData, isLoading } = useQuery({
     queryKey: ["inventory", activeWarehouseId],
@@ -65,11 +66,18 @@ function Dashboard() {
     : movements;
   const lowStock = scopedProducts.filter((p: any) => p.stock < p.reorder).slice(0, 5);
 
+  const isStaff = currentUser?.role === "Staff";
+  const pendingOrders = activeWarehouseId 
+    ? orders.filter(o => o.warehouseId === activeWarehouseId && o.status === "Pending").length
+    : orders.filter(o => o.status === "Pending").length;
+
   const kpis = [
-    { label: "Total SKUs", value: scopedProducts.length.toString(), delta: "+3 this week", icon: Package, tone: "primary" },
-    { label: "Units in stock", value: scopedProducts.reduce((s: number, p: any) => s + p.stock, 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" },
-    { label: "Inventory value", value: formatVND(scopedProducts.reduce((s: number, p: any) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" },
-    { label: "Low stock", value: scopedProducts.filter((p: any) => p.stock < p.reorder).length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" },
+    { label: "Total SKUs", value: scopedProducts.length.toString(), delta: "+3 this week", icon: Package, tone: "primary" as const },
+    { label: "Units in stock", value: scopedProducts.reduce((s: number, p: any) => s + p.stock, 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" as const },
+    isStaff 
+      ? { label: "Pending Orders", value: pendingOrders.toString(), delta: "Action required", icon: ClipboardList, tone: "warning" as const }
+      : { label: "Inventory value", value: formatVND(scopedProducts.reduce((s: number, p: any) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" as const },
+    { label: "Low stock", value: scopedProducts.filter((p: any) => p.stock < p.reorder).length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" as const },
   ];
 
   return (

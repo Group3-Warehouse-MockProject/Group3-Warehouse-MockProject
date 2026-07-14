@@ -16,7 +16,7 @@ public class Transfer extends BaseEntity{
 
     @Enumerated(EnumType.STRING)
     @Column(name = "transfer_type", nullable = false)
-    private Status.TransactionType transferType;
+    private Status.TransferType transferType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)

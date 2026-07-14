@@ -24,29 +24,26 @@ public class Product extends BaseEntity {
     @Column(name = "product_name", nullable = false)
     private String name;
 
-    @Column(name = "image_product")
-    private String imgProduct;
-
     @NotBlank(message = "Specification is required")
     @Column(name = "specification", columnDefinition = "TEXT")
     private String specification;
+
+    @NotNull(message = "Cost is required")
+    @DecimalMin(value = "0.0", inclusive = false)
+    @Column(name = "cost", nullable = false, precision = 12, scale = 2)
+    private BigDecimal cost;
 
     @NotNull(message = "Price is required")
     @DecimalMin(value = "0.0", inclusive = false)
     @Column(name = "price", nullable = false, precision = 12, scale = 2)
     private BigDecimal price;
 
-    @Column(name = "image_url")
+    @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
 
     @Column(name = "is_deleted", nullable = false)
     @Builder.Default
     private Boolean isDeleted = false;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    @Builder.Default
-    private Status.ProductStatus status = Status.ProductStatus.IN_STOCK;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)

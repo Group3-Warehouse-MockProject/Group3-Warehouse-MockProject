@@ -24,7 +24,7 @@ public class Supplier extends BaseEntity{
     private String email;
 
     @NotBlank(message = "Supplier phone number is required")
-    @Column(name = "phone_number", nullable = false, length = 15)
+    @Column(name = "phone_number", nullable = false, length = 20)
     private String phoneNumber;
 
     @NotBlank(message = "Supplier address is required")
