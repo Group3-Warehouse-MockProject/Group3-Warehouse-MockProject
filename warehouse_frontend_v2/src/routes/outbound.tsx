@@ -23,7 +23,7 @@ function OutboundPage() {
   const { activeWarehouseId } = useApp();
   const list = activeWarehouseId ? orders.filter((o) => o.warehouseId === activeWarehouseId) : orders;
   const [page, setPage] = useState(1);
-  const limit = 15;
+  const limit = 10;
   const totalPages = Math.max(1, Math.ceil(list.length / limit));
   const safePage = Math.min(page, totalPages);
   const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);

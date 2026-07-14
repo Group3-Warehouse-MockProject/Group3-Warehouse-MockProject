@@ -14,23 +14,30 @@ public class InventoryDTO {
     private String category;
     private String brand;
     private Long stock;
-    private Integer reorder; // Could be from product if it exists
+    private Long reorder;
     private BigDecimal price;
-    private BigDecimal cost; // Could be from product if it exists
-    private String location; // From somewhere
+    private BigDecimal cost;
+    private String location;
     private String warehouseId;
 
     public static InventoryDTO fromEntity(Inventory inventory) {
+        String loc = "N/A";
+        if (inventory.getLocation() != null) {
+            loc = inventory.getLocation().getZoneCode() + "-" + 
+                  inventory.getLocation().getRackCode() + "-" + 
+                  inventory.getLocation().getBinCode();
+        }
+        
         return InventoryDTO.builder()
                 .sku(inventory.getProduct().getCode())
                 .name(inventory.getProduct().getName())
                 .category(inventory.getProduct().getCategory().getName())
                 .brand(inventory.getProduct().getSupplier().getName()) // Approx map
                 .stock(inventory.getQuantity())
-                .reorder(20) // Mock
+                .reorder(inventory.getLowStockThreshold())
                 .price(inventory.getProduct().getPrice())
-                .cost(inventory.getProduct().getPrice().multiply(new BigDecimal("0.8"))) // Mock
-                .location("A-01-01") // Mock location
+                .cost(inventory.getProduct().getCost())
+                .location(loc)
                 .warehouseId(String.valueOf(inventory.getWarehouse().getId())) // Must match activeWarehouseId from JWT
                 .build();
     }

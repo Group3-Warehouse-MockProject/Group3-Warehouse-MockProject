@@ -1,11 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
-  weeklyFlow,
-  categoryShare,
-  movements,
-  formatVND,
-  orders,
+  formatVND
 } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
@@ -46,6 +42,16 @@ function Dashboard() {
     }
   });
 
+  const { data: dashboardData } = useQuery({
+    queryKey: ["dashboard", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/dashboard", {
+        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+      });
+      return res.data;
+    }
+  });
+
   const { data: warehousesData } = useQuery({
     queryKey: ["warehouses"],
     queryFn: async () => {
@@ -61,15 +67,18 @@ function Dashboard() {
 
   const scopedProducts = inventoryData || [];
     
-  const scopedMovements = activeWarehouseId
-    ? movements.filter((m) => m.warehouseId === activeWarehouseId)
-    : movements;
+  const scopedMovements = dashboardData?.movements || [];
   const lowStock = scopedProducts.filter((p: any) => p.stock < p.reorder).slice(0, 5);
 
   const isStaff = currentUser?.role === "Staff";
-  const pendingOrders = activeWarehouseId 
-    ? orders.filter(o => o.warehouseId === activeWarehouseId && o.status === "Pending").length
-    : orders.filter(o => o.status === "Pending").length;
+  const pendingOrders = dashboardData?.pendingOrders || 0;
+  const weeklyFlow = dashboardData?.weeklyFlow || [];
+
+  const categoryMap = new Map();
+  scopedProducts.forEach((p: any) => {
+    categoryMap.set(p.category, (categoryMap.get(p.category) || 0) + p.stock);
+  });
+  const categoryShare = Array.from(categoryMap.entries()).map(([name, value]) => ({ name, value }));
 
   const kpis = [
     { label: "Total SKUs", value: scopedProducts.length.toString(), delta: "+3 this week", icon: Package, tone: "primary" as const },
@@ -182,7 +191,7 @@ function Dashboard() {
               <button className="text-xs text-primary hover:underline">View all →</button>
             </div>
             <div className="space-y-3">
-              {scopedMovements.slice(0, 6).map((m) => (
+              {scopedMovements.slice(0, 6).map((m: any) => (
                 <div key={m.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/40 border border-border/60">
                   <div
                     className={`size-9 rounded-lg grid place-items-center ${

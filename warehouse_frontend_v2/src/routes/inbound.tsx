@@ -19,7 +19,7 @@ function InboundPage() {
     .filter((m) => !activeWarehouseId || m.warehouseId === activeWarehouseId);
   
   const [page, setPage] = useState(1);
-  const limit = 15;
+  const limit = 10;
   const totalPages = Math.max(1, Math.ceil(list.length / limit));
   const safePage = Math.min(page, totalPages);
   const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
