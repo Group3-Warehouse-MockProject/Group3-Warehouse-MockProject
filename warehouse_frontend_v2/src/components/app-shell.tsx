@@ -132,16 +132,39 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="m-3 p-4 rounded-xl surface-card">
-          <div className="text-xs text-muted-foreground">Capacity used</div>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-gradient">68%</span>
-            <span className="text-xs text-muted-foreground">/ 12,400 units</span>
-          </div>
-          <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: "68%", background: "var(--gradient-primary)" }} />
-          </div>
-        </div>
+        {(() => {
+          let totalCapacity = 0;
+          let totalUsed = 0;
+          
+          if (activeWarehouseId) {
+            const w = warehouses.find((x: any) => x.id === activeWarehouseId);
+            if (w) {
+              totalCapacity = w.capacity || 0;
+              totalUsed = w.usedCapacity || 0;
+            }
+          } else {
+            warehouses.forEach((w: any) => {
+              totalCapacity += (w.capacity || 0);
+              totalUsed += (w.usedCapacity || 0);
+            });
+          }
+
+          const pct = totalCapacity > 0 ? Math.round((totalUsed / totalCapacity) * 100) : 0;
+
+          return (
+            <div className="m-3 p-4 rounded-xl surface-card">
+              <div className="text-xs text-muted-foreground">Capacity used</div>
+              <div className="mt-2 flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-gradient">{pct}%</span>
+                <span className="text-xs text-muted-foreground">/ {totalCapacity.toLocaleString()} units</span>
+              </div>
+              <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: "var(--gradient-primary)" }} />
+              </div>
+              <div className="mt-1 text-[10px] text-muted-foreground text-right">{totalUsed.toLocaleString()} units used</div>
+            </div>
+          );
+        })()}
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -181,9 +204,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="text-sm font-medium leading-tight">{currentUser.name}</div>
                   <div className="text-xs text-muted-foreground leading-tight">{currentUser.title}</div>
                 </div>
-                <div className="size-10 rounded-full grid place-items-center text-sm font-semibold" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
-                  {currentUser.initials}
-                </div>
+                {currentUser.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt="Avatar" className="size-10 rounded-full object-cover ring-2 ring-border/50" />
+                ) : (
+                  <div className="size-10 rounded-full grid place-items-center text-sm font-semibold" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
+                    {currentUser.initials}
+                  </div>
+                )}
                 <ChevronDown className="size-4 text-muted-foreground" />
               </button>
 

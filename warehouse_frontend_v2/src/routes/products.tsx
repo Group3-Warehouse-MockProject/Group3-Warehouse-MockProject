@@ -4,10 +4,11 @@ import { formatVND } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Filter, Plus, Download, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import * as XLSX from "xlsx";
 
 export const Route = createFileRoute("/products")({
   head: () => ({ meta: [{ title: "Products — TechStock" }] }),
@@ -17,12 +18,18 @@ export const Route = createFileRoute("/products")({
 function ProductsPage() {
   const { activeWarehouseId } = useApp();
   const [open, setOpen] = useState(false);
+  const [openImport, setOpenImport] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 10;
   const [q, setQ] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterCostMin, setFilterCostMin] = useState("");
+  const [filterCostMax, setFilterCostMax] = useState("");
+  const [filterPriceMin, setFilterPriceMin] = useState("");
+  const [filterPriceMax, setFilterPriceMax] = useState("");
+
   
   const { data: productData, isLoading, error } = useQuery({
     queryKey: ["products", activeWarehouseId],
@@ -82,7 +89,15 @@ function ProductsPage() {
     else if (filterStatus === "Low") matchesStatus = p.stock > 0 && p.stock < p.reorder;
     else if (filterStatus === "In stock") matchesStatus = p.stock > 0 && p.stock >= p.reorder;
 
-    return matchesQ && matchesCategory && matchesStatus;
+    let matchesCost = true;
+    if (filterCostMin) matchesCost = matchesCost && p.cost >= Number(filterCostMin);
+    if (filterCostMax) matchesCost = matchesCost && p.cost <= Number(filterCostMax);
+
+    let matchesPrice = true;
+    if (filterPriceMin) matchesPrice = matchesPrice && p.price >= Number(filterPriceMin);
+    if (filterPriceMax) matchesPrice = matchesPrice && p.price <= Number(filterPriceMax);
+
+    return matchesQ && matchesCategory && matchesStatus && matchesCost && matchesPrice;
   });
   
   const totalPages = Math.max(1, Math.ceil(list.length / limit));
@@ -135,7 +150,7 @@ function ProductsPage() {
             <p className="text-sm text-muted-foreground mt-1">{list.length} SKUs in scope</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowFilter(!showFilter)} className={`h-10 px-4 rounded-lg border text-sm flex items-center gap-2 transition-colors ${showFilter ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border hover:bg-muted"}`}><Filter className="size-4" />Filter</button>
+            <button onClick={() => setOpenImport(true)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"><Upload className="size-4" />Import</button>
             <button onClick={handleExport} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"><Download className="size-4" />Export</button>
             <button onClick={() => setOpen(true)} className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
               <Plus className="size-4" />Add SKU
@@ -150,51 +165,82 @@ function ProductsPage() {
           <Kpi icon={AlertTriangle} label="Low stock" value={low} tone="warning" />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-          <div className="relative max-w-md w-full sm:w-96">
-            <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search SKU, product name, brand..."
-              className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
-            />
-          </div>
-          
-          {showFilter && (
-            <div className="flex items-center gap-3 w-full sm:w-auto p-3 surface-card rounded-lg border border-border/60">
-              <select
-                value={filterCategory}
+        <div className="flex flex-col gap-4 relative">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="relative max-w-md w-full sm:w-96">
+              <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={q}
                 onChange={(e) => {
-                  setFilterCategory(e.target.value);
+                  setQ(e.target.value);
                   setPage(1);
                 }}
-                className="h-9 px-3 rounded-md bg-input border border-border text-sm min-w-[140px]"
-              >
-                <option value="">All Categories</option>
-                {categories?.map((c: any) => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-              
-              <select
-                value={filterStatus}
-                onChange={(e) => {
-                  setFilterStatus(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 px-3 rounded-md bg-input border border-border text-sm min-w-[140px]"
-              >
-                <option value="">All Statuses</option>
-                <option value="In stock">In stock</option>
-                <option value="Low">Low stock</option>
-                <option value="Out">Out of stock</option>
-              </select>
+                placeholder="Search SKU, product name, brand..."
+                className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
+              />
             </div>
-          )}
+            <div className="relative">
+              <button onClick={() => setShowFilter(!showFilter)} className={`h-10 px-4 rounded-lg border text-sm flex items-center gap-2 transition-colors shrink-0 ${showFilter ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border hover:bg-muted"}`}>
+                <Filter className="size-4" />Filter
+              </button>
+              
+              {showFilter && (
+                <div className="absolute top-full right-0 mt-2 z-20 flex flex-col gap-5 p-5 surface-card rounded-xl border border-border/60 shadow-xl w-72">
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Category</div>
+                    <select
+                      value={filterCategory}
+                      onChange={(e) => {
+                        setFilterCategory(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm"
+                    >
+                      <option value="">All Categories</option>
+                      {categories?.map((c: any) => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Status</div>
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => {
+                        setFilterStatus(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="In stock">In stock</option>
+                      <option value="Low">Low stock</option>
+                      <option value="Out">Out of stock</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Cost Range (₫)</div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" placeholder="Min" value={filterCostMin} onChange={(e) => { setFilterCostMin(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                      <span className="text-muted-foreground">-</span>
+                      <input type="number" placeholder="Max" value={filterCostMax} onChange={(e) => { setFilterCostMax(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Price Range (₫)</div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" placeholder="Min" value={filterPriceMin} onChange={(e) => { setFilterPriceMin(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                      <span className="text-muted-foreground">-</span>
+                      <input type="number" placeholder="Max" value={filterPriceMax} onChange={(e) => { setFilterPriceMax(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -303,6 +349,7 @@ function ProductsPage() {
         </div>
       </div>
       <AddSkuModal open={open} onClose={() => setOpen(false)} warehouses={warehouses || []} categories={categories || []} suppliers={suppliers || []} locations={locations || []} />
+      <ImportModal open={openImport} onClose={() => setOpenImport(false)} />
     </AppShell>
   );
 }
@@ -435,5 +482,120 @@ function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; labe
       </div>
       <div className="mt-3 text-2xl font-bold">{value}</div>
     </div>
+  );
+}
+
+function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const downloadTemplate = () => {
+    const templateData = [
+      {
+        Code: "SKU-001",
+        Name: "Sample Product",
+        Specification: "Core i7, 16GB RAM",
+        SupplierID: 1,
+        CategoryID: 1,
+        WarehouseID: 1,
+        LocationID: "",
+        InitialStock: 50,
+        ReorderPoint: 10,
+        Cost: 1000000,
+        Price: 1500000
+      }
+    ];
+    
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, "TechStock_Import_Template.xlsx");
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setLoading(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      const payload = jsonData.map((row: any) => ({
+        code: String(row.Code),
+        name: String(row.Name),
+        specification: String(row.Specification || "N/A"),
+        supplierId: Number(row.SupplierID),
+        categoryId: Number(row.CategoryID),
+        warehouseId: Number(row.WarehouseID),
+        locationId: row.LocationID ? Number(row.LocationID) : null,
+        initialStock: Number(row.InitialStock || 0),
+        reorderPoint: Number(row.ReorderPoint || 0),
+        cost: Number(row.Cost || 0),
+        price: Number(row.Price || 0),
+        imageUrl: null
+      }));
+
+      await api.post("/products/bulk", payload);
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      alert("Products imported successfully!");
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      alert("Error importing products: " + (err.response?.data?.message || err.response?.data?.error || err.message || JSON.stringify(err)));
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      title="Import from Excel"
+      subtitle="Upload a .xlsx file to create products in bulk"
+      icon={<Upload className="size-5" />}
+      footer={
+        <>
+          <button onClick={onClose} disabled={loading} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+          <button onClick={() => fileInputRef.current?.click()} disabled={loading} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>
+            {loading ? "Importing..." : "Upload File"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-6 text-sm">
+        <div className="p-4 surface-card border border-border/60 rounded-lg">
+          <h3 className="font-medium mb-2">Step 1: Download Template</h3>
+          <p className="text-muted-foreground mb-4">Start by downloading the standard Excel template. Ensure you use valid IDs for Suppliers, Categories, and Warehouses.</p>
+          <button onClick={downloadTemplate} className="h-9 px-4 rounded-md border border-border bg-secondary hover:bg-muted font-medium inline-flex items-center gap-2 transition-colors">
+            <Download className="size-4" /> Download Template
+          </button>
+        </div>
+        
+        <div className="p-4 surface-card border border-border/60 rounded-lg">
+          <h3 className="font-medium mb-2">Step 2: Upload Data</h3>
+          <p className="text-muted-foreground mb-4">Fill out the template and upload it back. The system will process all rows simultaneously.</p>
+          
+          <input
+            type="file"
+            accept=".xlsx, .xls, .csv"
+            className="hidden"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+          />
+          
+          <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-secondary/30 transition-colors">
+            <Upload className="size-8 text-muted-foreground mx-auto mb-3" />
+            <div className="font-medium">Click to browse or drag and drop</div>
+            <div className="text-xs text-muted-foreground mt-1">Excel or CSV files up to 5MB</div>
+          </div>
+        </div>
+      </div>
+    </ModalShell>
   );
 }

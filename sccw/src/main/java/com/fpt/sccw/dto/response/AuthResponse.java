@@ -25,6 +25,8 @@ public class AuthResponse {
         private String email;
         private String fullName;
         private String avatarUrl;
+        private String phone;
+        private String department;
         private String role;
         private Long warehouseId;
     
@@ -35,6 +37,8 @@ public class AuthResponse {
                     .email(user.getEmail())
                     .fullName(user.getFullName())
                     .avatarUrl(user.getAvatar())
+                    .phone(user.getPhone())
+                    .department(user.getDepartment())
                     .role(user.getRole().getRoleName().toString())
                     .warehouseId(user.getWarehouse() != null ? user.getWarehouse().getId() : null)
                     .build();

@@ -17,6 +17,7 @@ public class WarehouseDTO {
     private String address;
     private String city;
     private Long capacity;
+    private Long usedCapacity;
 
     public static WarehouseDTO fromEntity(Warehouse warehouse) {
         // Parse city from location, e.g. "..., Ho Chi Minh City" -> "Ho Chi Minh City"
@@ -24,13 +25,21 @@ public class WarehouseDTO {
         String[] parts = location.split(",");
         String city = parts.length > 0 ? parts[parts.length - 1].trim() : "";
 
+        long used = 0L;
+        if (warehouse.getInventories() != null) {
+            used = warehouse.getInventories().stream()
+                    .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L)
+                    .sum();
+        }
+
         return WarehouseDTO.builder()
                 .id(String.valueOf(warehouse.getId()))
                 .name(warehouse.getWarehouseName())
                 .code(warehouse.getCode())
                 .address(location)
                 .city(city)
-                .capacity(12400L) // Mock capacity for now
+                .capacity(warehouse.getCapacity() != null ? warehouse.getCapacity() : 0L)
+                .usedCapacity(used)
                 .build();
     }
 }

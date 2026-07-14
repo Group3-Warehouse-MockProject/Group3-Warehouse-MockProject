@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
-import { users, warehouseName, warehouseCode } from "@/lib/warehouse-data";
 import { useApp, roleLabels } from "@/lib/app-context";
-import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff, ChevronLeft, ChevronRight } from "lucide-react";
+import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff, ChevronLeft, ChevronRight, Trash2, Edit, Save, Search, Filter, RefreshCcw, UserMinus } from "lucide-react";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({ meta: [{ title: "Staff — TechStock" }] }),
@@ -20,28 +21,82 @@ const roleTone: Record<string, string> = {
 function StaffPage() {
   const { currentUser, activeWarehouseId } = useApp();
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [viewUser, setViewUser] = useState<any>(null);
+  const [q, setQ] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterRole, setFilterRole] = useState("");
+  const [filterStatus, setFilterStatus] = useState("Active"); // Default to Active
+  const queryClient = useQueryClient();
 
-  // Scope rules:
-  // - Warehouse_Manager: only sees Staff in their own warehouse.
-  // - Staff: only sees teammates in their own warehouse.
-  // - Admin / Manager: see everyone; filtered by Active Warehouse selector when set.
-  let list = users.filter((u) => u.role === "Staff" || u.role === "Warehouse_Manager");
+  if (!currentUser) return null;
+
+  const { data: dbUsers = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => {
+      const res = await api.get("/users");
+      return res.data;
+    }
+  });
+
+  const { data: dbWarehouses = [] } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get("/warehouses");
+      return res.data;
+    }
+  });
+
+  const getWarehouseName = (id: number | string | null) => {
+    if (!id) return "All warehouses";
+    const w = dbWarehouses.find((x: any) => String(x.id) === String(id));
+    return w ? w.name : "Unknown";
+  };
+
+  const getWarehouseCode = (id: number | string | null) => {
+    if (!id) return "—";
+    const w = dbWarehouses.find((x: any) => String(x.id) === String(id));
+    return w ? w.code : "—";
+  };
+
+  let list = dbUsers.filter((u: any) => true);
+  
+  list = list.map((u: any) => ({
+    ...u,
+    role: u.role === "WAREHOUSE_MANAGER" ? "Warehouse_Manager" : u.role === "ADMIN" ? "Admin" : u.role === "MANAGER" ? "Manager" : "Staff"
+  }));
+
   if (currentUser.role === "Warehouse_Manager" || currentUser.role === "Staff") {
-    list = list.filter((u) => u.warehouseId === currentUser.warehouseId);
+    list = list.filter((u: any) => u.warehouseId === currentUser.warehouseId);
   } else if (activeWarehouseId) {
-    list = list.filter((u) => u.warehouseId === activeWarehouseId);
+    list = list.filter((u: any) => u.warehouseId === activeWarehouseId);
   }
 
   const scopeLabel =
     currentUser.role === "Warehouse_Manager" || currentUser.role === "Staff"
-      ? `Scoped to ${warehouseName(currentUser.warehouseId!)}`
+      ? `Scoped to ${getWarehouseName(currentUser.warehouseId)}`
       : activeWarehouseId
-      ? `Filtered: ${warehouseName(activeWarehouseId)}`
+      ? `Filtered: ${getWarehouseName(activeWarehouseId)}`
       : "All warehouses";
 
-  const managers = list.filter((u) => u.role === "Warehouse_Manager").length;
-  const staffCount = list.filter((u) => u.role === "Staff").length;
-  const warehouseSet = new Set(list.map((u) => u.warehouseId)).size;
+  // Apply search and filter
+  list = list.filter((u: any) => {
+    const matchesQ = 
+      (u.fullName || "").toLowerCase().includes(q.toLowerCase()) ||
+      (u.username || "").toLowerCase().includes(q.toLowerCase()) ||
+      (u.email || "").toLowerCase().includes(q.toLowerCase());
+    
+    const matchesRole = filterRole ? u.role === filterRole : true;
+    
+    let matchesStatus = true;
+    if (filterStatus === "Active") matchesStatus = u.isDeleted !== true;
+    else if (filterStatus === "Deactive") matchesStatus = u.isDeleted === true;
+
+    return matchesQ && matchesRole && matchesStatus;
+  });
+
+  const managers = list.filter((u: any) => u.role === "Warehouse_Manager").length;
+  const staffCount = list.filter((u: any) => u.role === "Staff").length;
+  const warehouseSet = new Set(list.map((u: any) => u.warehouseId).filter(Boolean)).size;
 
   const [page, setPage] = useState(1);
   const limit = 15;
@@ -68,7 +123,7 @@ function StaffPage() {
                 className="h-9 px-4 rounded-lg text-sm font-semibold text-primary-foreground glow-ring inline-flex items-center gap-2"
                 style={{ background: "var(--gradient-primary)" }}
               >
-                <UserPlus className="size-4" /> Register
+                <UserPlus className="size-4" /> Create Account
               </button>
             )}
           </div>
@@ -81,43 +136,123 @@ function StaffPage() {
           <Kpi icon={Building2} label="Warehouses covered" value={warehouseSet} tone="warning" />
         </div>
 
-        <div className="surface-card overflow-hidden">
+        <div className="flex flex-col gap-4 relative">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="relative max-w-md w-full sm:w-96">
+              <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search name, username, email..."
+                className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
+              />
+            </div>
+            <div className="relative">
+              <button onClick={() => setShowFilter(!showFilter)} className={`h-10 px-4 rounded-lg border text-sm flex items-center gap-2 transition-colors shrink-0 ${showFilter ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border hover:bg-muted"}`}>
+                <Filter className="size-4" />Filter
+              </button>
+              
+              {showFilter && (
+                <div className="absolute top-full right-0 mt-2 z-20 flex flex-col gap-5 p-5 surface-card rounded-xl border border-border/60 shadow-xl w-64">
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Role</div>
+                    <select
+                      value={filterRole}
+                      onChange={(e) => {
+                        setFilterRole(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm"
+                    >
+                      <option value="">All Roles</option>
+                      <option value="Admin">Admin</option>
+                      <option value="Manager">Manager</option>
+                      <option value="Warehouse_Manager">Warehouse Manager</option>
+                      <option value="Staff">Staff</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Status</div>
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => {
+                        setFilterStatus(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="Active">Active</option>
+                      <option value="Deactive">Deactive</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="surface-card overflow-hidden border border-border/50 shadow-sm rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
+              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/60 border-b border-border/80">
                 <tr>
-                  <th className="text-left p-4">Employee</th>
-                  <th className="text-left p-4">Title</th>
-                  <th className="text-left p-4">Role</th>
-                  <th className="text-left p-4">Warehouse</th>
-                  <th className="text-left p-4">Location</th>
+                  <th className="text-left py-4 px-6 font-semibold">Employee</th>
+                  <th className="text-left py-4 px-6 font-semibold">Title</th>
+                  <th className="text-left py-4 px-6 font-semibold">Role</th>
+                  <th className="text-left py-4 px-6 font-semibold">Status</th>
+                  <th className="text-left py-4 px-6 font-semibold">Warehouse</th>
+                  <th className="text-left py-4 px-6 font-semibold">Location</th>
+                  <th className="text-right py-4 px-6 font-semibold w-20">Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {paginatedList.map((s) => (
-                  <tr key={s.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="size-9 rounded-full grid place-items-center text-xs font-semibold" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
+              <tbody className="divide-y divide-border/60">
+                {paginatedList.map((s: any) => (
+                  <tr key={s.id} className="hover:bg-muted/30 transition-all duration-200 group">
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-4">
+                        <div className="size-10 rounded-full grid place-items-center text-sm font-bold shrink-0 shadow-sm border border-white/10 ring-2 ring-transparent group-hover:ring-primary/20 transition-all" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
                           {s.initials}
                         </div>
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{s.name}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{s.id}</div>
+                        <div className="min-w-0 flex items-center gap-2">
+                          <div>
+                            <div className="font-semibold text-foreground truncate">{s.fullName}</div>
+                            <div className="text-xs text-muted-foreground font-mono mt-0.5">@{s.username}</div>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4 text-muted-foreground">{s.title}</td>
-                    <td className="p-4">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${roleTone[s.role]}`}>{roleLabels[s.role]}</span>
+                    <td className="py-4 px-6 text-muted-foreground font-medium">{s.title}</td>
+                    <td className="py-4 px-6">
+                      <span className={`px-3 py-1.5 rounded-full text-[11px] uppercase tracking-wider font-bold shadow-sm ${roleTone[s.role] || roleTone.Staff}`}>{roleLabels[s.role as keyof typeof roleLabels] || s.role}</span>
                     </td>
-                    <td className="p-4 font-mono text-xs">{s.warehouseId ? warehouseCode(s.warehouseId) : "—"}</td>
-                    <td className="p-4 text-muted-foreground">{s.warehouseId ? warehouseName(s.warehouseId) : "All warehouses"}</td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <div className={`size-2 rounded-full ${s.isDeleted ? "bg-muted-foreground" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"}`}></div>
+                        <span className={`text-xs font-medium ${s.isDeleted ? "text-muted-foreground" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          {s.isDeleted ? "Deactive" : "Active"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 font-mono text-xs font-medium">{getWarehouseCode(s.warehouseId)}</td>
+                    <td className="py-4 px-6 text-muted-foreground font-medium">{getWarehouseName(s.warehouseId)}</td>
+                    <td className="py-4 px-6 text-right">
+                      <button 
+                        onClick={() => setViewUser(s)}
+                        className="size-8 inline-grid place-items-center rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        title="View details"
+                      >
+                        <Eye className="size-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {list.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-muted-foreground text-sm">
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground text-sm">
                       No staff assigned to this warehouse yet.
                     </td>
                   </tr>
@@ -163,12 +298,270 @@ function StaffPage() {
           )}
         </div>
       </div>
-      {registerOpen && <RegisterModal onClose={() => setRegisterOpen(false)} />}
+      {registerOpen && <RegisterModal onClose={() => { setRegisterOpen(false); queryClient.invalidateQueries({queryKey: ["users"]}); }} dbWarehouses={dbWarehouses} />}
+      {viewUser && <UserDetailModal user={viewUser} dbWarehouses={dbWarehouses} onClose={() => setViewUser(null)} onUpdated={() => { queryClient.invalidateQueries({queryKey: ["users"]}); setViewUser(null); }} />}
     </AppShell>
   );
 }
 
-function RegisterModal({ onClose }: { onClose: () => void }) {
+function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any, dbWarehouses: any[], onClose: () => void, onUpdated: () => void }) {
+  const { currentUser } = useApp();
+  const [isEditing, setIsEditing] = useState(false);
+  const [role, setRole] = useState(user.role);
+  const [warehouseId, setWarehouseId] = useState(user.warehouseId ? String(user.warehouseId) : "");
+  const [fullName, setFullName] = useState(user.fullName || "");
+  const [email, setEmail] = useState(user.email || "");
+  const [phone, setPhone] = useState(user.phone || "");
+  const [department, setDepartment] = useState(user.department || "");
+  const [error, setError] = useState<string | null>(null);
+
+  if (!currentUser) return null;
+
+  const canEdit = (currentUser.role === "Admin" || currentUser.role === "Manager") && user.role !== "Admin";
+  
+  const getWarehouseName = (id: number | string | null) => {
+    if (!id) return "All warehouses";
+    const w = dbWarehouses.find((x: any) => String(x.id) === String(id));
+    return w ? w.name : "Unknown";
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const payload: any = { 
+        fullName,
+        email,
+        phone,
+        department,
+        role: role === "Warehouse_Manager" ? "WAREHOUSE_MANAGER" : role.toUpperCase() 
+      };
+      if (role !== "Admin" && role !== "Manager" && warehouseId) {
+        payload.warehouseId = parseInt(warehouseId);
+      }
+      await api.put(`/users/${user.id}`, payload);
+    },
+    onSuccess: onUpdated,
+    onError: (err: any) => setError(err.response?.data?.message || "Failed to update user")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/users/${user.id}`);
+    },
+    onSuccess: onUpdated,
+    onError: (err: any) => setError(err.response?.data?.message || "Failed to deactivate user")
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: async () => {
+      await api.put(`/users/${user.id}/activate`);
+    },
+    onSuccess: onUpdated,
+    onError: (err: any) => setError(err.response?.data?.message || "Failed to activate user")
+  });
+
+  const handleDeactivate = () => {
+    if (confirm("Are you sure you want to deactivate this account?")) {
+      deleteMutation.mutate();
+    }
+  };
+
+  const handleActivate = () => {
+    if (confirm("Are you sure you want to reactivate this account?")) {
+      activateMutation.mutate();
+    }
+  };
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/users/${user.id}/hard`);
+    },
+    onSuccess: onUpdated,
+    onError: (err: any) => setError(err.response?.data?.message || "Failed to delete user permanently")
+  });
+
+  const handleHardDelete = () => {
+    if (confirm("WARNING: This will permanently delete the user and all their data. Are you absolutely sure?")) {
+      hardDeleteMutation.mutate();
+    }
+  };
+
+  const handleSave = () => {
+    if ((role === "Staff" || role === "Warehouse_Manager") && !warehouseId) {
+      setError("Please select a warehouse for this role.");
+      return;
+    }
+    updateMutation.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-w-lg surface-card overflow-hidden animate-in fade-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/30">
+          <div className="font-semibold flex items-center gap-2">
+            <Info className="size-4 text-primary" /> User Details
+          </div>
+          <button onClick={onClose} className="size-8 grid place-items-center rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="size-14 rounded-full grid place-items-center text-lg font-bold shrink-0" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
+              {user.initials}
+            </div>
+            <div>
+              <div className="text-lg font-bold">{user.fullName}</div>
+              <div className="text-sm text-muted-foreground font-mono">@{user.username}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Email</div>
+              <div className="font-medium truncate" title={user.email}>{user.email}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Phone</div>
+              <div className="font-medium">{user.phone || "—"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Department</div>
+              <div className="font-medium">{user.department || "—"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">System Title</div>
+              <div className="font-medium text-muted-foreground">{user.title}</div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Access & Role</div>
+            
+            {!isEditing ? (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Role</div>
+                  <span className={`px-2 py-1 rounded-md text-xs font-medium ${roleTone[user.role] || roleTone.Staff}`}>{roleLabels[user.role as keyof typeof roleLabels] || user.role}</span>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Status</div>
+                  <span className={`px-2 py-1 rounded-md text-xs font-medium ${user.isDeleted ? "bg-muted text-muted-foreground" : "bg-success/15 text-success"}`}>{user.isDeleted ? "Deactive" : "Active"}</span>
+                </div>
+                <div className="col-span-2 mt-2">
+                  <div className="text-xs text-muted-foreground mb-1">Assigned Warehouse</div>
+                  <div className="font-medium truncate" title={getWarehouseName(user.warehouseId)}>{getWarehouseName(user.warehouseId)}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Full Name" value={fullName} onChange={setFullName} />
+                <Input label="Email" value={email} onChange={setEmail} type="email" />
+                <Input label="Phone" value={phone} onChange={setPhone} />
+                <Input label="Department" value={department} onChange={setDepartment} />
+                
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Role</div>
+                  <select 
+                    value={role} 
+                    onChange={(e) => setRole(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Warehouse_Manager">Warehouse Manager</option>
+                    <option value="Staff">Staff</option>
+                  </select>
+                </label>
+                {(role !== "Admin" && role !== "Manager") && (
+                  <label className="block">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Warehouse</div>
+                    <select 
+                      value={warehouseId} 
+                      onChange={(e) => setWarehouseId(e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    >
+                      <option value="" disabled>Select a warehouse</option>
+                      {dbWarehouses.map(w => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {error && <div className="col-span-2 text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">{error}</div>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {canEdit && (
+          <div className="flex items-center justify-between px-6 py-4 bg-secondary/30 border-t border-border">
+            <div className="flex items-center gap-2">
+              {user.isDeleted ? (
+                <button 
+                  onClick={handleActivate}
+                  disabled={activateMutation.isPending}
+                  className="h-9 px-3 rounded-lg text-sm font-medium text-emerald-600 hover:bg-emerald-600/10 inline-flex items-center gap-2 transition-colors disabled:opacity-40"
+                >
+                  <RefreshCcw className="size-4" /> Activate
+                </button>
+              ) : (
+                <button 
+                  onClick={handleDeactivate}
+                  disabled={deleteMutation.isPending || currentUser.id === user.id}
+                  className="h-9 px-3 rounded-lg text-sm font-medium text-warning hover:bg-warning/10 inline-flex items-center gap-2 transition-colors disabled:opacity-40"
+                  title={currentUser.id === user.id ? "Cannot deactivate your own account" : ""}
+                  style={{ color: "var(--warning)" }}
+                >
+                  <UserMinus className="size-4" /> Deactive
+                </button>
+              )}
+              <button 
+                onClick={handleHardDelete}
+                disabled={hardDeleteMutation.isPending || currentUser.id === user.id}
+                className="h-9 px-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 transition-colors disabled:opacity-40"
+                title={currentUser.id === user.id ? "Cannot delete your own account" : ""}
+              >
+                <Trash2 className="size-4" /> Delete
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {isEditing ? (
+                <>
+                  <button 
+                    onClick={() => setIsEditing(false)}
+                    className="h-9 px-4 rounded-lg text-sm font-medium border border-border hover:bg-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleSave}
+                    disabled={updateMutation.isPending}
+                    className="h-9 px-4 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2"
+                  >
+                    <Save className="size-4" /> Save Changes
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={() => setIsEditing(true)}
+                  className="h-9 px-4 rounded-lg text-sm font-medium border border-border hover:bg-secondary inline-flex items-center gap-2"
+                >
+                  <Edit className="size-4" /> Edit
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWarehouses: any[] }) {
   const [fullName, setFullName] = useState("");
   const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
@@ -182,15 +575,6 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
   const [success, setSuccess] = useState(false);
   const [role, setRole] = useState("Staff");
   const [warehouseId, setWarehouseId] = useState("");
-  const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
-
-  useEffect(() => {
-    import("@/lib/api").then(({ api }) => {
-      api.get("/warehouses")
-        .then(res => setDbWarehouses(res.data))
-        .catch(err => console.error("Failed to fetch warehouses", err));
-    });
-  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,7 +584,6 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
     if (!accept) return setError("You must accept the terms to continue.");
     setError(null);
     try {
-      const { api } = await import("@/lib/api");
       const res = await api.post("/auth/register", {
         username: userName,
         email: email,
@@ -209,7 +592,7 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
         fullName: fullName,
         phone: phone,
         department: department,
-        role: role,
+        role: role === "Warehouse_Manager" ? "WAREHOUSE_MANAGER" : role.toUpperCase(),
         warehouseId: (role !== "Admin" && role !== "Manager") && warehouseId ? parseInt(warehouseId) : null
       });
       if (res.data.success) {
