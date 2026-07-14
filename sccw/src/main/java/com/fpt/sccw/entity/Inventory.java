@@ -19,6 +19,9 @@ public class Inventory extends BaseEntity{
     @Column(name = "quantity", nullable = false)
     private Long quantity;
 
+    @Column(name = "low_stock_threshold")
+    private Long lowStockThreshold;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
@@ -26,4 +29,8 @@ public class Inventory extends BaseEntity{
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "location_id")
+    private Location location;
 }

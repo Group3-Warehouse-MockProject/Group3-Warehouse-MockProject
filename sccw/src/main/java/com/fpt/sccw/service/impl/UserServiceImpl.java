@@ -4,16 +4,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fpt.sccw.service.*;
-import com.fpt.sccw.dto.request.LoginRequest;
-import com.fpt.sccw.dto.request.RegisterRequest;
-import com.fpt.sccw.dto.response.AuthResponse;
-import com.fpt.sccw.entity.Role;
-import com.fpt.sccw.entity.User;
-import com.fpt.sccw.entity.Warehouse;
-import com.fpt.sccw.repository.RoleRepository;
-import com.fpt.sccw.repository.UserRepository;
-import com.fpt.sccw.repository.WarehouseRepository;
+import com.fpt.sccw.dto.request.*;
+import com.fpt.sccw.dto.response.*;
+import com.fpt.sccw.entity.*;
+import com.fpt.sccw.repository.*;
 import com.fpt.sccw.security.JwtTokenProvider;
+
+import java.util.*;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -37,7 +34,7 @@ public class UserServiceImpl implements UserService {
         log.info("Attempting login for user: {}", loginRequest.getEmailOrUsername());
 
         // Find user by email or username
-        java.util.Optional<com.fpt.sccw.entity.User> userOpt = userRepository.findByEmail(loginRequest.getEmailOrUsername());
+        Optional<User> userOpt = userRepository.findByEmail(loginRequest.getEmailOrUsername());
         if (userOpt.isEmpty()) {
             userOpt = userRepository.findByUsername(loginRequest.getEmailOrUsername());
         }

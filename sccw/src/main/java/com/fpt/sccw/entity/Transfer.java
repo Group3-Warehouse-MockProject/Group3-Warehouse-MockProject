@@ -16,7 +16,7 @@ public class Transfer extends BaseEntity{
 
     @Enumerated(EnumType.STRING)
     @Column(name = "transfer_type", nullable = false)
-    private Status.TransactionType transferType;
+    private Status.TransferType transferType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
@@ -26,13 +26,21 @@ public class Transfer extends BaseEntity{
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_destination_id", nullable = true)
+    private Warehouse warehouseDestination;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_id", nullable = false)
+    private User createdByUser;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_by_id", nullable = true)
+    private User assignedByUser;
 
     @OneToMany(mappedBy = "transfer", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @Builder.Default

@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
-  weeklyFlow,
-  categoryShare,
-  movements,
-  formatVND,
+  formatVND
 } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Package, TrendingUp, TrendingDown, AlertTriangle, Boxes, ArrowUpRight } from "lucide-react";
+import { Package, TrendingUp, TrendingDown, AlertTriangle, Boxes, ArrowUpRight, ClipboardList } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -33,12 +30,22 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, currentUser } = useApp();
   
   const { data: inventoryData, isLoading } = useQuery({
     queryKey: ["inventory", activeWarehouseId],
     queryFn: async () => {
       const res = await api.get("/inventory", {
+        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+      });
+      return res.data;
+    }
+  });
+
+  const { data: dashboardData } = useQuery({
+    queryKey: ["dashboard", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/dashboard", {
         params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
       });
       return res.data;
@@ -60,16 +67,26 @@ function Dashboard() {
 
   const scopedProducts = inventoryData || [];
     
-  const scopedMovements = activeWarehouseId
-    ? movements.filter((m) => m.warehouseId === activeWarehouseId)
-    : movements;
+  const scopedMovements = dashboardData?.movements || [];
   const lowStock = scopedProducts.filter((p: any) => p.stock < p.reorder).slice(0, 5);
 
+  const isStaff = currentUser?.role === "Staff";
+  const pendingOrders = dashboardData?.pendingOrders || 0;
+  const weeklyFlow = dashboardData?.weeklyFlow || [];
+
+  const categoryMap = new Map();
+  scopedProducts.forEach((p: any) => {
+    categoryMap.set(p.category, (categoryMap.get(p.category) || 0) + p.stock);
+  });
+  const categoryShare = Array.from(categoryMap.entries()).map(([name, value]) => ({ name, value }));
+
   const kpis = [
-    { label: "Total SKUs", value: scopedProducts.length.toString(), delta: "+3 this week", icon: Package, tone: "primary" },
-    { label: "Units in stock", value: scopedProducts.reduce((s: number, p: any) => s + p.stock, 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" },
-    { label: "Inventory value", value: formatVND(scopedProducts.reduce((s: number, p: any) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" },
-    { label: "Low stock", value: scopedProducts.filter((p: any) => p.stock < p.reorder).length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" },
+    { label: "Total SKUs", value: scopedProducts.length.toString(), delta: "+3 this week", icon: Package, tone: "primary" as const },
+    { label: "Units in stock", value: scopedProducts.reduce((s: number, p: any) => s + p.stock, 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" as const },
+    isStaff 
+      ? { label: "Pending Orders", value: pendingOrders.toString(), delta: "Action required", icon: ClipboardList, tone: "warning" as const }
+      : { label: "Inventory value", value: formatVND(scopedProducts.reduce((s: number, p: any) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" as const },
+    { label: "Low stock", value: scopedProducts.filter((p: any) => p.stock < p.reorder).length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" as const },
   ];
 
   return (
@@ -174,7 +191,7 @@ function Dashboard() {
               <button className="text-xs text-primary hover:underline">View all →</button>
             </div>
             <div className="space-y-3">
-              {scopedMovements.slice(0, 6).map((m) => (
+              {scopedMovements.slice(0, 6).map((m: any) => (
                 <div key={m.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/40 border border-border/60">
                   <div
                     className={`size-9 rounded-lg grid place-items-center ${

@@ -43,6 +43,10 @@ public class Warehouse extends BaseEntity{
     @Builder.Default
     private List<Transfer> transfers = new ArrayList<>();
 
+    @OneToMany(mappedBy = "warehouseDestination", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @Builder.Default
+    private List<Transfer> incomingTransfers = new ArrayList<>();
+
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private List<InventoryCheck> inventoryChecks = new ArrayList<>();

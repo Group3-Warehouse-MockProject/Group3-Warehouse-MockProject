@@ -3,6 +3,8 @@ import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { suppliers } from "@/lib/warehouse-data";
 import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe } from "lucide-react";
+import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
+
 
 export const Route = createFileRoute("/suppliers")({
   head: () => ({ meta: [{ title: "Suppliers — TechStock" }] }),
@@ -14,6 +16,7 @@ const PAGE_SIZE = 6;
 function SuppliersPage() {
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
 
   const filtered = suppliers.filter(
     (s) =>
@@ -33,7 +36,7 @@ function SuppliersPage() {
             <h1 className="text-3xl font-bold">Suppliers</h1>
             <p className="text-sm text-muted-foreground mt-1">Partners distributing components & devices</p>
           </div>
-          <button className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
+          <button onClick={() => setOpen(true)} className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
             <Plus className="size-4" />Add supplier
           </button>
         </div>
@@ -141,7 +144,40 @@ function SuppliersPage() {
           </div>
         </div>
       </div>
+      <AddSupplierModal open={open} onClose={() => setOpen(false)} />
     </AppShell>
+  );
+}
+
+function AddSupplierModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      title="Add supplier"
+      subtitle="Register a new distribution partner"
+      icon={<Truck className="size-5" />}
+      footer={
+        <>
+          <button onClick={onClose} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+          <button onClick={onClose} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>Save supplier</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Supplier name" required className="sm:col-span-2"><input className={inputCls} placeholder="e.g. FPT Distribution" /></Field>
+        <Field label="Contact person" required><input className={inputCls} placeholder="Full name" /></Field>
+        <Field label="Country" required><input className={inputCls} placeholder="Vietnam" /></Field>
+        <Field label="Phone" required><input className={inputCls} placeholder="+84 ..." /></Field>
+        <Field label="Email" required><input type="email" className={inputCls} placeholder="sales@partner.com" /></Field>
+        <Field label="Categories supplied" className="sm:col-span-2" hint="Comma-separated, e.g. GPU, CPU, RAM">
+          <input className={inputCls} placeholder="GPU, CPU, Laptop" />
+        </Field>
+        <Field label="Initial rating (0-5)"><input type="number" step="0.1" min={0} max={5} className={inputCls} defaultValue={4.5} /></Field>
+        <Field label="On-time delivery (%)"><input type="number" min={0} max={100} className={inputCls} defaultValue={90} /></Field>
+        <Field label="Notes" className="sm:col-span-2"><textarea className={textareaCls} placeholder="Payment terms, lead time, ..." /></Field>
+      </div>
+    </ModalShell>
   );
 }
 

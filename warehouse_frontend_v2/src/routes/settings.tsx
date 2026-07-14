@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { warehouses } from "@/lib/warehouse-data";
 import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — TechStock" }] }),
@@ -10,6 +12,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const totalCap = warehouses.reduce((s, w) => s + w.capacity, 0);
+  const [open, setOpen] = useState(false);
   return (
     <AppShell>
       <div className="space-y-6 max-w-5xl">
@@ -18,9 +21,7 @@ function SettingsPage() {
             <h1 className="text-3xl font-bold">Settings</h1>
             <p className="text-sm text-muted-foreground mt-1">Manage warehouses, thresholds and system info</p>
           </div>
-          <button className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
-            <Plus className="size-4" />Add warehouse
-          </button>
+          <button className="h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium flex items-center gap-2 hover:opacity-90 transition-opacity" onClick={() => setOpen(true)}><Plus className="size-4" />Add warehouse</button>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -85,7 +86,38 @@ function SettingsPage() {
           </button>
         </div>
       </div>
+      <AddWarehouseModal open={open} onClose={() => setOpen(false)} />
     </AppShell>
+  );
+}
+
+function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      title="Add warehouse"
+      subtitle="Register a new warehouse facility"
+      icon={<Building2 className="size-5" />}
+      maxWidth="40rem"
+      footer={
+        <>
+          <button onClick={onClose} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted transition-colors">Cancel</button>
+          <button onClick={onClose} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>Create warehouse</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Warehouse code" required><input className={inputCls} placeholder="TS-HCM-02" /></Field>
+        <Field label="Name" required><input className={inputCls} placeholder="TechStock Hub" /></Field>
+        <Field label="Street address" required className="sm:col-span-2"><input className={inputCls} placeholder="Lot / Street / District" /></Field>
+        <Field label="City" required><input className={inputCls} placeholder="Ho Chi Minh City" /></Field>
+        <Field label="Country"><input className={inputCls} defaultValue="Vietnam" /></Field>
+        <Field label="Capacity (units)" required><input type="number" className={inputCls} defaultValue={10000} min={0} /></Field>
+        <Field label="Manager in charge"><input className={inputCls} placeholder="Warehouse Manager name" /></Field>
+        <Field label="Notes" className="sm:col-span-2"><textarea className={textareaCls} placeholder="Optional description" /></Field>
+      </div>
+    </ModalShell>
   );
 }
 
