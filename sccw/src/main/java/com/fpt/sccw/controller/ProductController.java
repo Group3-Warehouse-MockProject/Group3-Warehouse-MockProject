@@ -165,4 +165,53 @@ public class ProductController {
 
         return ResponseEntity.ok(ProductDTO.fromEntity(savedProduct, savedInventory));
     }
+
+    @PostMapping("/bulk")
+    @Transactional
+    public ResponseEntity<List<ProductDTO>> saveBulkProducts(@RequestBody List<ProductRequest> requests) {
+        List<ProductDTO> result = new java.util.ArrayList<>();
+        for (ProductRequest request : requests) {
+            Category category = categoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> new RuntimeException("Category not found for ID: " + request.getCategoryId()));
+            Supplier supplier = supplierRepository.findById(request.getSupplierId())
+                    .orElseThrow(() -> new RuntimeException("Supplier not found for ID: " + request.getSupplierId()));
+
+            Product product = Product.builder()
+                    .code(request.getCode())
+                    .name(request.getName())
+                    .specification(request.getSpecification())
+                    .cost(request.getCost())
+                    .price(request.getPrice())
+                    .imageUrl(request.getImageUrl())
+                    .category(category)
+                    .supplier(supplier)
+                    .isDeleted(false)
+                    .build();
+
+            Product savedProduct = productRepository.save(product);
+
+            Inventory savedInventory = null;
+            if (request.getWarehouseId() != null) {
+                Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
+                        .orElseThrow(() -> new RuntimeException("Warehouse not found for ID: " + request.getWarehouseId()));
+                
+                Location location = null;
+                if (request.getLocationId() != null) {
+                    location = locationRepository.findById(request.getLocationId())
+                            .orElseThrow(() -> new RuntimeException("Location not found for ID: " + request.getLocationId()));
+                }
+                
+                Inventory inventory = Inventory.builder()
+                        .product(savedProduct)
+                        .warehouse(warehouse)
+                        .location(location)
+                        .quantity(request.getInitialStock() != null ? request.getInitialStock() : 0L)
+                        .lowStockThreshold(request.getReorderPoint() != null ? request.getReorderPoint() : 0L)
+                        .build();
+                savedInventory = inventoryRepository.save(inventory);
+            }
+            result.add(ProductDTO.fromEntity(savedProduct, savedInventory));
+        }
+        return ResponseEntity.ok(result);
+    }
 }

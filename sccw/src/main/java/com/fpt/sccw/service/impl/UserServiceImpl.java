@@ -191,4 +191,109 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
     }
     
+    @Override
+    public java.util.List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    @Override
+    public User updateUser(Long id, String fullName, String email, String phone, String department, String roleName, Long warehouseId) {
+        User user = getUserById(id);
+        
+        // Update basic info
+        if (fullName != null && !fullName.trim().isEmpty()) {
+            user.setFullName(fullName);
+        }
+        if (email != null && !email.trim().isEmpty()) {
+            // Check if email is already used by another user
+            Optional<User> existingUser = userRepository.findByEmail(email);
+            if (existingUser.isPresent() && !existingUser.get().getId().equals(id)) {
+                throw new RuntimeException("Email is already in use.");
+            }
+            user.setEmail(email);
+        }
+        user.setPhone(phone);
+        user.setDepartment(department);
+
+        Role.RoleName roleEnum;
+        try {
+            roleEnum = Role.RoleName.valueOf(roleName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid role name: " + roleName);
+        }
+        
+        Role role = roleRepository.findByRoleName(roleEnum)
+                .orElseThrow(() -> new RuntimeException("Role not found: " + roleName));
+        
+        user.setRole(role);
+        
+        if (roleEnum == Role.RoleName.ADMIN || roleEnum == Role.RoleName.MANAGER) {
+            user.setWarehouse(null);
+        } else {
+            if (warehouseId == null) {
+                throw new RuntimeException("Warehouse ID is required for role: " + roleName);
+            }
+            Warehouse warehouse = warehouseRepository.findById(warehouseId)
+                    .orElseThrow(() -> new RuntimeException("Warehouse not found: " + warehouseId));
+            user.setWarehouse(warehouse);
+        }
+        
+        return userRepository.save(user);
+    }
+
+    @Override
+    public User updateProfile(Long id, String fullName, String email, String phone, String avatarUrl) {
+        User user = getUserById(id);
+        
+        if (fullName != null && !fullName.trim().isEmpty()) {
+            user.setFullName(fullName);
+        }
+        if (email != null && !email.trim().isEmpty()) {
+            Optional<User> existingUser = userRepository.findByEmail(email);
+            if (existingUser.isPresent() && !existingUser.get().getId().equals(id)) {
+                throw new RuntimeException("Email is already in use.");
+            }
+            user.setEmail(email);
+        }
+        if (phone != null) user.setPhone(phone);
+        if (avatarUrl != null) user.setAvatar(avatarUrl);
+        
+        return userRepository.save(user);
+    }
+
+    @Override
+    public void changePassword(Long id, String currentPassword, String newPassword) {
+        User user = getUserById(id);
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new RuntimeException("Current password is incorrect.");
+        }
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new RuntimeException("New password must be at least 8 characters long.");
+        }
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    @Override
+    public void deleteUser(Long id) {
+        User user = getUserById(id);
+        user.setIsDeleted(true);
+        userRepository.save(user);
+    }
+
+    @Override
+    public void activateUser(Long id) {
+        User user = getUserById(id);
+        user.setIsDeleted(false);
+        userRepository.save(user);
+    }
+
+    @Override
+    public void hardDeleteUser(Long id) {
+        try {
+            userRepository.deleteById(id);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new RuntimeException("Cannot permanently delete this user because they are linked to existing records (receipts, transfers, etc). Please keep them as Deactive.");
+        }
+    }
 }

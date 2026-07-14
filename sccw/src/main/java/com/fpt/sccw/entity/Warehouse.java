@@ -27,6 +27,9 @@ public class Warehouse extends BaseEntity{
     @Column(name = "location", nullable = false)
     private String location;
 
+    @Column(name = "capacity")
+    private Long capacity;
+
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private List<WarehouseReceipt> receipts = new ArrayList<>();
@@ -37,7 +40,7 @@ public class Warehouse extends BaseEntity{
 
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
-    private List<User> managers = new ArrayList<>();
+    private List<User> users = new ArrayList<>();
 
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default

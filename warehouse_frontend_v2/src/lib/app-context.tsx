@@ -9,6 +9,7 @@ interface AppContextValue {
   setActiveWarehouseId: (id: string | null) => void;
   canSwitchWarehouse: boolean;
   logout: () => void;
+  updateCurrentUser: (data: Partial<AppUser>) => void;
 }
 
 const AppCtx = createContext<AppContextValue | null>(null);
@@ -75,6 +76,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCurrentUser(null);
           window.location.href = "/login";
         }
+      },
+      updateCurrentUser: (data: Partial<AppUser>) => {
+        setCurrentUser(prev => prev ? { ...prev, ...data } : null);
       }
     };
   }, [currentUser, activeWarehouseId, canSwitchWarehouse]);

@@ -33,6 +33,7 @@ export interface AppUser {
   warehouseId: string | null; // null => all warehouses
   initials: string;
   title: string;
+  avatarUrl?: string;
 }
 
 export const users: AppUser[] = [

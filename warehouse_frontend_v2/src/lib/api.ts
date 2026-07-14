@@ -50,4 +50,3 @@ export function parseJwt(token: string) {
     return null;
   }
 }
-
