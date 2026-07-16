@@ -57,13 +57,19 @@ public class DashboardService {
 
                 movements.add(MovementDTO.builder()
                         .id("R-" + r.getId() + "-" + d.getId())
+                        .receiptId(r.getId())
                         .type(isInbound ? "Inbound" : "Outbound")
+                        .sku(d.getProduct().getCode())
                         .product(d.getProduct().getName())
                         .partner(partner)
                         .staff(r.getUser().getFullName())
                         .warehouseId(String.valueOf(r.getWarehouse().getId()))
                         .qty(d.getQuantity())
-                        .date(r.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd, yyyy")))
+                        .date(r.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
+                        .status(r.getStatus().name())
+                        .remark(r.getRemark())
+                        .createdAt(r.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
+                        .updatedAt(r.getUpdatedAt() != null ? r.getUpdatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : null)
                         .build());
             }
         }
@@ -77,6 +83,7 @@ public class DashboardService {
                 movements.add(MovementDTO.builder()
                         .id("T-" + t.getId() + "-" + d.getId())
                         .type(type)
+                        .sku(d.getProduct().getCode())
                         .product(d.getProduct().getName())
                         .partner("Transfer to " + partner)
                         .staff(t.getCreatedByUser().getFullName())
