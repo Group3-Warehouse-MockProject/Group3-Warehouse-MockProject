@@ -164,28 +164,12 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         throw new Error("The Excel file is empty.");
       }
 
-      // Filter out exact sample rows from the template
+      // Filter out exact sample rows from the template using their distinctive Notes
       const cleanJsonData = jsonData.filter((row) => {
-        const isSample1 =
-          Number(row.GroupKey) === 1 &&
-          String(row.WAREHOUSE || "").trim() === "TS-HCM-01" &&
-          String(row.PRODUCT || "").trim() === "CPU-INT-14700K" &&
-          Number(row.QTY) === 50;
-
-        const isSample2 =
-          Number(row.GroupKey) === 1 &&
-          String(row.WAREHOUSE || "").trim() === "TS-HCM-01" &&
-          String(row.PRODUCT || "").trim() === "CPU-AMD-7800X3D" &&
-          Number(row.QTY) === 20;
-
-        const isSample3 =
-          Number(row.GroupKey) === 2 &&
-          String(row.WAREHOUSE || "").trim() === "TS-HN-01" &&
-          String(row.PRODUCT || "").trim() === "CPU-INT-14700K" &&
-          Number(row.QTY) === 30;
-
-        return !isSample1 && !isSample2 && !isSample3;
+        const note = String(row.NOTES || "").trim();
+        return note !== "Imported batch A" && note !== "Imported batch B";
       });
+
 
       if (cleanJsonData.length === 0) {
         throw new Error("No valid data to import. Please delete the sample rows and fill in your own data.");
