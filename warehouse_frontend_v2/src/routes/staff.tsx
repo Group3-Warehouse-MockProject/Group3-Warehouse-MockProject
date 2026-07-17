@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { useApp, roleLabels } from "@/lib/app-context";
-import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff, ChevronLeft, ChevronRight, Trash2, Edit, Save, Search, Filter, RefreshCcw, UserMinus } from "lucide-react";
+import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff, ChevronLeft, ChevronRight, Trash2, Edit, Save, Search, Filter, RefreshCcw, UserMinus, Activity, Clock, LogIn, Globe } from "lucide-react";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({ meta: [{ title: "Staff — TechStock" }] }),
@@ -307,6 +307,8 @@ function StaffPage() {
 function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any, dbWarehouses: any[], onClose: () => void, onUpdated: () => void }) {
   const { currentUser } = useApp();
   const [isEditing, setIsEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"details" | "activity">("details");
+  const canViewActivity = currentUser?.role === "Admin" || currentUser?.role === "Manager";
   const [role, setRole] = useState(user.role);
   const [warehouseId, setWarehouseId] = useState(user.warehouseId ? String(user.warehouseId) : "");
   const [fullName, setFullName] = useState(user.fullName || "");
@@ -408,6 +410,33 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-border px-6 pt-4 gap-1">
+          <button
+            onClick={() => setActiveTab("details")}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === "details"
+                ? "bg-background text-foreground border border-border border-b-transparent -mb-px"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+            }`}
+          >
+            <Info className="size-3.5 inline mr-1.5" />Details
+          </button>
+          {canViewActivity && (
+            <button
+              onClick={() => setActiveTab("activity")}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                activeTab === "activity"
+                  ? "bg-background text-foreground border border-border border-b-transparent -mb-px"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+              }`}
+            >
+              <Activity className="size-3.5 inline mr-1.5" />Activity
+            </button>
+          )}
+        </div>
+
+        {activeTab === "details" && (
         <div className="p-6 space-y-6">
           <div className="flex items-center gap-4">
             <div className="size-14 rounded-full grid place-items-center text-lg font-bold shrink-0" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
@@ -496,6 +525,13 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
             )}
           </div>
         </div>
+        )} {/* End details tab */}
+
+        {activeTab === "activity" && canViewActivity && (
+          <div className="p-6">
+            <ActivityTimeline userId={user.id} />
+          </div>
+        )}
 
         {canEdit && (
           <div className="flex items-center justify-between px-6 py-4 bg-secondary/30 border-t border-border">
@@ -760,6 +796,149 @@ function Input({
         className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
       />
     </label>
+  );
+}
+
+function ActivityTimeline({ userId }: { userId: number }) {
+  const [activityPage, setActivityPage] = useState(0);
+  const pageSize = 10;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["user-activity", userId, activityPage],
+    queryFn: async () => {
+      const res = await api.get(`/logs/user/${userId}`, {
+        params: { page: activityPage, size: pageSize },
+      });
+      return res.data;
+    },
+  });
+
+  const logs = data?.content ?? [];
+  const totalPages = Math.max(1, data?.totalPages ?? 1);
+
+  const actionIcons: Record<string, React.ElementType> = {
+    LOGIN: LogIn,
+    PAGE_VIEW: Eye,
+    CREATE_PRODUCT: Users,
+    CREATE_INBOUND: Users,
+    CREATE_OUTBOUND: Users,
+    UPDATE_RECEIPT: Edit,
+    DELETE_RECEIPT: Trash2,
+    CREATE_USER: UserPlus,
+    UPDATE_USER: Edit,
+    DEACTIVATE_USER: UserMinus,
+    ACTIVATE_USER: RefreshCcw,
+    DELETE_USER: Trash2,
+  };
+
+  const actionColors: Record<string, string> = {
+    LOGIN: "text-emerald-400 bg-emerald-500/15",
+    PAGE_VIEW: "text-blue-400 bg-blue-500/15",
+    CREATE_PRODUCT: "text-purple-400 bg-purple-500/15",
+    CREATE_INBOUND: "text-cyan-400 bg-cyan-500/15",
+    CREATE_OUTBOUND: "text-orange-400 bg-orange-500/15",
+    UPDATE_RECEIPT: "text-yellow-400 bg-yellow-500/15",
+    DELETE_RECEIPT: "text-red-400 bg-red-500/15",
+    CREATE_USER: "text-green-400 bg-green-500/15",
+    UPDATE_USER: "text-indigo-400 bg-indigo-500/15",
+    DEACTIVATE_USER: "text-rose-400 bg-rose-500/15",
+    ACTIVATE_USER: "text-teal-400 bg-teal-500/15",
+    DELETE_USER: "text-red-400 bg-red-500/15",
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-3 py-12 text-muted-foreground">
+        <Activity className="size-5 animate-spin" />
+        <span className="text-sm">Loading activity history…</span>
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+        <Activity className="size-8 opacity-30" />
+        <span className="text-sm">No activity history found for this user.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        {logs.map((log: any, idx: number) => {
+          const Icon = actionIcons[log.actionType] || Activity;
+          const color = actionColors[log.actionType] || "text-muted-foreground bg-secondary";
+          return (
+            <div key={log.id} className="flex gap-3 items-start group">
+              {/* Timeline line */}
+              <div className="flex flex-col items-center">
+                <div className={`size-8 rounded-full grid place-items-center shrink-0 ${color}`}>
+                  <Icon className="size-3.5" />
+                </div>
+                {idx < logs.length - 1 && <div className="w-px flex-1 min-h-[24px] bg-border" />}
+              </div>
+              {/* Content */}
+              <div className="flex-1 pb-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border border-border/60 bg-secondary/40">
+                      {log.actionType.replace(/_/g, " ")}
+                    </span>
+                    {log.details && (
+                      <p className="mt-1.5 text-sm text-foreground">{log.details}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                    <Clock className="size-3" />
+                    {new Date(log.timestamp).toLocaleString()}
+                  </div>
+                </div>
+                {log.ipAddress && (
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Globe className="size-3" />
+                    {log.ipAddress}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1 pt-2">
+          <button
+            onClick={() => setActivityPage((p) => Math.max(0, p - 1))}
+            disabled={activityPage === 0}
+            className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+          {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              onClick={() => setActivityPage(n - 1)}
+              className={`size-8 rounded-md text-xs font-medium ${
+                n === activityPage + 1
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary border border-border hover:bg-muted"
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+          <button
+            onClick={() => setActivityPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={activityPage >= totalPages - 1}
+            className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

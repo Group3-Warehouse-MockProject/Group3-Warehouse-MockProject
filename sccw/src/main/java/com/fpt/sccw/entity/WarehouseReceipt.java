@@ -29,6 +29,9 @@ public class WarehouseReceipt extends BaseEntity{
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark;
 
+    @Column(name = "partner")
+    private String partner;
+
     @NotNull(message = "User is required")
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "user_id", nullable = false)

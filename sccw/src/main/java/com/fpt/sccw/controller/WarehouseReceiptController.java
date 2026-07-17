@@ -5,6 +5,8 @@ import com.fpt.sccw.dto.request.UpdateReceiptRequest;
 import com.fpt.sccw.dto.response.MovementDTO;
 import com.fpt.sccw.entity.*;
 import com.fpt.sccw.repository.*;
+import com.fpt.sccw.service.ActivityLogService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -30,6 +32,7 @@ public class WarehouseReceiptController {
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
     private final WarehouseRepository warehouseRepository;
+    private final ActivityLogService activityLogService;
 
     private static final DateTimeFormatter DATE_FMT     = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -70,10 +73,7 @@ public class WarehouseReceiptController {
             if (type != null && !type.isBlank() && !r.getType().name().equalsIgnoreCase(type)) continue;
 
             for (ReceiptDetail d : r.getDetails()) {
-                String partner = isInbound ? "Supplier" : "Customer";
-                if (isInbound && d.getProduct().getSupplier() != null) {
-                    partner = d.getProduct().getSupplier().getName();
-                }
+                String partner = resolvePartner(r, d, isInbound);
                 movements.add(buildReceiptMovement(r, d, isInbound, partner));
             }
         }
@@ -126,6 +126,7 @@ public class WarehouseReceiptController {
                 .type(txType)
                 .status(Status.ReceiptStatus.PENDING)
                 .remark(request.getRemark())
+                .partner(request.getPartner())
                 .user(user)
                 .warehouse(warehouse)
                 .build();
@@ -149,18 +150,21 @@ public class WarehouseReceiptController {
                     .price(resolvedPrice)
                     .build());
 
-            adjustInventory(product, warehouse, item.getQuantity(), isInbound);
-
+            if (isInbound) {
+                adjustInventory(product, warehouse, item.getQuantity(), true);
+            }
         }
 
         receipt.setDetails(details);
         WarehouseReceipt saved = receiptRepository.save(receipt);
 
+        activityLogService.log(user, isInbound ? "CREATE_INBOUND" : "CREATE_OUTBOUND",
+                "Created " + (isInbound ? "inbound" : "outbound") + " receipt #" + saved.getId()
+                + " at " + warehouse.getCode());
+
         List<MovementDTO> result = new ArrayList<>();
         for (ReceiptDetail d : saved.getDetails()) {
-            String partner = isInbound && d.getProduct().getSupplier() != null
-                    ? d.getProduct().getSupplier().getName() : (isInbound ? "Supplier" : "Customer");
-            result.add(buildReceiptMovement(saved, d, isInbound, partner));
+            result.add(buildReceiptMovement(saved, d, isInbound, resolvePartner(saved, d, isInbound)));
         }
         return ResponseEntity.status(201).body(result);
     }
@@ -197,13 +201,52 @@ public class WarehouseReceiptController {
                 return ResponseEntity.badRequest().body("Invalid status: " + request.getStatus());
             }
 
-            // Enforce business rule: Cannot change status of finalized receipts
-            if (receipt.getStatus() != Status.ReceiptStatus.PENDING && receipt.getStatus() != newStatus) {
-                return ResponseEntity.badRequest()
-                        .body("Cannot change status of a finalized receipt (" + receipt.getStatus() + ")");
-            }
+            boolean isReceiptInbound = receipt.getType() == Status.TransactionType.INBOUND;
 
-            receipt.setStatus(newStatus);
+            if (isReceiptInbound) {
+                if (receipt.getStatus() != Status.ReceiptStatus.PENDING && receipt.getStatus() != newStatus) {
+                    return ResponseEntity.badRequest()
+                            .body("Cannot change status of a finalized inbound receipt (" + receipt.getStatus() + ")");
+                }
+                receipt.setStatus(newStatus);
+            } else {
+                Status.ReceiptStatus currentStatus = receipt.getStatus();
+                if (currentStatus == Status.ReceiptStatus.PENDING) {
+                    if (newStatus != Status.ReceiptStatus.APPROVED && newStatus != Status.ReceiptStatus.REJECTED && newStatus != Status.ReceiptStatus.PENDING) {
+                        return ResponseEntity.badRequest().body("Pending outbound requests can only be transitioned to APPROVED or REJECTED");
+                    }
+                    receipt.setStatus(newStatus);
+                } else if (currentStatus == Status.ReceiptStatus.APPROVED) {
+                    if (newStatus == Status.ReceiptStatus.COMPLETED) {
+                        Warehouse warehouse = receipt.getWarehouse();
+                        // Verify inventory for all items
+                        for (ReceiptDetail d : receipt.getDetails()) {
+                            Inventory inv = inventoryRepository
+                                    .findByProductIdAndWarehouseId(d.getProduct().getId(), warehouse.getId())
+                                    .orElse(null);
+                            if (inv == null || inv.getQuantity() < d.getQuantity()) {
+                                receipt.setStatus(Status.ReceiptStatus.CANCELLED);
+                                receiptRepository.save(receipt);
+                                return ResponseEntity.badRequest().body("Insufficient inventory for product: " + d.getProduct().getCode() + " (Required: " + d.getQuantity() + "). Outbound request cancelled.");
+                            }
+                        }
+                        // Subtract inventory
+                        for (ReceiptDetail d : receipt.getDetails()) {
+                            adjustInventory(d.getProduct(), warehouse, d.getQuantity(), false);
+                        }
+                        receipt.setStatus(Status.ReceiptStatus.COMPLETED);
+                    } else if (newStatus == Status.ReceiptStatus.CANCELLED) {
+                        receipt.setStatus(Status.ReceiptStatus.CANCELLED);
+                    } else if (newStatus != Status.ReceiptStatus.APPROVED) {
+                        return ResponseEntity.badRequest().body("Approved outbound requests can only be transitioned to COMPLETED or CANCELLED");
+                    }
+                } else {
+                    if (currentStatus != newStatus) {
+                        return ResponseEntity.badRequest()
+                                .body("Cannot change status of a finalized outbound receipt (" + currentStatus + ")");
+                    }
+                }
+            }
         }
         if (request.getRemark() != null) {
             receipt.setRemark(request.getRemark().isBlank() ? null : request.getRemark());
@@ -212,13 +255,16 @@ public class WarehouseReceiptController {
 
         WarehouseReceipt saved = receiptRepository.save(receipt);
 
+        // Log the update
+        activityLogService.log(user, "UPDATE_RECEIPT",
+                "Updated receipt #" + saved.getId() + ": status=" + saved.getStatus().name()
+                + ", type=" + saved.getType().name());
+
         // Return updated movements for this receipt
         boolean isInbound = saved.getType().name().equals("INBOUND");
         List<MovementDTO> result = new ArrayList<>();
         for (ReceiptDetail d : saved.getDetails()) {
-            String partner = isInbound && d.getProduct().getSupplier() != null
-                    ? d.getProduct().getSupplier().getName() : (isInbound ? "Supplier" : "Customer");
-            result.add(buildReceiptMovement(saved, d, isInbound, partner));
+            result.add(buildReceiptMovement(saved, d, isInbound, resolvePartner(saved, d, isInbound)));
         }
         return ResponseEntity.ok(result);
     }
@@ -249,17 +295,33 @@ public class WarehouseReceiptController {
 
         // Rollback inventory
         for (ReceiptDetail d : receipt.getDetails()) {
-            // INBOUND added stock → subtract; OUTBOUND subtracted stock → add back
-            adjustInventory(d.getProduct(), warehouse, d.getQuantity(), !isInbound);
+            if (isInbound) {
+                adjustInventory(d.getProduct(), warehouse, d.getQuantity(), false);
+            } else {
+                if (receipt.getStatus() == Status.ReceiptStatus.COMPLETED) {
+                    adjustInventory(d.getProduct(), warehouse, d.getQuantity(), true);
+                }
+            }
         }
 
         receiptRepository.delete(receipt);
+
+        activityLogService.log(user, "DELETE_RECEIPT",
+                "Deleted " + (isInbound ? "inbound" : "outbound") + " receipt #" + receiptId
+                + " at " + warehouse.getCode());
+
         return ResponseEntity.noContent().build();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private String resolvePartner(WarehouseReceipt r, ReceiptDetail d, boolean isInbound) {
+        if (r.getPartner() != null && !r.getPartner().isBlank()) return r.getPartner();
+        if (isInbound && d.getProduct().getSupplier() != null) return d.getProduct().getSupplier().getName();
+        return isInbound ? "Supplier" : "Customer";
+    }
 
     private User resolveUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
