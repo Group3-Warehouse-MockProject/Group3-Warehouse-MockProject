@@ -20,6 +20,13 @@ interface WarehouseData {
   city: string;
   capacity: number;
   usedCapacity: number;
+  managerName?: string | null;
+}
+
+interface ManagerUser {
+  id: number;
+  fullName: string;
+  warehouseId: number | null;
 }
 
 function SettingsPage() {
@@ -105,6 +112,15 @@ function SettingsPage() {
                             <div className="text-muted-foreground">{w.city}</div>
                           </div>
                         </div>
+                        {/* Manager in charge */}
+                        {w.managerName && (
+                          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/15 text-accent">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                              {w.managerName}
+                            </span>
+                          </div>
+                        )}
                         {/* Utilization mini bar per warehouse */}
                         <div className="mt-3">
                           <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
@@ -179,10 +195,21 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
     address: "",
     city: "",
     capacity: "10000",
-    manager: "",
+    managerId: "",   // ID của WarehouseManager user (string vì select value)
     notes: "",
   });
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch danh sách user có role WAREHOUSE_MANAGER
+  const { data: managersData, isLoading: managersLoading } = useQuery<ManagerUser[]>({
+    queryKey: ["users", "WAREHOUSE_MANAGER"],
+    queryFn: async () => {
+      const res = await api.get("/users", { params: { role: "WAREHOUSE_MANAGER" } });
+      return res.data;
+    },
+    enabled: open, // chỉ fetch khi modal đang mở
+  });
+  const managers = managersData ?? [];
 
   const { mutate, isPending } = useMutation({
     mutationFn: async () => {
@@ -192,12 +219,14 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
         name: form.name,
         address: fullAddress,
         capacity: Number(form.capacity),
-        manager: form.manager,
+        managerId: form.managerId ? Number(form.managerId) : null,
         notes: form.notes,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["warehouses"] });
+      // Invalidate danh sách user vì manager đã được gán warehouse mới
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       handleClose();
     },
     onError: (err: any) => {
@@ -207,12 +236,12 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
   });
 
   function handleClose() {
-    setForm({ code: "", name: "", address: "", city: "", capacity: "10000", manager: "", notes: "" });
+    setForm({ code: "", name: "", address: "", city: "", capacity: "10000", managerId: "", notes: "" });
     setError(null);
     onClose();
   }
 
-  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
@@ -234,7 +263,7 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
           </button>
           <button
             onClick={() => { setError(null); mutate(); }}
-            disabled={isPending || !form.code || !form.name || !form.address}
+            disabled={isPending || !form.code || !form.name || !form.address || !form.city}
             className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring flex items-center gap-2 disabled:opacity-60"
             style={{ background: "var(--gradient-primary)" }}
           >
@@ -263,8 +292,22 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
         <Field label="Capacity (units)" required>
           <input type="number" className={inputCls} value={form.capacity} onChange={set("capacity")} min={0} />
         </Field>
-        <Field label="Manager in charge">
-          <input className={inputCls} placeholder="Warehouse Manager name" value={form.manager} onChange={set("manager")} />
+        <Field label="Manager in charge" hint={managers.length === 0 && !managersLoading ? "No available warehouse managers" : undefined}>
+          <select
+            className={inputCls}
+            value={form.managerId}
+            onChange={set("managerId")}
+            disabled={managersLoading}
+          >
+            <option value="">— None (assign later) —</option>
+            {managersLoading && <option disabled>Loading...</option>}
+            {managers.map((m) => (
+              <option key={m.id} value={String(m.id)}>
+                {m.fullName}
+                {m.warehouseId ? " (already assigned)" : ""}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="Notes" className="sm:col-span-2">
           <textarea className={textareaCls} placeholder="Optional description" value={form.notes} onChange={set("notes")} />

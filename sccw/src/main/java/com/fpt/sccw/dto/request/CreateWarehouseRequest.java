@@ -22,9 +22,10 @@ public class CreateWarehouseRequest {
     @Min(value = 0, message = "Capacity must be >= 0")
     private Long capacity;
 
-    /** Optional — ghi chú thêm, không lưu vào entity */
-    private String manager;
+    /** Optional — ID của User có role WAREHOUSE_MANAGER được gán vào kho này */
+    private Long managerId;
 
     /** Optional — ghi chú */
     private String notes;
 }
+

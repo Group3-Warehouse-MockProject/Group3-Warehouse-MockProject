@@ -42,7 +42,7 @@ public class WarehouseController {
         List<Warehouse> warehouses = warehouseRepository.findAll();
 
         List<WarehouseDTO> result = warehouses.stream()
-                .map(WarehouseDTO::fromEntity)
+                .map(w -> WarehouseDTO.fromEntity(w, resolveManagerName(w.getId())))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
@@ -57,13 +57,13 @@ public class WarehouseController {
         }
 
         String email = authentication.getName();
-        User user = userRepository.findByEmail(email).orElse(null);
-        if (user == null) {
+        User currentUser = userRepository.findByEmail(email).orElse(null);
+        if (currentUser == null) {
             return ResponseEntity.status(401).build();
         }
 
         // Chỉ ADMIN hoặc MANAGER mới được tạo kho
-        String roleName = user.getRole().getRoleName().name();
+        String roleName = currentUser.getRole().getRoleName().name();
         if (!roleName.equals("ADMIN") && !roleName.equals("MANAGER")) {
             return ResponseEntity.status(403).body("Insufficient permissions to create a warehouse");
         }
@@ -76,6 +76,20 @@ public class WarehouseController {
             return ResponseEntity.badRequest().body("Warehouse code already exists: " + request.getCode());
         }
 
+        // Validate managerId nếu có
+        User manager = null;
+        if (request.getManagerId() != null) {
+            manager = userRepository.findById(request.getManagerId()).orElse(null);
+            if (manager == null) {
+                return ResponseEntity.badRequest().body("Manager user not found: " + request.getManagerId());
+            }
+            String managerRole = manager.getRole().getRoleName().name();
+            if (!managerRole.equals("WAREHOUSE_MANAGER")) {
+                return ResponseEntity.badRequest().body("Selected user is not a Warehouse Manager");
+            }
+        }
+
+        // Tạo và lưu kho mới
         Warehouse warehouse = Warehouse.builder()
                 .code(request.getCode().trim().toUpperCase())
                 .warehouseName(request.getName().trim())
@@ -84,6 +98,27 @@ public class WarehouseController {
                 .build();
 
         Warehouse saved = warehouseRepository.save(warehouse);
-        return ResponseEntity.ok(WarehouseDTO.fromEntity(saved));
+
+        // Gán kho cho manager nếu có
+        if (manager != null) {
+            manager.setWarehouse(saved);
+            userRepository.save(manager);
+        }
+
+        String managerName = manager != null ? manager.getFullName() : null;
+        return ResponseEntity.ok(WarehouseDTO.fromEntity(saved, managerName));
+    }
+
+    /** Tìm tên Warehouse Manager đang được gán cho kho này */
+    private String resolveManagerName(Long warehouseId) {
+        return userRepository.findByWarehouseId(warehouseId)
+                .stream()
+                .filter(u -> u.getRole() != null
+                        && u.getRole().getRoleName().name().equals("WAREHOUSE_MANAGER")
+                        && !Boolean.TRUE.equals(u.getIsDeleted()))
+                .map(User::getFullName)
+                .findFirst()
+                .orElse(null);
     }
 }
+
