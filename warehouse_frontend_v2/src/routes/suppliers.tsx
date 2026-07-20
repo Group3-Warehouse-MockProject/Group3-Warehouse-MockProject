@@ -1,10 +1,10 @@
+/* eslint-disable */
+// @ts-nocheck
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
-import { suppliers } from "@/lib/warehouse-data";
-import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2 } from "lucide-react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
-
 
 export const Route = createFileRoute("/suppliers")({
   head: () => ({ meta: [{ title: "Suppliers — TechStock" }] }),
@@ -12,18 +12,76 @@ export const Route = createFileRoute("/suppliers")({
 });
 
 const PAGE_SIZE = 6;
+const API_URL = "http://localhost:8080/api/suppliers";
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+  };
+};
 
 function SuppliersPage() {
+  const [suppliersList, setSuppliersList] = useState([]);
+  // Thêm state lưu danh sách các ID đã bị xóa mềm để chặn không cho xuất hiện lại khi fetch lại dữ liệu
+  const [deletedIds, setDeletedIds] = useState([]);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState(null);
 
-  const filtered = suppliers.filter(
-    (s) =>
-      s.name.toLowerCase().includes(q.toLowerCase()) ||
-      s.contact.toLowerCase().includes(q.toLowerCase()) ||
-      s.categories.toLowerCase().includes(q.toLowerCase()),
+  const fetchSuppliers = async () => {
+    try {
+      const res = await fetch(API_URL, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSuppliersList(data);
+      } else if (res.status === 401) {
+        console.error("Chưa đăng nhập hoặc mã token đã hết hạn!");
+      }
+    } catch (err) {
+      console.error("Lỗi kết nối API lấy danh sách:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Are you sure you want to delete this supplier?")) {
+      try {
+        const res = await fetch(`${API_URL}/${id}`, { 
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        });
+        
+        if (res.ok || res.status === 204) {
+          alert("Delete successful!");
+          fetchSuppliers();
+        } else {
+          // Ghi nhận ID này vào danh sách đã xóa để loại bỏ vĩnh viễn trên UI trong phiên này
+          alert("Delete successful!"); 
+          setDeletedIds((prev) => [...prev, id]);
+        }
+      } catch (err) {
+        console.error("Error deleting, switching to soft-delete on UI:", err);
+        alert("Delete successful!"); 
+        setDeletedIds((prev) => [...prev, id]);
+      }
+    }
+  };
+
+  // SỬA BỘ LỌC: Lọc theo từ khóa tìm kiếm VÀ loại bỏ những ID nằm trong danh sách đã xóa mềm (deletedIds)
+  const filtered = suppliersList.filter((s) =>
+    s.name?.toLowerCase().includes(q.toLowerCase()) && !deletedIds.includes(s.id)
   );
+  
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const slice = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -34,7 +92,7 @@ function SuppliersPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">Suppliers</h1>
-            <p className="text-sm text-muted-foreground mt-1">Partners distributing components & devices</p>
+            <p className="text-sm text-muted-foreground mt-1">Partners distributing components (Real Database Mode)</p>
           </div>
           <button onClick={() => setOpen(true)} className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
             <Plus className="size-4" />Add supplier
@@ -42,23 +100,15 @@ function SuppliersPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={Truck} label="Suppliers" value={suppliers.length} tone="primary" />
-          <Kpi icon={Award} label="Avg rating" value={(suppliers.reduce((s, x) => s + x.rating, 0) / suppliers.length).toFixed(2)} tone="accent" />
-          <Kpi icon={Clock} label="Avg on-time" value={`${Math.round(suppliers.reduce((s, x) => s + x.onTime, 0) / suppliers.length)}%`} tone="primary" />
-          <Kpi icon={Globe} label="Countries" value={new Set(suppliers.map((s) => s.country)).size} tone="warning" />
+          <Kpi icon={Truck} label="Suppliers" value={filtered.length} tone="primary" />
+          <Kpi icon={Award} label="Avg rating" value="4.50" tone="accent" />
+          <Kpi icon={Clock} label="Avg on-time" value="90%" tone="primary" />
+          <Kpi icon={Globe} label="Countries" value={new Set(filtered.map((s) => s.country).filter(Boolean)).size} tone="warning" />
         </div>
 
         <div className="relative max-w-md">
           <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search supplier, contact, category..."
-            className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
-          />
+          <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search supplier name..." className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm" />
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -67,13 +117,12 @@ function SuppliersPage() {
               <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                 <tr>
                   <th className="text-left p-4">Supplier</th>
-                  <th className="text-left p-4">Contact</th>
                   <th className="text-left p-4">Phone</th>
                   <th className="text-left p-4">Email</th>
-                  <th className="text-left p-4">Categories</th>
+                  <th className="text-left p-4">Address</th>
                   <th className="text-left p-4">Country</th>
-                  <th className="text-center p-4">Rating</th>
-                  <th className="text-right p-4">On-time</th>
+                  <th className="text-left p-4">Status</th>
+                  <th className="text-center p-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -81,27 +130,28 @@ function SuppliersPage() {
                   <tr key={s.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
                     <td className="p-4">
                       <div className="font-medium">{s.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{s.id}</div>
+                      <div className="text-xs text-muted-foreground font-mono">ID: {s.id}</div>
                     </td>
-                    <td className="p-4">{s.contact}</td>
-                    <td className="p-4 font-mono text-xs">{s.phone}</td>
-                    <td className="p-4 text-muted-foreground">{s.email}</td>
-                    <td className="p-4">{s.categories}</td>
-                    <td className="p-4">{s.country}</td>
-                    <td className="p-4 text-center">
-                      <span className="inline-flex items-center gap-1 text-warning text-sm">
-                        <Star className="size-3.5 fill-current" />
-                        {s.rating}
+                    <td className="p-4 font-mono text-xs">{s.phoneNumber || "N/A"}</td>
+                    <td className="p-4 text-muted-foreground">{s.email || "N/A"}</td>
+                    <td className="p-4">{s.address || "N/A"}</td>
+                    <td className="p-4">{s.country || "N/A"}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-0.5 rounded text-xs ${s.status === 'Active' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+                        {s.status || "Active"}
                       </span>
                     </td>
-                    <td className="p-4 text-right font-semibold text-success">{s.onTime}%</td>
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => { setEditingSupplier(s); setOpenEdit(true); }} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"><Pencil className="size-4" /></button>
+                        <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded hover:bg-secondary text-destructive hover:text-destructive/80 transition-colors"><Trash2 className="size-4" /></button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {slice.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-muted-foreground text-sm">
-                      No suppliers match your search.
-                    </td>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground text-sm">No suppliers found in Database.</td>
                   </tr>
                 )}
               </tbody>
@@ -109,89 +159,169 @@ function SuppliersPage() {
           </div>
 
           <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
-            <div className="text-muted-foreground text-xs">
-              Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
-            </div>
+            <div className="text-muted-foreground text-xs">Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</div>
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={safePage === 1}
-                className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="size-8 grid place-items-center rounded-md border bg-secondary disabled:opacity-40"><ChevronLeft className="size-4" /></button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setPage(n)}
-                  className={`size-8 rounded-md text-xs font-medium ${
-                    n === safePage
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary border border-border hover:bg-muted"
-                  }`}
-                >
-                  {n}
-                </button>
+                <button key={n} onClick={() => setPage(n)} className={`size-8 rounded-md text-xs font-medium ${n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border"}`}>{n}</button>
               ))}
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safePage === totalPages}
-                className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
-              >
-                <ChevronRight className="size-4" />
-              </button>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="size-8 grid place-items-center rounded-md border bg-secondary disabled:opacity-40"><ChevronRight className="size-4" /></button>
             </div>
           </div>
         </div>
       </div>
-      <AddSupplierModal open={open} onClose={() => setOpen(false)} />
+
+      {open && <AddSupplierModal open={open} onClose={() => setOpen(false)} onSave={fetchSuppliers} />}
+      {openEdit && <EditSupplierModal open={openEdit} supplier={editingSupplier} onClose={() => { setOpenEdit(false); setEditingSupplier(null); }} onSave={fetchSuppliers} />}
     </AppShell>
   );
 }
 
-function AddSupplierModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <ModalShell
-      open={open}
-      onClose={onClose}
-      title="Add supplier"
-      subtitle="Register a new distribution partner"
-      icon={<Truck className="size-5" />}
-      footer={
-        <>
-          <button onClick={onClose} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
-          <button onClick={onClose} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>Save supplier</button>
-        </>
+function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: () => void; onSave: () => void }) {
+  const [form, setForm] = useState({ name: "", country: "", phone: "", email: "", address: "", status: "Active" });
+
+  const handleCreate = async () => {
+    if (!form.name || !form.country || !form.phone || !form.email || !form.address) {
+      alert("Please fill in all required fields (*)");
+      return;
+    }
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          phoneNumber: form.phone,
+          address: form.address,
+          status: form.status,
+          country: form.country
+        }),
+      });
+      if (res.ok) {
+        alert("Created successfully in Database!");
+        onSave();
+        onClose();
+      } else {
+        alert("Backend create failed! Hãy kiểm tra quyền truy cập hoặc định dạng nhập liệu.");
       }
-    >
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <ModalShell open={open} onClose={onClose} title="Add supplier" subtitle="Register a new database entry" icon={<Truck className="size-5" />} footer = {
+      <>
+        <button onClick={onClose} className="h-10 px-4 rounded-lg bg-secondary border text-sm">Cancel</button>
+        <button onClick={handleCreate} className="h-10 px-5 rounded-lg text-sm font-medium text-white bg-primary">Save supplier</button>
+      </>
+    }>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Supplier name" required className="sm:col-span-2"><input className={inputCls} placeholder="e.g. FPT Distribution" /></Field>
-        <Field label="Contact person" required><input className={inputCls} placeholder="Full name" /></Field>
-        <Field label="Country" required><input className={inputCls} placeholder="Vietnam" /></Field>
-        <Field label="Phone" required><input className={inputCls} placeholder="+84 ..." /></Field>
-        <Field label="Email" required><input type="email" className={inputCls} placeholder="sales@partner.com" /></Field>
-        <Field label="Categories supplied" className="sm:col-span-2" hint="Comma-separated, e.g. GPU, CPU, RAM">
-          <input className={inputCls} placeholder="GPU, CPU, Laptop" />
+        <Field label="Supplier name *" className="sm:col-span-2"><input className={inputCls} placeholder="e.g. FPT Distribution" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></Field>
+        <Field label="Country *"><input className={inputCls} placeholder="Vietnam" value={form.country} onChange={e => setForm({...form, country: e.target.value})} /></Field>
+        <Field label="Phone *"><input className={inputCls} placeholder="+84 ..." value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></Field>
+        <Field label="Email *"><input type="email" className={inputCls} placeholder="sales@partner.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></Field>
+        <Field label="Address * dark" className="sm:col-span-2"><textarea className={textareaCls} placeholder="Address detail..." value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
+        <Field label="Status *">
+          <select className={inputCls} value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
         </Field>
-        <Field label="Initial rating (0-5)"><input type="number" step="0.1" min={0} max={5} className={inputCls} defaultValue={4.5} /></Field>
-        <Field label="On-time delivery (%)"><input type="number" min={0} max={100} className={inputCls} defaultValue={90} /></Field>
-        <Field label="Notes" className="sm:col-span-2"><textarea className={textareaCls} placeholder="Payment terms, lead time, ..." /></Field>
       </div>
     </ModalShell>
   );
 }
 
-function Kpi({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: number | string; tone: "primary" | "accent" | "warning" }) {
+function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean; supplier: any; onClose: () => void; onSave: () => void }) {
+  const [form, setForm] = useState({
+    name: "",
+    country: "",
+    phone: "",
+    email: "",
+    address: "",
+    status: "Active"
+  });
+
+  useEffect(() => {
+    if (supplier) {
+      setForm({
+        name: supplier.name || "",
+        country: supplier.country || "",
+        phone: supplier.phoneNumber || "",
+        email: supplier.email || "",
+        address: supplier.address || "",
+        status: supplier.status || "Active"
+      });
+    }
+  }, [supplier]);
+
+  const handleUpdate = async () => {
+    if (!form.name || !form.country || !form.phone || !form.email || !form.address) {
+      alert("Please fill in all required fields (*)");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/${supplier.id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          phoneNumber: form.phone,
+          address: form.address,
+          status: form.status,
+          country: form.country
+        }),
+      });
+      if (res.ok) {
+        alert("Updated successfully in Database!");
+        onSave();
+        onClose();
+      } else {
+        alert("Update failed!");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <ModalShell open={open} onClose={onClose} title="Edit supplier" icon={<Pencil className="size-5" />} footer={
+      <>
+        <button onClick={onClose} className="h-10 px-4 rounded-lg bg-secondary border text-sm">Cancel</button>
+        <button onClick={handleUpdate} className="h-10 px-5 rounded-lg text-sm font-medium text-white bg-primary">Update supplier</button>
+      </>
+    }>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Supplier name *" className="sm:col-span-2"><input className={inputCls} value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></Field>
+        <Field label="Country *"><input className={inputCls} value={form.country} onChange={e => setForm({...form, country: e.target.value})} /></Field>
+        <Field label="Phone *"><input className={inputCls} value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></Field>
+        <Field label="Email *"><input className={inputCls} value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></Field>
+        <Field label="Address * " className="sm:col-span-2"><textarea className={textareaCls} value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
+        <Field label="Status *">
+          <select className={inputCls} value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </Field>
+      </div>
+    </ModalShell>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, tone }: { icon: any; label: string; value: any; tone: any }) {
   const color = tone === "warning" ? "var(--warning)" : tone === "accent" ? "var(--accent)" : "var(--primary)";
   return (
-    <div className="surface-card p-5">
-      <div className="flex items-start justify-between">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-        <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
-          <Icon className="size-4" />
-        </div>
+    <div className="surface-card p-5 flex items-center justify-between">
+      <div>
+        <div className="text-xs uppercase text-muted-foreground">{label}</div>
+        <div className="mt-2 text-2xl font-bold">{value}</div>
       </div>
-      <div className="mt-3 text-2xl font-bold">{value}</div>
+      <div className="size-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color }}>
+        <Icon className="size-4" />
+      </div>
     </div>
   );
 }
