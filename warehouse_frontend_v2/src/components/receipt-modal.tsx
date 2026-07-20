@@ -19,6 +19,7 @@ interface ProductOption {
   cost: number;
   price: number;
   warehouseId: string;
+  stock?: number;
 }
 
 interface WarehouseOption {
@@ -31,6 +32,12 @@ interface WarehouseOption {
 interface SupplierOption {
   id: string;
   name: string;
+}
+
+interface UserOption {
+  id: number;
+  fullName: string;
+  role: string;
 }
 
 interface Props {
@@ -48,12 +55,14 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
 
   // Form state
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [partner, setPartner] = useState<string>("");
   const [reference, setReference] = useState<string>("");
+  const [assignedStaff, setAssignedStaff] = useState<string>("");
   const [note, setNote] = useState<string>("");
   const [lines, setLines] = useState<LineItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -71,15 +80,21 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
       api.get<WarehouseOption[]>("/warehouses"),
       api.get<ProductOption[]>("/products"),
       api.get<SupplierOption[]>("/suppliers"),
+      api.get<UserOption[]>("/users"),
     ])
-      .then(([wRes, pRes, sRes]) => {
+      .then(([wRes, pRes, sRes, uRes]) => {
         setWarehouses(wRes.data);
         setProducts(pRes.data);
         setSuppliers(sRes.data);
+        setUsers(uRes.data);
         // Default warehouse
         const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
         const defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
         setWarehouseId(defaultWh);
+
+        if (!isInbound) {
+          setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
+        }
       })
       .catch(() => setSubmitError("Failed to load form data. Please try again."))
       .finally(() => setDataLoading(false));
@@ -136,6 +151,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
     setLines([]);
     setPartner("");
     setReference("");
+    setAssignedStaff("");
     setNote("");
     setSubmitError(null);
     setLineErrors({});
@@ -200,7 +216,12 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
       await api.post("/receipts", {
         warehouseId: Number(warehouseId),
         type: isInbound ? "INBOUND" : "OUTBOUND",
-        remark: [reference ? `Ref: ${reference}` : "", note].filter(Boolean).join(" | ") || null,
+        partner: partner || null,
+        remark: [
+          reference ? `Ref: ${reference}` : "",
+          assignedStaff ? `Assignee: ${assignedStaff}` : "",
+          note
+        ].filter(Boolean).join(" | ") || null,
         items: validLines.map((l) => ({
           productCode: l.sku,
           quantity: l.qty,
@@ -328,6 +349,24 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     />
                   </Field>
                 )}
+                {!isInbound && (
+                  <Field label="Assign to Staff">
+                    <select
+                      value={assignedStaff}
+                      onChange={(e) => setAssignedStaff(e.target.value)}
+                      className="input"
+                    >
+                      <option value="">Select staff member…</option>
+                      {users
+                        .filter((u) => u.role === "STAFF" || u.role === "WAREHOUSE_MANAGER")
+                        .map((u) => (
+                          <option key={u.id} value={u.fullName}>
+                            {u.fullName} — {u.role === "STAFF" ? "Staff" : "Warehouse Manager"}
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
+                )}
               </div>
 
 
@@ -351,6 +390,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     <thead className="bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground">
                       <tr>
                         <th className="text-left px-3 py-2">Product</th>
+                        {!isInbound && <th className="text-right px-3 py-2 w-32">System Stock</th>}
                         <th className="text-right px-3 py-2 w-24">Qty</th>
                         <th className="text-right px-3 py-2 w-40">
                           {isInbound ? "Unit cost" : "Unit price"}
@@ -382,6 +422,11 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                                   ))}
                                 </select>
                               </td>
+                              {!isInbound && (
+                                <td className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                  {p?.stock ?? 0}
+                                </td>
+                              )}
                               <td className="px-3 py-2">
                                 <input
                                   type="number"
@@ -410,7 +455,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                             </tr>
                             {lineErr && (
                               <tr key={`${line.id}-err`} className="bg-destructive/5">
-                                <td colSpan={5} className="px-3 pb-2">
+                                <td colSpan={isInbound ? 5 : 6} className="px-3 pb-2">
                                   <p className="text-xs text-destructive">{lineErr}</p>
                                 </td>
                               </tr>
@@ -421,7 +466,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-border bg-secondary/30">
-                        <td className="px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground" colSpan={3}>
+                        <td className="px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground" colSpan={isInbound ? 3 : 4}>
                           Total
                         </td>
                         <td className="px-3 py-2 text-right font-semibold text-gradient">
