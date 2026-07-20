@@ -5,6 +5,8 @@ import { useApp } from "@/lib/app-context";
 import { ClipboardList, TrendingUp, Clock, Truck, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/components/modal-shell";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { BarcodeScanner } from "@/components/barcode-scanner";
 
 export const Route = createFileRoute("/outbound")({
@@ -133,7 +135,20 @@ function OutboundPage() {
 
 function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { activeWarehouseId } = useApp();
-  const [warehouseId, setWarehouseId] = useState<string>(activeWarehouseId ?? warehouses[0].id);
+
+  const { data: dynamicWarehouses } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get<any[]>("/warehouses");
+      return res.data;
+    },
+  });
+
+  const activeWarehouses = (dynamicWarehouses || warehouses).filter(
+    (w: any) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE"
+  );
+
+  const [warehouseId, setWarehouseId] = useState<string>(activeWarehouseId ?? activeWarehouses[0]?.id ?? warehouses[0].id);
   const [lines, setLines] = useState<{ sku: string; qty: number }[]>([]);
   
   const total = lines.reduce((s, l) => {
@@ -200,7 +215,7 @@ function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }
         <Field label="Warehouse" required>
           <select className={selectCls} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>
             <option value="" disabled>Select warehouse</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
+            {activeWarehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
           </select>
         </Field>
         <Field label="Order date" required><input type="date" className={inputCls} defaultValue={new Date().toISOString().slice(0, 10)} /></Field>

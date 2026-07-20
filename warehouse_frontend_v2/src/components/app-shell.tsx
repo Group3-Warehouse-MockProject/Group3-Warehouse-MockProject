@@ -103,11 +103,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="mt-1 w-full h-9 px-2 rounded-lg bg-input border border-border text-sm disabled:opacity-70"
           >
             {canSwitchWarehouse && <option value="ALL">All warehouses</option>}
-            {warehouses.map((w: any) => (
-              <option key={w.id} value={w.id}>
-                {w.code} — {w.city}
-              </option>
-            ))}
+            {warehouses
+              .filter((w: any) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
+              .map((w: any) => (
+                <option key={w.id} value={w.id}>
+                  {w.code} — {w.city}
+                </option>
+              ))}
           </select>
         </div>
 
