@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, useEffect, type ReactNode } from "react";
-import { warehouses, type AppUser, type Role } from "@/lib/warehouse-data";
+import { type AppUser, type Role } from "@/lib/warehouse-data";
 import { parseJwt } from "@/lib/api";
 
 interface AppContextValue {
@@ -94,7 +94,7 @@ export function useApp() {
 
 export function useScopedWarehouseIds(): string[] {
   const { activeWarehouseId } = useApp();
-  return activeWarehouseId ? [activeWarehouseId] : warehouses.map((w) => w.id);
+  // Returns [id] when a specific warehouse is selected, or [] to mean "all warehouses"
+  return activeWarehouseId ? [activeWarehouseId] : [];
 }
-
 

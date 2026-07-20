@@ -25,13 +25,25 @@ public class UserController {
     private final ActivityLogService activityLogService;
 
     @GetMapping
-    public ResponseEntity<List<UserDTO>> getAllUsers() {
+    public ResponseEntity<List<UserDTO>> getAllUsers(
+            @RequestParam(required = false) String role
+    ) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
             return ResponseEntity.status(401).build();
         }
 
         List<User> users = userService.getAllUsers();
+
+        // Filter by role if provided (e.g. ?role=WAREHOUSE_MANAGER)
+        if (role != null && !role.isBlank()) {
+            String roleUpper = role.trim().toUpperCase();
+            users = users.stream()
+                    .filter(u -> u.getRole() != null
+                            && u.getRole().getRoleName().name().equals(roleUpper))
+                    .collect(Collectors.toList());
+        }
+
         List<UserDTO> userDTOs = users.stream()
                 .map(UserDTO::fromEntity)
                 .collect(Collectors.toList());

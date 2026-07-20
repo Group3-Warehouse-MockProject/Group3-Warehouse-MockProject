@@ -11,6 +11,12 @@ import {
   Search, Filter, X, ChevronLeft, ChevronRight, Loader2, AlertCircle,
   CheckCircle2, XCircle, Ban
 } from "lucide-react";
+import { ClipboardList, TrendingUp, Clock, Truck, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/components/modal-shell";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { BarcodeScanner } from "@/components/barcode-scanner";
 
 export const Route = createFileRoute("/outbound")({
   head: () => ({ meta: [{ title: "Outbound Orders — TechStock" }] }),
@@ -265,11 +271,39 @@ function OutboundPage() {
             )}
           </div>
 
-          {(activeFilterCount > 0 || searchQuery) && (
-            <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
-              Clear all
-            </button>
-          )}
+function AddOrderModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { activeWarehouseId } = useApp();
+
+  const { data: dynamicWarehouses } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get<any[]>("/warehouses");
+      return res.data;
+    },
+  });
+
+  const activeWarehouses = (dynamicWarehouses || warehouses).filter(
+    (w: any) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE"
+  );
+
+  const [warehouseId, setWarehouseId] = useState<string>(activeWarehouseId ?? activeWarehouses[0]?.id ?? warehouses[0].id);
+  const [lines, setLines] = useState<{ sku: string; qty: number }[]>([]);
+  
+  const total = lines.reduce((s, l) => {
+    const p = products.find((x) => x.sku === l.sku);
+    return s + (p ? p.price * l.qty : 0);
+  }, 0);
+
+  const handleScan = (barcode: string) => {
+    const product = products.find(p => p.sku.toLowerCase() === barcode.toLowerCase());
+    if (!product) {
+      alert(`Barcode ${barcode} not found in catalog.`);
+      return;
+    }
+    if (product.warehouseId !== warehouseId) {
+      alert(`Product ${barcode} does not belong to selected warehouse.`);
+      return;
+    }
 
           {/* Filter Panel */}
           <div className="relative ml-auto" ref={filterRef}>
