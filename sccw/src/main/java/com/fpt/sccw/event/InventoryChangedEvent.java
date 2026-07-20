@@ -1,4 +1,4 @@
-package com.fpt.sccw.entity;
+package com.fpt.sccw.event;
 
 import org.springframework.context.ApplicationEvent;
 

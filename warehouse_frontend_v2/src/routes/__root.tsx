@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { AppProvider } from "@/lib/app-context";
+import { ChatBotButton } from "@/components/chatbot-modal";
 
 
 function NotFoundComponent() {
@@ -138,6 +139,8 @@ function RootComponent() {
       <AppProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
+        {/* Chatbot nổi góc dưới phải, hiện trên toàn bộ trang */}
+        <ChatBotButton />
       </AppProvider>
     </QueryClientProvider>
   );
