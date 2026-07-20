@@ -1,5 +1,6 @@
 package com.fpt.sccw.entity;
 
+import com.fpt.sccw.listener.InventoryListener;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -7,6 +8,7 @@ import lombok.*;
 
 @Entity
 @Table(name = "inventories")
+@EntityListeners(InventoryListener.class)
 @Getter
 @Setter
 @NoArgsConstructor
