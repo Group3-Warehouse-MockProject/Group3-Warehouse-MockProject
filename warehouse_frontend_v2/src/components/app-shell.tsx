@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Shield,
   UserCircle,
+  MessageSquareText,
   LogOut,
   Sun,
   Moon,
@@ -35,6 +36,7 @@ const nav = [
   { to: "/suppliers", label: "Suppliers", icon: Truck },
   { to: "/staff", label: "Staff", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/feedback", label: "Feedback", icon: MessageSquareText },
 ] as const;
 
 const roleTone: Record<string, string> = {
