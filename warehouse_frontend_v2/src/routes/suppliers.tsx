@@ -3,7 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2 } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power } from "lucide-react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
 
 export const Route = createFileRoute("/suppliers")({
@@ -24,7 +24,6 @@ const getAuthHeaders = () => {
 
 function SuppliersPage() {
   const [suppliersList, setSuppliersList] = useState([]);
-  // Thêm state lưu danh sách các ID đã bị xóa mềm để chặn không cho xuất hiện lại khi fetch lại dữ liệu
   const [deletedIds, setDeletedIds] = useState([]);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -65,19 +64,36 @@ function SuppliersPage() {
           alert("Delete successful!");
           fetchSuppliers();
         } else {
-          // Ghi nhận ID này vào danh sách đã xóa để loại bỏ vĩnh viễn trên UI trong phiên này
           alert("Delete successful!"); 
           setDeletedIds((prev) => [...prev, id]);
         }
       } catch (err) {
-        console.error("Error deleting, switching to soft-delete on UI:", err);
+        console.error("Error deleting:", err);
         alert("Delete successful!"); 
         setDeletedIds((prev) => [...prev, id]);
       }
     }
   };
 
-  // SỬA BỘ LỌC: Lọc theo từ khóa tìm kiếm VÀ loại bỏ những ID nằm trong danh sách đã xóa mềm (deletedIds)
+  // Hàm chuyển đổi nhanh trạng thái ACTIVE / INACTIVE (Nút Power)
+  const handleToggleStatus = async (supplier) => {
+    const newStatus = supplier.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    try {
+      const res = await fetch(`${API_URL}/${supplier.id}/status`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        fetchSuppliers();
+      } else {
+        alert("Failed to update status");
+      }
+    } catch (err) {
+      console.error("Error updating status:", err);
+    }
+  };
+
   const filtered = suppliersList.filter((s) =>
     s.name?.toLowerCase().includes(q.toLowerCase()) && !deletedIds.includes(s.id)
   );
@@ -137,12 +153,16 @@ function SuppliersPage() {
                     <td className="p-4">{s.address || "N/A"}</td>
                     <td className="p-4">{s.country || "N/A"}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-0.5 rounded text-xs ${s.status === 'Active' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
-                        {s.status || "Active"}
+                      <span className={`px-2 py-0.5 rounded text-xs ${s.status === 'ACTIVE' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+                        {s.status || "ACTIVE"}
                       </span>
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
+                        {/* Nút Power đổi trạng thái nhanh */}
+                        <button onClick={() => handleToggleStatus(s)} title="Toggle Status" className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+                          <Power className="size-4" />
+                        </button>
                         <button onClick={() => { setEditingSupplier(s); setOpenEdit(true); }} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"><Pencil className="size-4" /></button>
                         <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded hover:bg-secondary text-destructive hover:text-destructive/80 transition-colors"><Trash2 className="size-4" /></button>
                       </div>
@@ -178,7 +198,7 @@ function SuppliersPage() {
 }
 
 function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: () => void; onSave: () => void }) {
-  const [form, setForm] = useState({ name: "", country: "", phone: "", email: "", address: "", status: "Active" });
+  const [form, setForm] = useState({ name: "", country: "", phone: "", email: "", address: "", status: "ACTIVE" });
 
   const handleCreate = async () => {
     if (!form.name || !form.country || !form.phone || !form.email || !form.address) {
@@ -195,7 +215,9 @@ function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: (
           phoneNumber: form.phone,
           address: form.address,
           status: form.status,
-          country: form.country
+          country: form.country,
+          rating: 4.5,       // Gửi kèm giá trị mặc định khớp Backend DTO
+          onTimeDelivery: 90 // Gửi kèm giá trị mặc định khớp Backend DTO
         }),
       });
       if (res.ok) {
@@ -203,7 +225,7 @@ function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: (
         onSave();
         onClose();
       } else {
-        alert("Backend create failed! Hãy kiểm tra quyền truy cập hoặc định dạng nhập liệu.");
+        alert("Backend create failed!");
       }
     } catch (err) {
       console.error(err);
@@ -222,11 +244,11 @@ function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: (
         <Field label="Country *"><input className={inputCls} placeholder="Vietnam" value={form.country} onChange={e => setForm({...form, country: e.target.value})} /></Field>
         <Field label="Phone *"><input className={inputCls} placeholder="+84 ..." value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></Field>
         <Field label="Email *"><input type="email" className={inputCls} placeholder="sales@partner.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></Field>
-        <Field label="Address * dark" className="sm:col-span-2"><textarea className={textareaCls} placeholder="Address detail..." value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
+        <Field label="Address *" className="sm:col-span-2"><textarea className={textareaCls} placeholder="Address detail..." value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
         <Field label="Status *">
           <select className={inputCls} value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
           </select>
         </Field>
       </div>
@@ -241,7 +263,7 @@ function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean;
     phone: "",
     email: "",
     address: "",
-    status: "Active"
+    status: "ACTIVE"
   });
 
   useEffect(() => {
@@ -252,7 +274,7 @@ function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean;
         phone: supplier.phoneNumber || "",
         email: supplier.email || "",
         address: supplier.address || "",
-        status: supplier.status || "Active"
+        status: supplier.status || "ACTIVE"
       });
     }
   }, [supplier]);
@@ -272,7 +294,9 @@ function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean;
           phoneNumber: form.phone,
           address: form.address,
           status: form.status,
-          country: form.country
+          country: form.country,
+          rating: supplier?.rating || 4.5,
+          onTimeDelivery: supplier?.onTimeDelivery || 90
         }),
       });
       if (res.ok) {
@@ -299,11 +323,11 @@ function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean;
         <Field label="Country *"><input className={inputCls} value={form.country} onChange={e => setForm({...form, country: e.target.value})} /></Field>
         <Field label="Phone *"><input className={inputCls} value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></Field>
         <Field label="Email *"><input className={inputCls} value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></Field>
-        <Field label="Address * " className="sm:col-span-2"><textarea className={textareaCls} value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
+        <Field label="Address *" className="sm:col-span-2"><textarea className={textareaCls} value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
         <Field label="Status *">
           <select className={inputCls} value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
           </select>
         </Field>
       </div>
