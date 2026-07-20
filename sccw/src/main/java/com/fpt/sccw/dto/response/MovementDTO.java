@@ -11,11 +11,18 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class MovementDTO {
     private String id;
-    private String type; // "Inbound" or "Outbound"
+    private Long receiptId;          // ID của WarehouseReceipt cha
+    private String type;             // "Inbound" or "Outbound"
+    private String sku;              // Product code
     private String product;
-    private String partner; // Supplier name or Destination Warehouse
-    private String staff;
+    private String partner;          // Supplier name or destination
+    private String staff;            // fullName of creator
     private String warehouseId;
     private Long qty;
-    private String date;
+    private String date;             // yyyy-MM-dd
+    private String status;           // PENDING | APPROVED | REJECTED
+    private String remark;           // ghi chú receipt
+    private String createdAt;        // yyyy-MM-dd HH:mm
+    private String updatedAt;        // yyyy-MM-dd HH:mm
 }
+
