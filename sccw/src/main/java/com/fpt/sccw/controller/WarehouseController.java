@@ -96,6 +96,7 @@ public class WarehouseController {
                 .warehouseName(request.getName().trim())
                 .location(request.getAddress().trim())
                 .capacity(request.getCapacity())
+                .status("ACTIVE")
                 .build();
 
         Warehouse saved = warehouseRepository.save(warehouse);
@@ -142,6 +143,9 @@ public class WarehouseController {
         warehouse.setWarehouseName(request.getName().trim());
         warehouse.setLocation(request.getAddress().trim());
         warehouse.setCapacity(request.getCapacity());
+        if (request.getStatus() != null && !request.getStatus().isBlank()) {
+            warehouse.setStatus(request.getStatus().trim().toUpperCase());
+        }
 
         // Xử lý manager
         if (request.getManagerId() != null) {
@@ -179,6 +183,38 @@ public class WarehouseController {
         }
 
         Warehouse saved = warehouseRepository.save(warehouse);
+        String managerName = resolveManagerName(saved.getId());
+        return ResponseEntity.ok(WarehouseDTO.fromEntity(saved, managerName));
+    }
+
+    @PatchMapping("/{id}/status")
+    @Transactional
+    public ResponseEntity<?> toggleWarehouseStatus(@PathVariable Long id) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        String email = authentication.getName();
+        User currentUser = userRepository.findByEmail(email).orElse(null);
+        if (currentUser == null) {
+            return ResponseEntity.status(401).build();
+        }
+
+        String roleName = currentUser.getRole().getRoleName().name();
+        if (!roleName.equals("ADMIN") && !roleName.equals("MANAGER")) {
+            return ResponseEntity.status(403).body("Insufficient permissions to update warehouse status");
+        }
+
+        Warehouse warehouse = warehouseRepository.findById(id).orElse(null);
+        if (warehouse == null) {
+            return ResponseEntity.status(404).body("Warehouse not found: " + id);
+        }
+
+        String newStatus = "INACTIVE".equalsIgnoreCase(warehouse.getStatus()) ? "ACTIVE" : "INACTIVE";
+        warehouse.setStatus(newStatus);
+        Warehouse saved = warehouseRepository.save(warehouse);
+
         String managerName = resolveManagerName(saved.getId());
         return ResponseEntity.ok(WarehouseDTO.fromEntity(saved, managerName));
     }

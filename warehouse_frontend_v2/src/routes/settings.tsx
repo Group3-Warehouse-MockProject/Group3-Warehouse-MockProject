@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, Pencil } from "lucide-react";
+import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, Pencil, Power } from "lucide-react";
 import { useState, useEffect } from "react";
-import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
+import { ModalShell, Field, inputCls } from "@/components/modal-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
@@ -20,6 +20,7 @@ interface WarehouseData {
   city: string;
   capacity: number;
   usedCapacity: number;
+  status?: string;
   managerName?: string | null;
 }
 
@@ -49,6 +50,17 @@ function SettingsPage() {
   const utilization = totalCap > 0 ? Math.round((totalUsed / totalCap) * 100) : 0;
 
   const canManage = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+
+  const queryClient = useQueryClient();
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.patch(`/warehouses/${id}/status`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["warehouses"] });
+    },
+  });
 
   return (
     <AppShell>
@@ -95,11 +107,17 @@ function SettingsPage() {
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {warehouses.map((w) => {
                     const usedPct = w.capacity > 0 ? Math.round((w.usedCapacity / w.capacity) * 100) : 0;
+                    const isActive = (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE";
                     return (
-                      <div key={w.id} className="p-4 rounded-xl border border-border/60 bg-secondary/30">
+                      <div key={w.id} className={`p-4 rounded-xl border transition-all ${isActive ? "border-border/60 bg-secondary/30" : "border-destructive/30 bg-destructive/5 opacity-80"}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="font-semibold">{w.name}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{w.name}</span>
+                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isActive ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-destructive/15 text-destructive"}`}>
+                                {isActive ? "Active" : "Inactive"}
+                              </span>
+                            </div>
                             <div className="text-xs text-muted-foreground font-mono">{w.code}</div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -107,13 +125,23 @@ function SettingsPage() {
                               {(w.capacity ?? 0).toLocaleString()} units
                             </span>
                             {canManage && (
-                              <button
-                                onClick={() => setEditWarehouse(w)}
-                                className="size-7 rounded-lg grid place-items-center bg-secondary border border-border hover:bg-muted transition-colors"
-                                title="Edit warehouse"
-                              >
-                                <Pencil className="size-3.5 text-muted-foreground" />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => toggleStatusMutation.mutate(w.id)}
+                                  disabled={toggleStatusMutation.isPending}
+                                  className={`size-7 rounded-lg grid place-items-center border transition-colors ${isActive ? "bg-secondary border-border hover:bg-destructive/15 hover:text-destructive hover:border-destructive/30" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/20"}`}
+                                  title={isActive ? "Deactivate warehouse" : "Activate warehouse"}
+                                >
+                                  <Power className="size-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditWarehouse(w)}
+                                  className="size-7 rounded-lg grid place-items-center bg-secondary border border-border hover:bg-muted transition-colors"
+                                  title="Edit warehouse"
+                                >
+                                  <Pencil className="size-3.5 text-muted-foreground" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -214,7 +242,6 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
     city: "",
     capacity: "10000",
     managerId: "",   // ID của WarehouseManager user (string vì select value)
-    notes: "",
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -238,7 +265,6 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
         address: fullAddress,
         capacity: Number(form.capacity),
         managerId: form.managerId ? Number(form.managerId) : null,
-        notes: form.notes,
       });
     },
     onSuccess: () => {
@@ -254,7 +280,7 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
   });
 
   function handleClose() {
-    setForm({ code: "", name: "", address: "", city: "", capacity: "10000", managerId: "", notes: "" });
+    setForm({ code: "", name: "", address: "", city: "", capacity: "10000", managerId: "" });
     setError(null);
     onClose();
   }
@@ -325,9 +351,6 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
             ))}
           </select>
         </Field>
-        <Field label="Notes" className="sm:col-span-2">
-          <textarea className={textareaCls} placeholder="Optional description" value={form.notes} onChange={set("notes")} />
-        </Field>
         {error && (
           <div className="sm:col-span-2 text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
             {error}
@@ -347,17 +370,12 @@ function EditWarehouseModal({
 }) {
   const queryClient = useQueryClient();
 
-  // Tách street address và city từ full address
-  // address = "Lot B12, Tan Binh, Ho Chi Minh City" | city = "Ho Chi Minh City"
-  const streetAddress = warehouse.city
-    ? warehouse.address.replace(new RegExp(`,?\\s*${warehouse.city}\\s*$`), "").trim()
-    : warehouse.address;
-
   const [form, setForm] = useState({
     name: warehouse.name,
-    address: streetAddress,
+    address: warehouse.address,   // address đã không còn chứa city (đã fix ở backend)
     city: warehouse.city,
     capacity: String(warehouse.capacity ?? ""),
+    status: warehouse.status ?? "ACTIVE",
     managerId: "-1",   // default — sẽ được update bởi useEffect khi managers load
   });
   const [error, setError] = useState<string | null>(null);
@@ -389,6 +407,7 @@ function EditWarehouseModal({
         name: form.name,
         address: fullAddress,
         capacity: Number(form.capacity),
+        status: form.status,
         managerId: Number(form.managerId),
       });
     },
@@ -454,6 +473,12 @@ function EditWarehouseModal({
         <Field label="Capacity (units)" required>
           <input type="number" className={inputCls} value={form.capacity} onChange={set("capacity")} min={0} />
         </Field>
+        <Field label="Status">
+          <select className={inputCls} value={form.status} onChange={set("status")}>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+        </Field>
         <Field label="Manager in charge" className="sm:col-span-2">
           <select
             className={inputCls}
@@ -478,6 +503,7 @@ function EditWarehouseModal({
     </ModalShell>
   );
 }
+
 
 function Kpi({
   icon: Icon,

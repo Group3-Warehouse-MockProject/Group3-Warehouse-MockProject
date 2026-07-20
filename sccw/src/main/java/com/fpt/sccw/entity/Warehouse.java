@@ -30,6 +30,10 @@ public class Warehouse extends BaseEntity{
     @Column(name = "capacity")
     private Long capacity;
 
+    @Column(name = "status")
+    @Builder.Default
+    private String status = "ACTIVE";
+
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private List<WarehouseReceipt> receipts = new ArrayList<>();

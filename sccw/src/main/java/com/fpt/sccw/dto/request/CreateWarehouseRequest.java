@@ -24,8 +24,5 @@ public class CreateWarehouseRequest {
 
     /** Optional — ID của User có role WAREHOUSE_MANAGER được gán vào kho này */
     private Long managerId;
-
-    /** Optional — ghi chú */
-    private String notes;
 }
 

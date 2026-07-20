@@ -19,6 +19,8 @@ public class UpdateWarehouseRequest {
     @Min(value = 0, message = "Capacity must be >= 0")
     private Long capacity;
 
+    private String status;
+
     /**
      * Optional — ID của User có role WAREHOUSE_MANAGER.
      * - Nếu null → giữ nguyên manager hiện tại.
