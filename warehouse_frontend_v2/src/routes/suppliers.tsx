@@ -63,49 +63,51 @@ function SuppliersPage() {
 
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                <tr>
-                  <th className="text-left p-4">Supplier</th>
-                  <th className="text-left p-4">Contact</th>
-                  <th className="text-left p-4">Phone</th>
-                  <th className="text-left p-4">Email</th>
-                  <th className="text-left p-4">Categories</th>
-                  <th className="text-left p-4">Country</th>
-                  <th className="text-center p-4">Rating</th>
-                  <th className="text-right p-4">On-time</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="min-w-[950px] text-sm">
+              {/* Grid Table Header */}
+              <div className="grid grid-cols-[minmax(180px,1.5fr)_130px_120px_180px_140px_100px_80px_80px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                <div>Supplier</div>
+                <div>Contact</div>
+                <div>Phone</div>
+                <div>Email</div>
+                <div>Categories</div>
+                <div>Country</div>
+                <div className="text-center">Rating</div>
+                <div className="text-right">On-time</div>
+              </div>
+
+              {/* Grid Table Body */}
+              <div className="divide-y divide-border/60">
                 {slice.map((s) => (
-                  <tr key={s.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                    <td className="p-4">
-                      <div className="font-medium">{s.name}</div>
+                  <div
+                    key={s.id}
+                    className="grid grid-cols-[minmax(180px,1.5fr)_130px_120px_180px_140px_100px_80px_80px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                  >
+                    <div>
+                      <div className="font-medium truncate">{s.name}</div>
                       <div className="text-xs text-muted-foreground font-mono">{s.id}</div>
-                    </td>
-                    <td className="p-4">{s.contact}</td>
-                    <td className="p-4 font-mono text-xs">{s.phone}</td>
-                    <td className="p-4 text-muted-foreground">{s.email}</td>
-                    <td className="p-4">{s.categories}</td>
-                    <td className="p-4">{s.country}</td>
-                    <td className="p-4 text-center">
+                    </div>
+                    <div className="truncate">{s.contact}</div>
+                    <div className="font-mono text-xs">{s.phone}</div>
+                    <div className="text-muted-foreground truncate">{s.email}</div>
+                    <div className="truncate">{s.categories}</div>
+                    <div className="truncate">{s.country}</div>
+                    <div className="text-center">
                       <span className="inline-flex items-center gap-1 text-warning text-sm">
                         <Star className="size-3.5 fill-current" />
                         {s.rating}
                       </span>
-                    </td>
-                    <td className="p-4 text-right font-semibold text-success">{s.onTime}%</td>
-                  </tr>
+                    </div>
+                    <div className="text-right font-semibold text-success">{s.onTime}%</div>
+                  </div>
                 ))}
                 {slice.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-muted-foreground text-sm">
-                      No suppliers match your search.
-                    </td>
-                  </tr>
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    No suppliers match your search.
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">

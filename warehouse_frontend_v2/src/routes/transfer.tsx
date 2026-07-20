@@ -77,36 +77,40 @@ function TransferPage() {
 
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                <tr>
-                  <th className="text-left p-4">Transfer #</th>
-                  <th className="text-left p-4">Type</th>
-                  <th className="text-left p-4">From</th>
-                  <th className="text-left p-4">To</th>
-                  <th className="text-left p-4">Date</th>
-                  <th className="text-right p-4">Items Qty</th>
-                  <th className="text-left p-4">Created by</th>
-                  <th className="text-center p-4">Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="min-w-[900px] text-sm">
+              {/* Grid Table Header */}
+              <div className="grid grid-cols-[110px_minmax(160px,1.5fr)_110px_110px_110px_80px_130px_110px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                <div>Transfer #</div>
+                <div>Type</div>
+                <div>From</div>
+                <div>To</div>
+                <div>Date</div>
+                <div className="text-right">Items Qty</div>
+                <div>Created by</div>
+                <div className="text-center">Status</div>
+              </div>
+
+              {/* Grid Table Body */}
+              <div className="divide-y divide-border/60">
                 {paginatedList.map((t) => (
-                  <tr key={t.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                    <td className="p-4 font-mono text-xs">{t.id}</td>
-                    <td className="p-4 font-medium">{t.type}</td>
-                    <td className="p-4 font-mono text-xs">{t.from}</td>
-                    <td className="p-4 font-mono text-xs">{t.to}</td>
-                    <td className="p-4 text-muted-foreground">{t.date}</td>
-                    <td className="p-4 text-right font-semibold">{t.items}</td>
-                    <td className="p-4">{t.createdBy}</td>
-                    <td className="p-4 text-center">
+                  <div
+                    key={t.id}
+                    className="grid grid-cols-[110px_minmax(160px,1.5fr)_110px_110px_110px_80px_130px_110px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                  >
+                    <div className="font-mono text-xs">{t.id}</div>
+                    <div className="font-medium truncate">{t.type}</div>
+                    <div className="font-mono text-xs">{t.from}</div>
+                    <div className="font-mono text-xs">{t.to}</div>
+                    <div className="text-muted-foreground">{t.date}</div>
+                    <div className="text-right font-semibold">{t.items}</div>
+                    <div className="truncate">{t.createdBy}</div>
+                    <div className="text-center">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[t.status]}`}>{t.status}</span>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
           {totalPages > 1 && (
             <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">

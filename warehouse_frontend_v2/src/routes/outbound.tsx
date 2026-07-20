@@ -57,38 +57,42 @@ function OutboundPage() {
 
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                <tr>
-                  <th className="text-left p-4">Order #</th>
-                  <th className="text-left p-4">Customer</th>
-                  <th className="text-left p-4">Warehouse</th>
-                  <th className="text-left p-4">Date</th>
-                  <th className="text-left p-4">Created by</th>
-                  <th className="text-left p-4">Assigned to</th>
-                  <th className="text-right p-4">Items</th>
-                  <th className="text-right p-4">Total</th>
-                  <th className="text-center p-4">Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="min-w-[950px] text-sm">
+              {/* Grid Table Header */}
+              <div className="grid grid-cols-[100px_minmax(160px,1.5fr)_110px_110px_130px_130px_70px_120px_110px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                <div>Order #</div>
+                <div>Customer</div>
+                <div>Warehouse</div>
+                <div>Date</div>
+                <div>Created by</div>
+                <div>Assigned to</div>
+                <div className="text-right">Items</div>
+                <div className="text-right">Total</div>
+                <div className="text-center">Status</div>
+              </div>
+
+              {/* Grid Table Body */}
+              <div className="divide-y divide-border/60">
                 {paginatedList.map((o) => (
-                  <tr key={o.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                    <td className="p-4 font-mono text-xs">{o.id}</td>
-                    <td className="p-4 font-medium">{o.customer}</td>
-                    <td className="p-4 font-mono text-xs">{warehouseCode(o.warehouseId)}</td>
-                    <td className="p-4 text-muted-foreground">{o.date}</td>
-                    <td className="p-4">{o.createdBy}</td>
-                    <td className="p-4">{o.assignedTo}</td>
-                    <td className="p-4 text-right">{o.items}</td>
-                    <td className="p-4 text-right font-semibold">{formatVND(o.total)}</td>
-                    <td className="p-4 text-center">
+                  <div
+                    key={o.id}
+                    className="grid grid-cols-[100px_minmax(160px,1.5fr)_110px_110px_130px_130px_70px_120px_110px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                  >
+                    <div className="font-mono text-xs">{o.id}</div>
+                    <div className="font-medium truncate">{o.customer}</div>
+                    <div className="font-mono text-xs">{warehouseCode(o.warehouseId)}</div>
+                    <div className="text-muted-foreground">{o.date}</div>
+                    <div className="truncate">{o.createdBy}</div>
+                    <div className="truncate">{o.assignedTo}</div>
+                    <div className="text-right">{o.items}</div>
+                    <div className="text-right font-semibold">{formatVND(o.total)}</div>
+                    <div className="text-center">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[o.status]}`}>{o.status}</span>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
           {totalPages > 1 && (
             <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">

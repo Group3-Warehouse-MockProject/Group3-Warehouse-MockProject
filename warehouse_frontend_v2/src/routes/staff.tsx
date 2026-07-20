@@ -197,49 +197,53 @@ function StaffPage() {
 
         <div className="surface-card overflow-hidden border border-border/50 shadow-sm rounded-xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/60 border-b border-border/80">
-                <tr>
-                  <th className="text-left py-4 px-6 font-semibold">Employee</th>
-                  <th className="text-left py-4 px-6 font-semibold">Title</th>
-                  <th className="text-left py-4 px-6 font-semibold">Role</th>
-                  <th className="text-left py-4 px-6 font-semibold">Status</th>
-                  <th className="text-left py-4 px-6 font-semibold">Warehouse</th>
-                  <th className="text-left py-4 px-6 font-semibold">Location</th>
-                  <th className="text-right py-4 px-6 font-semibold w-20">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
+            <div className="min-w-[950px] text-sm">
+              {/* Grid Table Header */}
+              <div className="grid grid-cols-[minmax(200px,2fr)_140px_130px_100px_110px_140px_60px] items-center gap-3 py-4 px-6 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/60 font-semibold border-b border-border/80">
+                <div>Employee</div>
+                <div>Title</div>
+                <div>Role</div>
+                <div>Status</div>
+                <div>Warehouse</div>
+                <div>Location</div>
+                <div className="text-right">Action</div>
+              </div>
+
+              {/* Grid Table Body */}
+              <div className="divide-y divide-border/60">
                 {paginatedList.map((s: any) => (
-                  <tr key={s.id} className="hover:bg-muted/30 transition-all duration-200 group">
-                    <td className="py-4 px-6">
+                  <div
+                    key={s.id}
+                    className="grid grid-cols-[minmax(200px,2fr)_140px_130px_100px_110px_140px_60px] items-center gap-3 py-4 px-6 hover:bg-muted/30 transition-all duration-200 group"
+                  >
+                    <div>
                       <div className="flex items-center gap-4">
                         <div className="size-10 rounded-full grid place-items-center text-sm font-bold shrink-0 shadow-sm border border-white/10 ring-2 ring-transparent group-hover:ring-primary/20 transition-all" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
                           {s.initials}
                         </div>
                         <div className="min-w-0 flex items-center gap-2">
-                          <div>
+                          <div className="min-w-0">
                             <div className="font-semibold text-foreground truncate">{s.fullName}</div>
-                            <div className="text-xs text-muted-foreground font-mono mt-0.5">@{s.username}</div>
+                            <div className="text-xs text-muted-foreground font-mono mt-0.5 truncate">@{s.username}</div>
                           </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="py-4 px-6 text-muted-foreground font-medium">{s.title}</td>
-                    <td className="py-4 px-6">
-                      <span className={`px-3 py-1.5 rounded-full text-[11px] uppercase tracking-wider font-bold shadow-sm ${roleTone[s.role] || roleTone.Staff}`}>{roleLabels[s.role as keyof typeof roleLabels] || s.role}</span>
-                    </td>
-                    <td className="py-4 px-6">
+                    </div>
+                    <div className="text-muted-foreground font-medium truncate">{s.title}</div>
+                    <div>
+                      <span className={`px-3 py-1.5 rounded-full text-[11px] uppercase tracking-wider font-bold shadow-sm inline-block truncate max-w-full ${roleTone[s.role] || roleTone.Staff}`}>{roleLabels[s.role as keyof typeof roleLabels] || s.role}</span>
+                    </div>
+                    <div>
                       <div className="flex items-center gap-2">
                         <div className={`size-2 rounded-full ${s.isDeleted ? "bg-muted-foreground" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"}`}></div>
                         <span className={`text-xs font-medium ${s.isDeleted ? "text-muted-foreground" : "text-emerald-600 dark:text-emerald-400"}`}>
                           {s.isDeleted ? "Deactive" : "Active"}
                         </span>
                       </div>
-                    </td>
-                    <td className="py-4 px-6 font-mono text-xs font-medium">{getWarehouseCode(s.warehouseId)}</td>
-                    <td className="py-4 px-6 text-muted-foreground font-medium">{getWarehouseName(s.warehouseId)}</td>
-                    <td className="py-4 px-6 text-right">
+                    </div>
+                    <div className="font-mono text-xs font-medium truncate">{getWarehouseCode(s.warehouseId)}</div>
+                    <div className="text-muted-foreground font-medium truncate">{getWarehouseName(s.warehouseId)}</div>
+                    <div className="text-right">
                       <button 
                         onClick={() => setViewUser(s)}
                         className="size-8 inline-grid place-items-center rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100"
@@ -247,18 +251,16 @@ function StaffPage() {
                       >
                         <Eye className="size-4" />
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))}
                 {list.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground text-sm">
-                      No staff assigned to this warehouse yet.
-                    </td>
-                  </tr>
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    No staff assigned to this warehouse yet.
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
           {totalPages > 1 && (
             <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">

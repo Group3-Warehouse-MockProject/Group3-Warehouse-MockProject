@@ -439,35 +439,39 @@ function InboundPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                    <tr>
-                      <th className="text-left p-4">Receipt #</th>
-                      <th className="text-left p-4">Product</th>
-                      <th className="text-left p-4">Supplier</th>
-                      <th className="text-left p-4">Warehouse</th>
-                      <th className="text-right p-4">Qty</th>
-                      <th className="text-left p-4">Date</th>
-                      <th className="text-left p-4">Status</th>
-                      <th className="text-left p-4">Received by</th>
-                      <th className="w-12" />
-                    </tr>
-                  </thead>
-                  <tbody>
+                <div className="min-w-[950px] text-sm">
+                  {/* Grid Table Header */}
+                  <div className="grid grid-cols-[100px_minmax(180px,2fr)_minmax(140px,1.5fr)_110px_70px_110px_110px_130px_48px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                    <div>Receipt #</div>
+                    <div>Product</div>
+                    <div>Supplier</div>
+                    <div>Warehouse</div>
+                    <div className="text-right">Qty</div>
+                    <div>Date</div>
+                    <div>Status</div>
+                    <div>Received by</div>
+                    <div />
+                  </div>
+
+                  {/* Grid Table Body */}
+                  <div className="divide-y divide-border/60">
                     {paginatedList.map((m) => (
-                      <tr key={m.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                        <td className="p-4 font-mono text-xs">R-{m.receiptId}</td>
-                        <td className="p-4">
+                      <div
+                        key={m.id}
+                        className="grid grid-cols-[100px_minmax(180px,2fr)_minmax(140px,1.5fr)_110px_70px_110px_110px_130px_48px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                      >
+                        <div className="font-mono text-xs">R-{m.receiptId}</div>
+                        <div>
                           <div className="font-medium">{m.product}</div>
                           <div className="text-xs text-muted-foreground font-mono">{m.sku}</div>
-                        </td>
-                        <td className="p-4">{m.partner}</td>
-                        <td className="p-4 font-mono text-xs">{warehouseCode(m.warehouseId)}</td>
-                        <td className="p-4 text-right font-semibold text-primary">+{m.qty}</td>
-                        <td className="p-4 text-muted-foreground">{m.date}</td>
-                        <td className="p-4"><StatusBadge status={m.status} /></td>
-                        <td className="p-4 text-muted-foreground">{m.staff}</td>
-                        <td className="p-2 text-center">
+                        </div>
+                        <div className="truncate">{m.partner}</div>
+                        <div className="font-mono text-xs">{warehouseCode(m.warehouseId)}</div>
+                        <div className="text-right font-semibold text-primary">+{m.qty}</div>
+                        <div className="text-muted-foreground">{m.date}</div>
+                        <div><StatusBadge status={m.status} /></div>
+                        <div className="text-muted-foreground truncate">{m.staff}</div>
+                        <div className="text-center">
                           <button
                             onClick={() => setSelectedMovement(m)}
                             title="View detail"
@@ -475,11 +479,11 @@ function InboundPage() {
                           >
                             <Eye className="size-4" />
                           </button>
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
               </div>
 
               {/* Pagination */}
