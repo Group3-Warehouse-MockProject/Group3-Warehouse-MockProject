@@ -25,6 +25,7 @@ interface WarehouseOption {
   id: string;
   code: string;
   city: string;
+  status?: string;
 }
 
 interface SupplierOption {
@@ -76,7 +77,8 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         setProducts(pRes.data);
         setSuppliers(sRes.data);
         // Default warehouse
-        const defaultWh = activeWarehouseId ?? wRes.data[0]?.id ?? "";
+        const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
+        const defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
         setWarehouseId(defaultWh);
       })
       .catch(() => setSubmitError("Failed to load form data. Please try again."))
@@ -274,11 +276,13 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     className="input"
                     disabled={!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager"}
                   >
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.code} — {w.city}
-                      </option>
-                    ))}
+                    {warehouses
+                      .filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
+                      .map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.code} — {w.city}
+                        </option>
+                      ))}
                   </select>
                 </Field>
                 <Field label="Date">
