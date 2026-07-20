@@ -30,6 +30,11 @@ public class InventoryCheck extends BaseEntity {
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
+    // Nhân viên được giao thực hiện đếm (có thể null nếu chưa assign)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "assigned_user_id", nullable = true)
+    private User assignedUser;
+
     @OneToMany(mappedBy = "inventoryCheck", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @Builder.Default
     private List<InventoryCheckDetail> details = new ArrayList<>();

@@ -1,11 +1,11 @@
-package com.fpt.sccw.service.impl;
+package com.fpt.sccw.listener;
 
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
-import com.fpt.sccw.entity.InventoryChangedEvent;
+import com.fpt.sccw.event.InventoryChangedEvent;
 import com.fpt.sccw.service.AiRagService;
 
 import lombok.RequiredArgsConstructor;
@@ -28,7 +28,6 @@ public class AiRagEventListener {
     public void onInventoryChanged(InventoryChangedEvent event) {
         Long inventoryId = event.getInventoryId();
         log.info("Inventory changed (id={}), triggering re-ingest into vector store...", inventoryId);
-        // Gọi method mới — logic build description nằm trong AiRagServiceImpl, không bị duplicate
         aiRagService.ingestInventoryById(inventoryId);
     }
 }

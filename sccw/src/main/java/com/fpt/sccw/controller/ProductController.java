@@ -9,6 +9,8 @@ import com.fpt.sccw.repository.ProductRepository;
 import com.fpt.sccw.repository.UserRepository;
 import com.fpt.sccw.repository.InventoryRepository;
 import com.fpt.sccw.repository.WarehouseRepository;
+import com.fpt.sccw.service.ActivityLogService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -39,6 +41,7 @@ public class ProductController {
     private final LocationRepository locationRepository;
     private final InventoryRepository inventoryRepository;
     private final WarehouseRepository warehouseRepository;
+    private final ActivityLogService activityLogService;
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -142,6 +145,12 @@ public class ProductController {
 
         Product savedProduct = productRepository.save(product);
 
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            activityLogService.log(currentUser, "CREATE_PRODUCT",
+                    "Created product " + savedProduct.getCode() + " - " + savedProduct.getName());
+        }
+
         Inventory savedInventory = null;
         if (request.getWarehouseId() != null) {
             Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
@@ -213,5 +222,11 @@ public class ProductController {
             result.add(ProductDTO.fromEntity(savedProduct, savedInventory));
         }
         return ResponseEntity.ok(result);
+    }
+
+    private User resolveUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return null;
+        return userRepository.findByEmail(auth.getName()).orElse(null);
     }
 }

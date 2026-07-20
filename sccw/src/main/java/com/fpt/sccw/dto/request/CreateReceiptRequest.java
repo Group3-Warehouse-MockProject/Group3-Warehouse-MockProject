@@ -21,6 +21,9 @@ public class CreateReceiptRequest {
     /** Optional remark / note */
     private String remark;
 
+    /** Partner name (supplier for inbound, customer for outbound) */
+    private String partner;
+
     /** Line items */
     private List<LineItemRequest> items;
 
