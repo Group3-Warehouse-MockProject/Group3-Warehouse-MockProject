@@ -3,6 +3,7 @@ package com.fpt.sccw.listener;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.fpt.sccw.event.InventoryChangedEvent;
 import com.fpt.sccw.service.AiRagService;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
  * Chạy async để không chặn request chính (@EnableAsync đã có trong SccwApplication).
  */
 @Component
+@ConditionalOnProperty(name = "app.ai.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
 public class AiRagEventListener {
