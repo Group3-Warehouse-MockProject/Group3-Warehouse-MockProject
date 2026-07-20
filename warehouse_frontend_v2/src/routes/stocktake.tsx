@@ -5,6 +5,7 @@ import { useApp } from "@/lib/app-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { warehouses } from "@/lib/warehouse-data";
 import {
   ClipboardCheck, Plus, X, Save, ListChecks,
   AlertTriangle, CheckCircle2, Boxes,
@@ -97,17 +98,7 @@ function StocktakePage() {
     },
   });
 
-  // --- Lấy danh sách sản phẩm để chọn khi tạo phiếu ---
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ["inventory", activeWarehouseId],
-    queryFn: async () => {
-      const res = await api.get("/inventory", {
-        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {},
-      });
-      return res.data;
-    },
-    enabled: creating,
-  });
+
 
   // --- Mutation: Đổi trạng thái phiếu ---
   const updateStatusMutation = useMutation({
@@ -327,7 +318,6 @@ function StocktakePage() {
         <Modal onClose={() => setCreating(false)} title="Create stocktake sheet">
           <CreateForm
             onClose={() => setCreating(false)}
-            inventoryItems={inventoryItems}
             activeWarehouseId={activeWarehouseId}
             currentUserWarehouseId={currentUser?.warehouseId ?? null}
           />
@@ -519,25 +509,53 @@ function StocktakePage() {
 // ----------------------------------------------------------------
 function CreateForm({
   onClose,
-  inventoryItems,
   activeWarehouseId,
   currentUserWarehouseId,
 }: {
   onClose: () => void;
-  inventoryItems: any[];
   activeWarehouseId: string | null;
   currentUserWarehouseId: string | null;
 }) {
-  const { currentUser } = useApp();
+  const { currentUser, canSwitchWarehouse } = useApp();
   const queryClient = useQueryClient();
+
+  // Lấy danh sách tất cả các kho
+  const { data: apiWarehouses = [] } = useQuery<any[]>({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get("/warehouses");
+      return res.data;
+    },
+  });
+
+  const warehousesList = apiWarehouses.length > 0 ? apiWarehouses : warehouses;
+
+  // Kho mặc định được chọn
+  const initialWarehouseId =
+    currentUserWarehouseId ??
+    activeWarehouseId ??
+    (warehousesList[0]?.id ? String(warehousesList[0].id) : "1");
+
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(initialWarehouseId);
   const [remark, setRemark] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [assignedUserId, setAssignedUserId] = useState<number | "">("");
   const [categoryFilter, setCategoryFilter] = useState("");
 
-  const effectiveWarehouseId = currentUserWarehouseId ?? activeWarehouseId;
+  // Lấy danh sách sản phẩm theo kho đã chọn
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ["inventory", selectedWarehouseId],
+    queryFn: async () => {
+      if (!selectedWarehouseId) return [];
+      const res = await api.get("/inventory", {
+        params: { warehouseIdParam: selectedWarehouseId },
+      });
+      return res.data;
+    },
+    enabled: !!selectedWarehouseId,
+  });
 
-  // Lấy danh sách staff cùng kho để gán
+  // Lấy danh sách staff thuộc kho đã chọn
   const { data: allUsers = [] } = useQuery<any[]>({
     queryKey: ["users"],
     queryFn: async () => {
@@ -550,7 +568,7 @@ function CreateForm({
     (u: any) =>
       (u.role === "STAFF" || u.role === "Staff") &&
       u.warehouseId !== null &&
-      String(u.warehouseId) === String(effectiveWarehouseId) &&
+      String(u.warehouseId) === String(selectedWarehouseId) &&
       !u.isDeleted
   );
 
@@ -584,27 +602,53 @@ function CreateForm({
   };
 
   const handleCreate = () => {
-    if (!effectiveWarehouseId) {
+    if (!selectedWarehouseId) {
       toast.error("No warehouse selected");
       return;
     }
     createMutation.mutate({
-      warehouseId: Number(effectiveWarehouseId),
+      warehouseId: Number(selectedWarehouseId),
       assignedUserId: assignedUserId !== "" ? Number(assignedUserId) : undefined,
       remark,
       productIds: selectedProductIds,
     });
   };
 
+  const currentWarehouseObj = warehousesList.find(
+    (w: any) => String(w.id) === String(selectedWarehouseId)
+  );
+
   return (
     <div className="space-y-4">
-      {/* Warehouse (readonly) */}
+      {/* Warehouse select / readonly */}
       <Field label="Warehouse">
-        <input
-          readOnly
-          value={effectiveWarehouseId ? `Warehouse #${effectiveWarehouseId}` : "No warehouse assigned"}
-          className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm opacity-70"
-        />
+        {canSwitchWarehouse ? (
+          <select
+            value={selectedWarehouseId}
+            onChange={(e) => {
+              setSelectedWarehouseId(e.target.value);
+              setSelectedProductIds([]);
+              setAssignedUserId("");
+            }}
+            className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm"
+          >
+            {warehousesList.map((w: any) => (
+              <option key={w.id} value={String(w.id)}>
+                {w.code ? `${w.code} - ${w.name}` : w.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            readOnly
+            value={
+              currentWarehouseObj
+                ? `${currentWarehouseObj.code ? `${currentWarehouseObj.code} - ` : ""}${currentWarehouseObj.name}`
+                : `Warehouse #${selectedWarehouseId}`
+            }
+            className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm opacity-70"
+          />
+        )}
       </Field>
 
       {/* Created by (readonly) */}
