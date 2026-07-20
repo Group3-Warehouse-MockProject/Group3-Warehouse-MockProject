@@ -202,7 +202,6 @@ public class InventoryCheckController {
         InventoryCheck check = inventoryCheckRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Stocktake not found: " + id));
 
-        String newStatus = body.get("status");
         try {
             check.setStatus(Status.InventoryCheckStatus.valueOf(newStatus));
         } catch (IllegalArgumentException e) {
