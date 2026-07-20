@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, Pencil } from "lucide-react";
+import { useState, useEffect } from "react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -32,6 +32,7 @@ interface ManagerUser {
 function SettingsPage() {
   const { currentUser } = useApp();
   const [open, setOpen] = useState(false);
+  const [editWarehouse, setEditWarehouse] = useState<WarehouseData | null>(null);
 
   const { data: warehousesData, isLoading } = useQuery<WarehouseData[]>({
     queryKey: ["warehouses"],
@@ -101,9 +102,20 @@ function SettingsPage() {
                             <div className="font-semibold">{w.name}</div>
                             <div className="text-xs text-muted-foreground font-mono">{w.code}</div>
                           </div>
-                          <span className="text-xs px-2 py-1 rounded-md bg-primary/15 text-primary">
-                            {(w.capacity ?? 0).toLocaleString()} units
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2 py-1 rounded-md bg-primary/15 text-primary">
+                              {(w.capacity ?? 0).toLocaleString()} units
+                            </span>
+                            {canManage && (
+                              <button
+                                onClick={() => setEditWarehouse(w)}
+                                className="size-7 rounded-lg grid place-items-center bg-secondary border border-border hover:bg-muted transition-colors"
+                                title="Edit warehouse"
+                              >
+                                <Pencil className="size-3.5 text-muted-foreground" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="mt-3 flex items-start gap-2 text-sm">
                           <MapPin className="size-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -181,6 +193,12 @@ function SettingsPage() {
 
       {canManage && (
         <AddWarehouseModal open={open} onClose={() => setOpen(false)} />
+      )}
+      {canManage && editWarehouse && (
+        <EditWarehouseModal
+          warehouse={editWarehouse}
+          onClose={() => setEditWarehouse(null)}
+        />
       )}
     </AppShell>
   );
@@ -292,25 +310,164 @@ function AddWarehouseModal({ open, onClose }: { open: boolean; onClose: () => vo
         <Field label="Capacity (units)" required>
           <input type="number" className={inputCls} value={form.capacity} onChange={set("capacity")} min={0} />
         </Field>
-        <Field label="Manager in charge" hint={managers.length === 0 && !managersLoading ? "No available warehouse managers" : undefined}>
+        <Field label="Manager in charge">
           <select
             className={inputCls}
             value={form.managerId}
             onChange={set("managerId")}
             disabled={managersLoading}
           >
-            <option value="">— None (assign later) —</option>
-            {managersLoading && <option disabled>Loading...</option>}
+            <option value="">— None —</option>
             {managers.map((m) => (
               <option key={m.id} value={String(m.id)}>
                 {m.fullName}
-                {m.warehouseId ? " (already assigned)" : ""}
               </option>
             ))}
           </select>
         </Field>
         <Field label="Notes" className="sm:col-span-2">
           <textarea className={textareaCls} placeholder="Optional description" value={form.notes} onChange={set("notes")} />
+        </Field>
+        {error && (
+          <div className="sm:col-span-2 text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        )}
+      </div>
+    </ModalShell>
+  );
+}
+
+function EditWarehouseModal({
+  warehouse,
+  onClose,
+}: {
+  warehouse: WarehouseData;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  // Tách street address và city từ full address
+  // address = "Lot B12, Tan Binh, Ho Chi Minh City" | city = "Ho Chi Minh City"
+  const streetAddress = warehouse.city
+    ? warehouse.address.replace(new RegExp(`,?\\s*${warehouse.city}\\s*$`), "").trim()
+    : warehouse.address;
+
+  const [form, setForm] = useState({
+    name: warehouse.name,
+    address: streetAddress,
+    city: warehouse.city,
+    capacity: String(warehouse.capacity ?? ""),
+    managerId: "-1",   // default — sẽ được update bởi useEffect khi managers load
+  });
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch danh sách WAREHOUSE_MANAGER
+  const { data: managersData, isLoading: managersLoading } = useQuery<ManagerUser[]>({
+    queryKey: ["users", "WAREHOUSE_MANAGER"],
+    queryFn: async () => {
+      const res = await api.get("/users", { params: { role: "WAREHOUSE_MANAGER" } });
+      return res.data;
+    },
+  });
+  const managers = managersData ?? [];
+
+  // Pre-select manager hiện tại khi data load xong
+  useEffect(() => {
+    if (!managersData) return;
+    const current = managersData.find((m) => String(m.warehouseId) === warehouse.id);
+    setForm((prev) => ({ ...prev, managerId: current ? String(current.id) : "-1" }));
+  }, [managersData, warehouse.id]);
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: async () => {
+      const fullAddress = form.city
+        ? `${form.address.trim()}, ${form.city.trim()}`
+        : form.address.trim();
+
+      await api.put(`/warehouses/${warehouse.id}`, {
+        name: form.name,
+        address: fullAddress,
+        capacity: Number(form.capacity),
+        managerId: Number(form.managerId),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["warehouses"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      onClose();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data ?? err?.message ?? "Failed to update warehouse";
+      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    },
+  });
+
+  const set =
+    (key: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+
+  return (
+    <ModalShell
+      open={true}
+      onClose={onClose}
+      title={`Edit — ${warehouse.code}`}
+      subtitle="Update warehouse information"
+      icon={<Pencil className="size-5" />}
+      maxWidth="40rem"
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => { setError(null); mutate(); }}
+            disabled={isPending || !form.name || !form.address || !form.city || !form.capacity}
+            className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring flex items-center gap-2 disabled:opacity-60"
+            style={{ background: "var(--gradient-primary)" }}
+          >
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            Save changes
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Code readonly */}
+        <Field label="Warehouse code">
+          <input className={`${inputCls} opacity-60 cursor-not-allowed`} value={warehouse.code} readOnly />
+        </Field>
+        <Field label="Name" required>
+          <input className={inputCls} value={form.name} onChange={set("name")} />
+        </Field>
+        <Field label="Street address" required className="sm:col-span-2">
+          <input className={inputCls} value={form.address} onChange={set("address")} />
+        </Field>
+        <Field label="City" required>
+          <input className={inputCls} value={form.city} onChange={set("city")} />
+        </Field>
+        <Field label="Capacity (units)" required>
+          <input type="number" className={inputCls} value={form.capacity} onChange={set("capacity")} min={0} />
+        </Field>
+        <Field label="Manager in charge" className="sm:col-span-2">
+          <select
+            className={inputCls}
+            value={form.managerId}
+            onChange={set("managerId")}
+            disabled={managersLoading}
+          >
+            <option value="-1">— None —</option>
+            {managers.map((m) => (
+              <option key={m.id} value={String(m.id)}>
+                {m.fullName}
+              </option>
+            ))}
+          </select>
         </Field>
         {error && (
           <div className="sm:col-span-2 text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
