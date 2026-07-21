@@ -106,16 +106,26 @@ function StocktakePage() {
     if (currentUser?.role === "Warehouse_Manager" || currentUser?.role === "Admin" || currentUser?.role === "Manager") {
       return true;
     }
-    if (!sheet.assignedUserId && !sheet.assignedUserName) {
+    // Nếu phiếu chưa gán cho ai, Staff trong kho đều được đếm
+    if (!sheet.assignedUserId && (!sheet.assignedUserName || sheet.assignedUserName === "—")) {
       return true;
     }
+    // Kiểm tra theo ID nhân viên
     if (currentUser?.id && sheet.assignedUserId) {
-      return Number(sheet.assignedUserId) === Number(currentUser.id);
+      if (String(sheet.assignedUserId) === String(currentUser.id)) {
+        return true;
+      }
     }
+    // Kiểm tra theo tên / username nhân viên
     if (currentUser?.name && sheet.assignedUserName) {
-      return sheet.assignedUserName.trim().toLowerCase() === currentUser.name.trim().toLowerCase();
+      const uName = currentUser.name.trim().toLowerCase();
+      const aName = sheet.assignedUserName.trim().toLowerCase();
+      if (aName === uName || aName.includes(uName) || uName.includes(aName)) {
+        return true;
+      }
     }
-    return true;
+    // Phiếu đã gán cho người khác -> STAFF này không được đếm!
+    return false;
   };
 
   // Chỉ Warehouse_Manager mới được đóng phiếu
@@ -504,130 +514,128 @@ function StocktakePage() {
 
         {/* Bảng danh sách */}
         <div className="surface-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <div className="min-w-[950px] text-sm">
-              {/* Grid Table Header */}
-              <div className="grid grid-cols-[100px_110px_110px_130px_130px_70px_90px_110px_48px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
-                <div>Sheet #</div>
-                <div>Date</div>
-                <div>Warehouse</div>
-                <div>Created by</div>
-                <div>Assigned to</div>
-                <div className="text-right">Items</div>
-                <div className="text-right">Variance</div>
-                <div className="text-center">Status</div>
-                <div />
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-3 py-20 text-muted-foreground">
+              <Loader2 className="size-5 animate-spin" />
+              <span className="text-sm">Loading stocktake sheets…</span>
+            </div>
+          ) : paginatedList.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
+              <Search className="size-8 opacity-30" />
+              <span className="text-sm">
+                {activeFilterCount > 0 || searchQuery
+                  ? "No stocktake sheets match your search or filters."
+                  : "No stocktake sheets yet."}
+              </span>
+              {(searchQuery || activeFilterCount > 0) && (
+                <button onClick={clearFilters} className="text-xs text-primary underline underline-offset-2 mt-1">
+                  Clear filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
+                    <tr>
+                      <th className="text-left p-4">Sheet #</th>
+                      <th className="text-left p-4">Date</th>
+                      <th className="text-left p-4">Warehouse</th>
+                      <th className="text-left p-4">Created by</th>
+                      <th className="text-left p-4">Assigned to</th>
+                      <th className="text-right p-4">Items</th>
+                      <th className="text-right p-4">Variance</th>
+                      <th className="text-center p-4">Status</th>
+                      <th className="text-right p-4" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedList.map((s) => {
+                      if (!s) return null;
+                      return (
+                        <tr
+                          key={s.id || Math.random()}
+                          onClick={() => setViewing(s)}
+                          className="border-t border-border/60 hover:bg-secondary/30 transition-colors cursor-pointer"
+                        >
+                          <td className="p-4 font-mono text-xs">ST-{String(s.id || 0).padStart(4, "0")}</td>
+                          <td className="p-4 text-muted-foreground">{s.date || "—"}</td>
+                          <td className="p-4 font-mono text-xs">{s.warehouseCode || "—"}</td>
+                          <td className="p-4">{s.createdByName || "—"}</td>
+                          <td className="p-4 text-muted-foreground">{s.assignedUserName ?? "—"}</td>
+                          <td className="p-4 text-right font-medium">{s.items ?? 0}</td>
+                          <td className={`p-4 text-right font-semibold ${(s.status === "PENDING" || s.status === "CANCELLED") ? "text-muted-foreground" : (s.variance || 0) > 0 ? "text-warning" : "text-muted-foreground"}`}>
+                            {(s.status === "PENDING" || s.status === "CANCELLED") ? "0" : (s.variance || 0) > 0 ? `±${s.variance}` : "0"}
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-md text-xs font-medium inline-block ${statusTone[s.status] || "bg-muted text-muted-foreground"}`}>
+                              {statusLabel[s.status] || s.status || "Draft"}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-2">
+                              {/* Staff được gán / WH_Manager nhập số đếm */}
+                              {canCount && isUserAssignedOrManager(s) && s.status !== "COMPLETED" && s.status !== "CANCELLED" && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setCounting(s); setCounts({}); }}
+                                  className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                                >
+                                  <ClipboardCheck className="size-3.5" /> Count
+                                </button>
+                              )}
+                              {/* Chỉ WH_Manager được Complete */}
+                              {canComplete && s.status === "IN_PROGRESS" && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ id: s.id, status: "COMPLETED" }); }}
+                                  className="text-xs text-success hover:underline inline-flex items-center gap-1 font-medium"
+                                >
+                                  <CheckCircle2 className="size-3.5" /> Complete
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
-              {/* Grid Table Body */}
-              <div className="divide-y divide-border/60">
-                {isLoading ? (
-                  <div className="p-8 text-center text-muted-foreground text-sm">
-                    <Loader2 className="size-5 animate-spin mx-auto" />
+              {/* Phân trang */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
+                  <div className="text-muted-foreground text-xs">
+                    Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, stocktakes.length)} of {stocktakes.length} entries
                   </div>
-                ) : paginatedList.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
-                      {activeFilterCount > 0 || searchQuery ? (
-                        <div className="space-y-2">
-                          <p>No stocktake sheets found matching your search or filters.</p>
-                          <button
-                            onClick={clearFilters}
-                            className="text-xs text-primary underline"
-                          >
-                            Clear filters
-                          </button>
-                        </div>
-                      ) : (
-                        "No stocktake sheets yet."
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedList.map((s) => {
-                    if (!s) return null;
-                    return (
-                      <tr
-                        key={s.id || Math.random()}
-                        onClick={() => setViewing(s)}
-                        className="border-t border-border/60 hover:bg-secondary/30 transition-colors cursor-pointer"
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage === 1}
+                      className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setPage(n)}
+                        className={`size-8 rounded-md text-xs font-medium ${n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"}`}
                       >
-                        <td className="p-4 font-mono text-xs">ST-{String(s.id || 0).padStart(4, "0")}</td>
-                        <td className="p-4 text-muted-foreground">{s.date || "—"}</td>
-                        <td className="p-4 font-mono text-xs">{s.warehouseCode || "—"}</td>
-                        <td className="p-4">{s.createdByName || "—"}</td>
-                        <td className="p-4 text-muted-foreground">{s.assignedUserName ?? "—"}</td>
-                        <td className="p-4 text-right">{s.items ?? 0}</td>
-                        <td className={`p-4 text-right font-semibold ${(s.status === "PENDING" || s.status === "CANCELLED") ? "text-muted-foreground" : (s.variance || 0) > 0 ? "text-warning" : "text-muted-foreground"}`}>
-                          {(s.status === "PENDING" || s.status === "CANCELLED") ? "0" : (s.variance || 0) > 0 ? `±${s.variance}` : "0"}
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[s.status] || "bg-muted text-muted-foreground"}`}>
-                            {statusLabel[s.status] || s.status || "Draft"}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Staff được gán / WH_Manager nhập số đếm */}
-                            {canCount && isUserAssignedOrManager(s) && s.status !== "COMPLETED" && s.status !== "CANCELLED" && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setCounting(s); setCounts({}); }}
-                                className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                              >
-                                <ClipboardCheck className="size-3.5" /> Count
-                              </button>
-                            )}
-                            {/* Chỉ WH_Manager được Complete */}
-                            {canComplete && s.status === "IN_PROGRESS" && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ id: s.id, status: "COMPLETED" }); }}
-                                className="text-xs text-success hover:underline inline-flex items-center gap-1"
-                              >
-                                <CheckCircle2 className="size-3.5" /> Complete
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Phân trang */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
-              <div className="text-muted-foreground text-xs">
-                Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, stocktakes.length)} of {stocktakes.length} entries
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
-                >
-                  <ChevronLeft className="size-4" />
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setPage(n)}
-                    className={`size-8 rounded-md text-xs font-medium ${n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"}`}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
-                >
-                  <ChevronRight className="size-4" />
-                </button>
-              </div>
-            </div>
+                        {n}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage === totalPages}
+                      className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
