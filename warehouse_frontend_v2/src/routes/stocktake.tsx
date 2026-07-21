@@ -200,55 +200,52 @@ function StocktakePage() {
         {/* Bảng danh sách */}
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                <tr>
-                  <th className="text-left p-4">Sheet #</th>
-                  <th className="text-left p-4">Date</th>
-                  <th className="text-left p-4">Warehouse</th>
-                  <th className="text-left p-4">Created by</th>
-                  <th className="text-left p-4">Assigned to</th>
-                  <th className="text-right p-4">Items</th>
-                  <th className="text-right p-4">Variance</th>
-                  <th className="text-center p-4">Status</th>
-                  <th className="text-right p-4"></th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="min-w-[950px] text-sm">
+              {/* Grid Table Header */}
+              <div className="grid grid-cols-[100px_110px_110px_130px_130px_70px_90px_110px_48px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                <div>Sheet #</div>
+                <div>Date</div>
+                <div>Warehouse</div>
+                <div>Created by</div>
+                <div>Assigned to</div>
+                <div className="text-right">Items</div>
+                <div className="text-right">Variance</div>
+                <div className="text-center">Status</div>
+                <div />
+              </div>
+
+              {/* Grid Table Body */}
+              <div className="divide-y divide-border/60">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
-                      <Loader2 className="size-5 animate-spin mx-auto" />
-                    </td>
-                  </tr>
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    <Loader2 className="size-5 animate-spin mx-auto" />
+                  </div>
                 ) : paginatedList.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
-                      No stocktake sheets yet.
-                    </td>
-                  </tr>
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    No stocktake sheets yet.
+                  </div>
                 ) : (
                   paginatedList.map((s) => (
-                    <tr
+                    <div
                       key={s.id}
                       onClick={() => setViewing(s)}
-                      className="border-t border-border/60 hover:bg-secondary/30 transition-colors cursor-pointer"
+                      className="grid grid-cols-[100px_110px_110px_130px_130px_70px_90px_110px_48px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors cursor-pointer"
                     >
-                      <td className="p-4 font-mono text-xs">ST-{String(s.id).padStart(4, "0")}</td>
-                      <td className="p-4 text-muted-foreground">{s.date}</td>
-                      <td className="p-4 font-mono text-xs">{s.warehouseCode}</td>
-                      <td className="p-4">{s.createdByName}</td>
-                      <td className="p-4 text-muted-foreground">{s.assignedUserName ?? "—"}</td>
-                      <td className="p-4 text-right">{s.items}</td>
-                      <td className={`p-4 text-right font-semibold ${s.variance > 0 ? "text-warning" : "text-muted-foreground"}`}>
+                      <div className="font-mono text-xs">ST-{String(s.id).padStart(4, "0")}</div>
+                      <div className="text-muted-foreground">{s.date}</div>
+                      <div className="font-mono text-xs">{s.warehouseCode}</div>
+                      <div className="truncate">{s.createdByName}</div>
+                      <div className="text-muted-foreground truncate">{s.assignedUserName ?? "—"}</div>
+                      <div className="text-right">{s.items}</div>
+                      <div className={`text-right font-semibold ${s.variance > 0 ? "text-warning" : "text-muted-foreground"}`}>
                         {s.variance > 0 ? `±${s.variance}` : "0"}
-                      </td>
-                      <td className="p-4 text-center">
+                      </div>
+                      <div className="text-center">
                         <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[s.status]}`}>
                           {statusLabel[s.status]}
                         </span>
-                      </td>
-                      <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      </div>
+                      <div className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           {/* Staff / WH_Manager nhập số đếm */}
                           {canCount && s.status !== "COMPLETED" && s.status !== "CANCELLED" && (
@@ -269,12 +266,12 @@ function StocktakePage() {
                             </button>
                           )}
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   ))
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
 
           {/* Phân trang */}

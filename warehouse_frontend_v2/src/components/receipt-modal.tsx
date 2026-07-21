@@ -294,7 +294,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   <select
                     value={warehouseId}
                     onChange={(e) => setWarehouseId(e.target.value)}
-                    className="input"
+                    className="input disabled:opacity-50 disabled:bg-muted disabled:cursor-not-allowed"
                     disabled={!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager"}
                   >
                     {warehouses
