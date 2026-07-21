@@ -11,8 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -78,60 +77,79 @@ public class InventoryCheckController {
     // POST /api/stocktake  — Tạo phiếu mới (Admin / Manager / WH_Manager)
     // ------------------------------------------------------------------
     @PostMapping
-    @Transactional
-    public ResponseEntity<InventoryCheckDTO> createCheck(@RequestBody InventoryCheckRequest request) {
-        User user = getAuthenticatedUser();
-        if (user == null) return ResponseEntity.status(401).build();
-
-        String role = user.getRole().getRoleName().name();
-        if (role.equals("STAFF")) return ResponseEntity.status(403).build();
-
-        Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new RuntimeException("Warehouse not found"));
-
-        // Tìm nhân viên được gán (nếu có)
-        User assignedUser = null;
-        if (request.getAssignedUserId() != null) {
-            assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
-        }
-
-        // Tạo phiếu kiểm kê
-        InventoryCheck check = InventoryCheck.builder()
-                .user(user)
-                .warehouse(warehouse)
-                .assignedUser(assignedUser)
-                .remark(request.getRemark())
-                .status(Status.InventoryCheckStatus.PENDING)
-                .build();
-
-        // Tạo dòng chi tiết cho từng sản phẩm được chọn
-        if (request.getProductIds() != null && !request.getProductIds().isEmpty()) {
-            for (Long productId : request.getProductIds()) {
-                Product product = productRepository.findById(productId)
-                        .orElseThrow(() -> new RuntimeException("Product not found: " + productId));
-
-                // Lấy số lượng hệ thống hiện tại từ inventory
-                Long systemQty = inventoryRepository
-                        .findByWarehouseId(warehouse.getId())
-                        .stream()
-                        .filter(inv -> inv.getProduct().getId().equals(productId))
-                        .mapToLong(Inventory::getQuantity)
-                        .findFirst()
-                        .orElse(0L);
-
-                InventoryCheckDetail detail = InventoryCheckDetail.builder()
-                        .inventoryCheck(check)
-                        .product(product)
-                        .systemQuantity(systemQty)
-                        .actualQuantity(systemQty) // Mặc định bằng system qty → variance = 0 khi chưa đếm
-                        .build();
-
-                check.getDetails().add(detail);
+    public ResponseEntity<?> createCheck(@RequestBody InventoryCheckRequest request) {
+        try {
+            User user = getAuthenticatedUser();
+            if (user == null) {
+                return ResponseEntity.status(401).body(Map.of("message", "User not authenticated"));
             }
-        }
 
-        InventoryCheck saved = inventoryCheckRepository.save(check);
-        return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+            String role = user.getRole() != null && user.getRole().getRoleName() != null 
+                    ? user.getRole().getRoleName().name() 
+                    : "STAFF";
+
+            if ("STAFF".equalsIgnoreCase(role)) {
+                return ResponseEntity.status(403).body(Map.of("message", "Staff cannot create stocktake sheets"));
+            }
+
+            if (request.getWarehouseId() == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Warehouse ID is required"));
+            }
+
+            Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
+                    .orElseThrow(() -> new RuntimeException("Warehouse not found: " + request.getWarehouseId()));
+
+            User assignedUser = null;
+            if (request.getAssignedUserId() != null) {
+                assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
+            }
+
+            List<InventoryCheckDetail> detailsList = new ArrayList<>();
+
+            InventoryCheck check = InventoryCheck.builder()
+                    .user(user)
+                    .warehouse(warehouse)
+                    .assignedUser(assignedUser)
+                    .remark(request.getRemark())
+                    .status(Status.InventoryCheckStatus.PENDING)
+                    .details(detailsList)
+                    .build();
+
+            if (request.getProductIds() != null && !request.getProductIds().isEmpty()) {
+                List<Inventory> invList = inventoryRepository.findByWarehouseId(warehouse.getId());
+
+                for (Long productId : request.getProductIds()) {
+                    if (productId == null) continue;
+                    Product product = productRepository.findById(productId).orElse(null);
+                    if (product == null) continue;
+
+                    Long systemQty = 0L;
+                    if (invList != null) {
+                        systemQty = invList.stream()
+                                .filter(inv -> inv != null && inv.getProduct() != null && inv.getProduct().getId().equals(productId))
+                                .mapToLong(Inventory::getQuantity)
+                                .findFirst()
+                                .orElse(0L);
+                    }
+
+                    InventoryCheckDetail detail = InventoryCheckDetail.builder()
+                            .inventoryCheck(check)
+                            .product(product)
+                            .systemQuantity(systemQty)
+                            .actualQuantity(0L)
+                            .difference(0L)
+                            .build();
+
+                    detailsList.add(detail);
+                }
+            }
+
+            InventoryCheck saved = inventoryCheckRepository.save(check);
+            return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Error creating stocktake sheet"));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -151,6 +169,16 @@ public class InventoryCheckController {
 
         if (check.getStatus() == Status.InventoryCheckStatus.COMPLETED) {
             return ResponseEntity.badRequest().build();
+        }
+
+        String role = user.getRole() != null && user.getRole().getRoleName() != null ? user.getRole().getRoleName().name() : "";
+
+        // Nếu phiếu được giao cho nhân viên cụ thể (assignedUser != null)
+        // và người đang đếm là STAFF nhưng KHÔNG PHẢI nhân viên được gán -> Chặn 403
+        if ("STAFF".equalsIgnoreCase(role) 
+                && check.getAssignedUser() != null 
+                && !check.getAssignedUser().getId().equals(user.getId())) {
+            return ResponseEntity.status(403).build();
         }
 
         // Cập nhật số đếm thực tế cho từng dòng sản phẩm
@@ -188,10 +216,10 @@ public class InventoryCheckController {
         User user = getAuthenticatedUser();
         if (user == null) return ResponseEntity.status(401).build();
 
-        String role = user.getRole().getRoleName().name();
+        String role = user.getRole() != null && user.getRole().getRoleName() != null ? user.getRole().getRoleName().name() : "";
 
         // STAFF không được đổi trạng thái
-        if (role.equals("STAFF")) return ResponseEntity.status(403).build();
+        if ("STAFF".equalsIgnoreCase(role)) return ResponseEntity.status(403).build();
 
         // Chỉ WAREHOUSE_MANAGER mới được đóng phiếu (COMPLETED)
         String newStatus = body.get("status");
