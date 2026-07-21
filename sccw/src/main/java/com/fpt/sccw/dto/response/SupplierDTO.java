@@ -15,7 +15,7 @@ public class SupplierDTO {
     private String address;
     private String status;
     private String country;
-    private BigDecimal rating;          // Đổi từ Double sang BigDecimal
+    private BigDecimal rating;         
     private Integer onTimeDelivery; 
 
     public static SupplierDTO fromEntity(Supplier supplier) {

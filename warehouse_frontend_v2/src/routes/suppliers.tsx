@@ -3,7 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power, Filter, X, ChevronDown } from "lucide-react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
 
 export const Route = createFileRoute("/suppliers")({
@@ -30,6 +30,16 @@ function SuppliersPage() {
   const [open, setOpen] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
+
+  // States bộ lọc combobox
+  const [selectedCountry, setSelectedCountry] = useState("ALL");
+  const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+
+  const defaultCountries = ["Vietnam", "Singapore", "Taiwan"];
+  const allAvailableCountries = Array.from(
+    new Set([...defaultCountries, ...suppliersList.map((s) => s.country).filter(Boolean)])
+  );
 
   const fetchSuppliers = async () => {
     try {
@@ -75,7 +85,6 @@ function SuppliersPage() {
     }
   };
 
-  // Hàm chuyển đổi nhanh trạng thái ACTIVE / INACTIVE (Nút Power)
   const handleToggleStatus = async (supplier) => {
     const newStatus = supplier.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
@@ -94,13 +103,38 @@ function SuppliersPage() {
     }
   };
 
-  const filtered = suppliersList.filter((s) =>
-    s.name?.toLowerCase().includes(q.toLowerCase()) && !deletedIds.includes(s.id)
-  );
+  // Logic tìm kiếm toàn cục trên tất cả các trường
+  const searchLower = q.toLowerCase().trim();
+  
+  const filtered = suppliersList.filter((s) => {
+    if (deletedIds.includes(s.id)) return false;
+    
+    const matchesSearch = searchLower === "" || 
+      (s.name && s.name.toLowerCase().includes(searchLower)) ||
+      (s.phoneNumber && s.phoneNumber.toLowerCase().includes(searchLower)) ||
+      (s.email && s.email.toLowerCase().includes(searchLower)) ||
+      (s.address && s.address.toLowerCase().includes(searchLower)) ||
+      (s.country && s.country.toLowerCase().includes(searchLower)) ||
+      (s.status && s.status.toLowerCase().includes(searchLower));
+    
+    const matchesStatus = selectedStatus === "ALL" || s.status === selectedStatus;
+    const matchesCountry = selectedCountry === "ALL" || s.country === selectedCountry;
+
+    return matchesSearch && matchesStatus && matchesCountry;
+  });
   
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const slice = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const hasActiveFilterOrSearch = q.trim() !== "" || selectedCountry !== "ALL" || selectedStatus !== "ALL";
+
+  const handleClearAll = () => {
+    setQ("");
+    setSelectedCountry("ALL");
+    setSelectedStatus("ALL");
+    setPage(1);
+  };
 
   return (
     <AppShell>
@@ -122,9 +156,93 @@ function SuppliersPage() {
           <Kpi icon={Globe} label="Countries" value={new Set(filtered.map((s) => s.country).filter(Boolean)).size} tone="warning" />
         </div>
 
-        <div className="relative max-w-md">
-          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search supplier name..." className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm" />
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            <div className="relative w-full sm:w-80">
+              <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input 
+                value={q} 
+                onChange={(e) => { 
+                  setQ(e.target.value); 
+                  setPage(1); 
+                }} 
+                placeholder="Search across all fields..." 
+                className="w-full h-10 pl-9 pr-8 rounded-lg bg-input border border-border text-sm" 
+              />
+              {q && (
+                <button onClick={() => setQ("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilterOrSearch && (
+              <button 
+                onClick={handleClearAll}
+                className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+
+          <div className="relative">
+            <button 
+              onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+              className={`h-10 px-4 rounded-lg border text-sm flex items-center gap-2 transition-colors ${(selectedCountry !== "ALL" || selectedStatus !== "ALL") ? 'bg-primary/10 border-primary text-primary font-medium' : 'bg-secondary/50 border-border text-foreground'}`}
+            >
+              <Filter className="size-3.5" />
+              Filter {(selectedCountry !== "ALL" || selectedStatus !== "ALL") && "(Active)"}
+            </button>
+
+            {filterDropdownOpen && (
+              <div className="absolute right-0 sm:left-auto sm:right-0 top-12 mt-1 w-72 rounded-xl bg-card border border-border p-4 shadow-2xl z-20 space-y-4">
+                
+                {/* Combobox COUNTRY */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Country</label>
+                  <div className="relative">
+                    <select 
+                      value={selectedCountry}
+                      onChange={(e) => {
+                        setSelectedCountry(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full h-10 px-3 pr-8 rounded-lg bg-input border border-border text-sm appearance-none cursor-pointer focus:outline-none focus:border-primary"
+                    >
+                      <option value="ALL">All Countries</option>
+                      {allAvailableCountries.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="size-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Combobox STATUS */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
+                  <div className="relative">
+                    <select 
+                      value={selectedStatus}
+                      onChange={(e) => {
+                        setSelectedStatus(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full h-10 px-3 pr-8 rounded-lg bg-input border border-border text-sm appearance-none cursor-pointer focus:outline-none focus:border-primary"
+                    >
+                      <option value="ALL">All Statuses</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                    <ChevronDown className="size-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -132,12 +250,66 @@ function SuppliersPage() {
             <table className="w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                 <tr>
-                  <th className="text-left p-4">Supplier</th>
-                  <th className="text-left p-4">Phone</th>
-                  <th className="text-left p-4">Email</th>
-                  <th className="text-left p-4">Address</th>
-                  <th className="text-left p-4">Country</th>
-                  <th className="text-left p-4">Status</th>
+                  {/* Cột Supplier */}
+                  <th className={`text-left p-4 ${searchLower !== '' && slice.some(s => s.name?.toLowerCase().includes(searchLower)) ? 'text-primary font-bold bg-primary/5' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <span>Supplier</span>
+                      {searchLower !== '' && slice.some(s => s.name?.toLowerCase().includes(searchLower)) && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched in Supplier"></span>
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Cột Phone */}
+                  <th className={`text-left p-4 ${searchLower !== '' && slice.some(s => s.phoneNumber?.toLowerCase().includes(searchLower)) ? 'text-primary font-bold bg-primary/5' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <span>Phone</span>
+                      {searchLower !== '' && slice.some(s => s.phoneNumber?.toLowerCase().includes(searchLower)) && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched in Phone"></span>
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Cột Email */}
+                  <th className={`text-left p-4 ${searchLower !== '' && slice.some(s => s.email?.toLowerCase().includes(searchLower)) ? 'text-primary font-bold bg-primary/5' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <span>Email</span>
+                      {searchLower !== '' && slice.some(s => s.email?.toLowerCase().includes(searchLower)) && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched in Email"></span>
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Cột Address */}
+                  <th className={`text-left p-4 ${searchLower !== '' && slice.some(s => s.address?.toLowerCase().includes(searchLower)) ? 'text-primary font-bold bg-primary/5' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <span>Address</span>
+                      {searchLower !== '' && slice.some(s => s.address?.toLowerCase().includes(searchLower)) && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched in Address"></span>
+                      )}
+                    </div>
+                  </th>
+                  
+                  {/* Cột Country */}
+                  <th className={`text-left p-4 ${(searchLower !== '' && slice.some(s => s.country?.toLowerCase().includes(searchLower))) || selectedCountry !== 'ALL' ? 'text-primary font-bold bg-primary/5' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <span>Country</span>
+                      {((searchLower !== '' && slice.some(s => s.country?.toLowerCase().includes(searchLower))) || selectedCountry !== 'ALL') && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Active country filter or search match"></span>
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Cột Status */}
+                  <th className={`text-left p-4 ${(searchLower !== '' && slice.some(s => s.status?.toLowerCase().includes(searchLower))) || selectedStatus !== 'ALL' ? 'text-primary font-bold bg-primary/5' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <span>Status</span>
+                      {((searchLower !== '' && slice.some(s => s.status?.toLowerCase().includes(searchLower))) || selectedStatus !== 'ALL') && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Active status filter or search match"></span>
+                      )}
+                    </div>
+                  </th>
+
                   <th className="text-center p-4">Actions</th>
                 </tr>
               </thead>
@@ -159,7 +331,6 @@ function SuppliersPage() {
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        {/* Nút Power đổi trạng thái nhanh */}
                         <button onClick={() => handleToggleStatus(s)} title="Toggle Status" className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
                           <Power className="size-4" />
                         </button>
@@ -216,8 +387,8 @@ function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: (
           address: form.address,
           status: form.status,
           country: form.country,
-          rating: 4.5,       // Gửi kèm giá trị mặc định khớp Backend DTO
-          onTimeDelivery: 90 // Gửi kèm giá trị mặc định khớp Backend DTO
+          rating: 4.5,      
+          onTimeDelivery: 90 
         }),
       });
       if (res.ok) {

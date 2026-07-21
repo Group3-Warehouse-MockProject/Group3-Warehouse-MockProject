@@ -505,27 +505,26 @@ function StocktakePage() {
         {/* Bảng danh sách */}
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                <tr>
-                  <th className="text-left p-4">Sheet #</th>
-                  <th className="text-left p-4">Date</th>
-                  <th className="text-left p-4">Warehouse</th>
-                  <th className="text-left p-4">Created by</th>
-                  <th className="text-left p-4">Assigned to</th>
-                  <th className="text-right p-4">Items</th>
-                  <th className="text-right p-4">Variance</th>
-                  <th className="text-center p-4">Status</th>
-                  <th className="text-right p-4"></th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="min-w-[950px] text-sm">
+              {/* Grid Table Header */}
+              <div className="grid grid-cols-[100px_110px_110px_130px_130px_70px_90px_110px_48px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                <div>Sheet #</div>
+                <div>Date</div>
+                <div>Warehouse</div>
+                <div>Created by</div>
+                <div>Assigned to</div>
+                <div className="text-right">Items</div>
+                <div className="text-right">Variance</div>
+                <div className="text-center">Status</div>
+                <div />
+              </div>
+
+              {/* Grid Table Body */}
+              <div className="divide-y divide-border/60">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
-                      <Loader2 className="size-5 animate-spin mx-auto" />
-                    </td>
-                  </tr>
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    <Loader2 className="size-5 animate-spin mx-auto" />
+                  </div>
                 ) : paginatedList.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
@@ -593,8 +592,8 @@ function StocktakePage() {
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
 
           {/* Phân trang */}

@@ -277,41 +277,51 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         </>
       }
     >
-      <div className="space-y-6 text-sm">
-        <div className="p-4 surface-card border border-border/60 rounded-lg">
-          <h3 className="font-medium mb-2">Step 1: Download Template</h3>
-          <p className="text-muted-foreground mb-4">
-            Start by downloading the standard Excel template. It has built-in dropdown choices for Warehouses, Suppliers, and Products.
-          </p>
-          <button onClick={downloadTemplate} disabled={loading} className="h-9 px-4 rounded-md border border-border bg-secondary hover:bg-muted font-medium inline-flex items-center gap-2 transition-colors">
-            <Download className="size-4" /> Download Template
-          </button>
-        </div>
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div className="p-5 surface-card border border-border/60 rounded-xl flex flex-col justify-between">
+            <div>
+              <h3 className="font-semibold text-base mb-2">Step 1: Download Template</h3>
+              <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                Start by downloading the standard Excel template. It includes built-in dropdown choices for Warehouses, Suppliers, and Products.
+              </p>
+            </div>
+            <button
+              onClick={downloadTemplate}
+              disabled={loading}
+              className="h-10 px-4 rounded-lg border border-border bg-secondary hover:bg-muted font-medium inline-flex items-center justify-center gap-2 transition-colors w-full"
+            >
+              <Download className="size-4" /> Download Template
+            </button>
+          </div>
 
-        <div className="p-4 surface-card border border-border/60 rounded-lg">
-          <h3 className="font-medium mb-2">Step 2: Upload Data</h3>
-          <p className="text-muted-foreground mb-4">
-            Fill out the template. Select options from the dropdown cells in Excel, and upload it back.
-          </p>
+          <div className="p-5 surface-card border border-border/60 rounded-xl flex flex-col justify-between">
+            <div>
+              <h3 className="font-semibold text-base mb-2">Step 2: Upload Data</h3>
+              <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                Fill out the template. Select options from the dropdown cells in Excel, and upload it back.
+              </p>
+            </div>
 
-          <input
-            type="file"
-            accept=".xlsx, .xls, .csv"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            disabled={loading}
-          />
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              disabled={loading}
+            />
 
-          <div
-            onClick={() => !loading && fileInputRef.current?.click()}
-            className={`border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-secondary/30 transition-colors ${
-              loading ? "opacity-60 pointer-events-none" : ""
-            }`}
-          >
-            <Upload className="size-8 text-muted-foreground mx-auto mb-3" />
-            <div className="font-medium">Click to browse or drag and drop</div>
-            <div className="text-xs text-muted-foreground mt-1">Excel or CSV files up to 5MB</div>
+            <div
+              onClick={() => !loading && fileInputRef.current?.click()}
+              className={`border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:bg-secondary/30 transition-colors ${
+                loading ? "opacity-60 pointer-events-none" : ""
+              }`}
+            >
+              <Upload className="size-6 text-muted-foreground mx-auto mb-2" />
+              <div className="font-medium text-xs">Click to browse or drag & drop</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">Excel or CSV files up to 5MB</div>
+            </div>
           </div>
         </div>
 
