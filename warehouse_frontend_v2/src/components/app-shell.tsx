@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Shield,
   UserCircle,
+  MessageSquareText,
   LogOut,
   Sun,
   Moon,
@@ -44,7 +45,8 @@ const nav: NavItem[] = [
   { to: "/staff", label: "Staff", icon: Users },
   { to: "/tracking", label: "Tracking", icon: Activity, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
-];
+  { to: "/feedback", label: "Feedback", icon: MessageSquareText },
+] as const;
 
 const roleTone: Record<string, string> = {
   Admin: "bg-destructive/15 text-destructive border-destructive/30",
