@@ -150,9 +150,7 @@ public class WarehouseReceiptController {
                     .price(resolvedPrice)
                     .build());
 
-            if (isInbound) {
-                adjustInventory(product, warehouse, item.getQuantity(), true);
-            }
+            // Inventory for inbound will be adjusted when status is updated to APPROVED.
         }
 
         receipt.setDetails(details);
@@ -208,6 +206,14 @@ public class WarehouseReceiptController {
                     return ResponseEntity.badRequest()
                             .body("Cannot change status of a finalized inbound receipt (" + receipt.getStatus() + ")");
                 }
+                
+                if (receipt.getStatus() == Status.ReceiptStatus.PENDING && newStatus == Status.ReceiptStatus.APPROVED) {
+                    Warehouse warehouse = receipt.getWarehouse();
+                    for (ReceiptDetail d : receipt.getDetails()) {
+                        adjustInventory(d.getProduct(), warehouse, d.getQuantity(), true);
+                    }
+                }
+                
                 receipt.setStatus(newStatus);
             } else {
                 Status.ReceiptStatus currentStatus = receipt.getStatus();
@@ -296,7 +302,9 @@ public class WarehouseReceiptController {
         // Rollback inventory
         for (ReceiptDetail d : receipt.getDetails()) {
             if (isInbound) {
-                adjustInventory(d.getProduct(), warehouse, d.getQuantity(), false);
+                if (receipt.getStatus() == Status.ReceiptStatus.APPROVED) {
+                    adjustInventory(d.getProduct(), warehouse, d.getQuantity(), false);
+                }
             } else {
                 if (receipt.getStatus() == Status.ReceiptStatus.COMPLETED) {
                     adjustInventory(d.getProduct(), warehouse, d.getQuantity(), true);

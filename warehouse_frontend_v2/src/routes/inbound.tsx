@@ -51,7 +51,7 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 function InboundPage() {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, canSwitchWarehouse } = useApp();
 
   const [movements, setMovements] = useState<ReceiptMovement[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
@@ -220,6 +220,11 @@ function InboundPage() {
     document.body.removeChild(link);
   };
 
+  const sq = searchQuery.toLowerCase().trim();
+  const isSearchMatchingReceipt = sq && filteredMovements.some(m => `r-${m.receiptId}`.includes(sq));
+  const isSearchMatchingProduct = sq && filteredMovements.some(m => m.product.toLowerCase().includes(sq) || m.sku.toLowerCase().includes(sq));
+  const isSearchMatchingSupplier = sq && filteredMovements.some(m => m.partner.toLowerCase().includes(sq));
+
   return (
     <AppShell>
       <div className="space-y-6">
@@ -327,17 +332,19 @@ function InboundPage() {
               <div className="absolute right-0 top-12 z-30 w-72 surface-card rounded-xl shadow-xl border border-border p-4 space-y-4">
 
                 {/* Warehouse */}
-                <FilterField label="Warehouse">
-                  <select value={filters.warehouse} onChange={(e) => setFilter("warehouse", e.target.value)} className="filter-select">
-                    <option value="">All Warehouses</option>
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>{w.code}</option>
-                    ))}
-                  </select>
-                </FilterField>
+                {canSwitchWarehouse && (
+                  <FilterField label="Warehouse" isActive={!!filters.warehouse}>
+                    <select value={filters.warehouse} onChange={(e) => setFilter("warehouse", e.target.value)} className="filter-select">
+                      <option value="">All Warehouses</option>
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={w.id}>{w.code}</option>
+                      ))}
+                    </select>
+                  </FilterField>
+                )}
 
                 {/* Status */}
-                <FilterField label="Status">
+                <FilterField label="Status" isActive={!!filters.status}>
                   <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)} className="filter-select">
                     <option value="">All Statuses</option>
                     <option value="PENDING">Pending</option>
@@ -347,7 +354,7 @@ function InboundPage() {
                 </FilterField>
 
                 {/* Received by */}
-                <FilterField label="Received by">
+                <FilterField label="Received by" isActive={!!filters.staff}>
                   <select value={filters.staff} onChange={(e) => setFilter("staff", e.target.value)} className="filter-select">
                     <option value="">All Staff</option>
                     {staffOptions.map((s) => (
@@ -357,7 +364,7 @@ function InboundPage() {
                 </FilterField>
 
                 {/* Qty range */}
-                <FilterField label="Qty range">
+                <FilterField label="Qty range" isActive={!!filters.qtyMin || !!filters.qtyMax}>
                   <div className="flex items-center gap-2">
                     <input
                       type="number" min={0} placeholder="Min"
@@ -377,7 +384,7 @@ function InboundPage() {
                 </FilterField>
 
                 {/* Date range */}
-                <FilterField label="Date range">
+                <FilterField label="Date range" isActive={!!filters.dateFrom || !!filters.dateTo}>
                   <div className="flex items-center gap-2">
                     <input
                       type="date"
@@ -442,14 +449,14 @@ function InboundPage() {
                 <div className="min-w-[950px] text-sm">
                   {/* Grid Table Header */}
                   <div className="grid grid-cols-[100px_minmax(180px,2fr)_minmax(140px,1.5fr)_110px_70px_110px_110px_130px_48px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
-                    <div>Receipt #</div>
-                    <div>Product</div>
-                    <div>Supplier</div>
-                    <div>Warehouse</div>
-                    <div className="text-right">Qty</div>
-                    <div>Date</div>
-                    <div>Status</div>
-                    <div>Received by</div>
+                    <div>Receipt #{isSearchMatchingReceipt ? <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" /> : null}</div>
+                    <div>Product{isSearchMatchingProduct ? <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" /> : null}</div>
+                    <div>Supplier{isSearchMatchingSupplier ? <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" /> : null}</div>
+                    <div>Warehouse{filters.warehouse && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div className="text-right">Qty{(filters.qtyMin || filters.qtyMax) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Date{(filters.dateFrom || filters.dateTo) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Status{filters.status && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Received by{filters.staff && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div />
                   </div>
 
@@ -564,10 +571,13 @@ function InboundPage() {
   );
 }
 
-function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterField({ label, isActive, children }: { label: string; isActive?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1.5">
+        {label}
+        {isActive && <div className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+      </div>
       {children}
     </div>
   );
