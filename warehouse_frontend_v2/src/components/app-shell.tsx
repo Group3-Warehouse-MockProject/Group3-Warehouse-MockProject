@@ -19,14 +19,22 @@ import {
   LogOut,
   Sun,
   Moon,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Activity
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
-const nav = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: React.ElementType;
+  adminOnly?: boolean;
+}
+
+const nav: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/products", label: "Products", icon: Package },
   { to: "/inbound", label: "Inbound", icon: ArrowDownToLine },
@@ -35,6 +43,7 @@ const nav = [
   { to: "/transfer", label: "Transfer", icon: ArrowRightLeft },
   { to: "/suppliers", label: "Suppliers", icon: Truck },
   { to: "/staff", label: "Staff", icon: Users },
+  { to: "/tracking", label: "Tracking", icon: Activity, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
   { to: "/feedback", label: "Feedback", icon: MessageSquareText },
 ] as const;
@@ -72,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       return res.data;
     }
   });
-  
+
   const warehouses = warehousesData || [];
 
   // Auto redirect to login if no valid session
@@ -105,16 +114,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="mt-1 w-full h-9 px-2 rounded-lg bg-input border border-border text-sm disabled:opacity-70"
           >
             {canSwitchWarehouse && <option value="ALL">All warehouses</option>}
-            {warehouses.map((w: any) => (
-              <option key={w.id} value={w.id}>
-                {w.code} — {w.city}
-              </option>
-            ))}
+            {warehouses
+              .filter((w: any) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
+              .map((w: any) => (
+                <option key={w.id} value={w.id}>
+                  {w.code} — {w.city}
+                </option>
+              ))}
           </select>
         </div>
 
         <nav className="px-3 py-2 flex-1 space-y-1 overflow-y-auto">
-          {nav.map(({ to, label, icon: Icon }) => {
+          {nav.map(({ to, label, icon: Icon, adminOnly }) => {
+            if (adminOnly && currentUser?.role !== "Admin") return null;
             const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
             return (
               <Link

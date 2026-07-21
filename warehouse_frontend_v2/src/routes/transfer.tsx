@@ -282,6 +282,18 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
     enabled: open && Boolean(sourceWarehouse),
   });
 
+  const { data: dynamicWarehouses } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get<any[]>("/warehouses");
+      return res.data;
+    },
+  });
+
+  const activeWarehouses = (dynamicWarehouses || warehouses).filter(
+    (w: any) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE"
+  );
+
   useEffect(() => {
     if (!open) return;
     const defaultWarehouse = activeWarehouseId ?? warehouses[0]?.id ?? "";
@@ -389,13 +401,13 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
             <Field label="Source Warehouse" required>
               <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setLines([]); }}>
                 <option value="" disabled>Select source</option>
-                {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.city}</option>)}
+                {activeWarehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
               </select>
             </Field>
             <Field label="Destination Warehouse" required>
               <select className={selectCls} value={destWarehouse} onChange={(e) => setDestWarehouse(e.target.value)}>
                 <option value="" disabled>Select destination</option>
-                {warehouses.filter((w: any) => String(w.id) !== String(sourceWarehouse)).map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.city}</option>)}
+                {activeWarehouses.filter((w: any) => String(w.id) !== String(sourceWarehouse)).map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
               </select>
             </Field>
           </>
@@ -404,7 +416,7 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
             <Field label="Warehouse" required className="sm:col-span-2">
               <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setLines([]); }}>
                 <option value="" disabled>Select warehouse</option>
-                {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} - {w.city}</option>)}
+                {activeWarehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
               </select>
             </Field>
             <Field label="Source Location" required>

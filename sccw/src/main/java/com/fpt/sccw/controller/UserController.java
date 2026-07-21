@@ -2,7 +2,9 @@ package com.fpt.sccw.controller;
 
 import com.fpt.sccw.dto.response.UserDTO;
 import com.fpt.sccw.entity.User;
+import com.fpt.sccw.service.ActivityLogService;
 import com.fpt.sccw.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -20,15 +22,28 @@ import java.util.stream.Collectors;
 public class UserController {
 
     private final UserService userService;
+    private final ActivityLogService activityLogService;
 
     @GetMapping
-    public ResponseEntity<List<UserDTO>> getAllUsers() {
+    public ResponseEntity<List<UserDTO>> getAllUsers(
+            @RequestParam(required = false) String role
+    ) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
             return ResponseEntity.status(401).build();
         }
 
         List<User> users = userService.getAllUsers();
+
+        // Filter by role if provided (e.g. ?role=WAREHOUSE_MANAGER)
+        if (role != null && !role.isBlank()) {
+            String roleUpper = role.trim().toUpperCase();
+            users = users.stream()
+                    .filter(u -> u.getRole() != null
+                            && u.getRole().getRoleName().name().equals(roleUpper))
+                    .collect(Collectors.toList());
+        }
+
         List<UserDTO> userDTOs = users.stream()
                 .map(UserDTO::fromEntity)
                 .collect(Collectors.toList());
@@ -58,6 +73,13 @@ public class UserController {
         }
 
         User updatedUser = userService.updateUser(id, fullName, email, phone, department, role, warehouseId);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            activityLogService.log(currentUser, "UPDATE_USER",
+                    "Updated user " + updatedUser.getFullName() + " (role: " + role + ")");
+        }
+
         return ResponseEntity.ok(UserDTO.fromEntity(updatedUser));
     }
 
@@ -95,6 +117,12 @@ public class UserController {
         return ResponseEntity.ok(UserDTO.fromEntity(updatedUser));
     }
 
+    private User resolveUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return null;
+        return userService.getUserByEmail(auth.getName());
+    }
+
     @PutMapping("/profile/password")
     public ResponseEntity<Map<String, String>> changePassword(@RequestBody Map<String, String> request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -126,6 +154,14 @@ public class UserController {
         }
 
         userService.deleteUser(id);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            User deletedUser = userService.getUserById(id);
+            activityLogService.log(currentUser, "DEACTIVATE_USER",
+                    "Deactivated user " + (deletedUser != null ? deletedUser.getFullName() : "#" + id));
+        }
+
         return ResponseEntity.noContent().build();
     }
 
@@ -137,6 +173,14 @@ public class UserController {
         }
 
         userService.activateUser(id);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            User activatedUser = userService.getUserById(id);
+            activityLogService.log(currentUser, "ACTIVATE_USER",
+                    "Activated user " + (activatedUser != null ? activatedUser.getFullName() : "#" + id));
+        }
+
         return ResponseEntity.noContent().build();
     }
 
@@ -148,6 +192,13 @@ public class UserController {
         }
 
         userService.hardDeleteUser(id);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            activityLogService.log(currentUser, "DELETE_USER",
+                    "Permanently deleted user #" + id);
+        }
+
         return ResponseEntity.noContent().build();
     }
 }

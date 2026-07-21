@@ -15,6 +15,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.fpt.sccw.entity.Inventory;
 import com.fpt.sccw.repository.InventoryRepository;
@@ -24,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
+@ConditionalOnProperty(name = "app.ai.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
 public class AiRagServiceImpl implements AiRagService {
@@ -59,14 +61,26 @@ public class AiRagServiceImpl implements AiRagService {
         inventoryRepository.findById(inventoryId).ifPresentOrElse(inv -> {
             String productId   = String.valueOf(inv.getProduct().getId());
             String description = buildDescription(inv);
-            Document document  = new Document(description, Map.of(
-                    "productId",   productId,
-                    "warehouseId", String.valueOf(inv.getWarehouse().getId()),
-                    "inventoryId", String.valueOf(inv.getId())
-            ));
+
+            // Xóa vector cũ nếu có để tránh trùng lặp
+            jdbcTemplate.update("DELETE FROM ai_vector_store WHERE id = ?", String.valueOf(inventoryId));
+
+            Document document  = new Document(
+                    String.valueOf(inv.getId()), // Đặt document ID bằng inventory ID
+                    description, 
+                    Map.of(
+                            "productId",   productId,
+                            "warehouseId", String.valueOf(inv.getWarehouse().getId()),
+                            "inventoryId", String.valueOf(inv.getId())
+                    )
+            );
             vectorStore.add(List.of(document));
             log.info("Re-ingested inventory id={}, product={} successfully.", inventoryId, productId);
-        }, () -> log.warn("Inventory id={} not found, skipping re-ingest.", inventoryId));
+        }, () -> {
+            // Nếu không tìm thấy inventory (đã bị xóa), xóa luôn vector tương ứng
+            jdbcTemplate.update("DELETE FROM ai_vector_store WHERE id = ?", String.valueOf(inventoryId));
+            log.info("Inventory id={} not found/deleted, removed its vector from store.", inventoryId);
+        });
     }
 
     /**
@@ -89,11 +103,15 @@ public class AiRagServiceImpl implements AiRagService {
         }
 
         List<Document> documents = inventories.stream()
-                .map(inv -> new Document(buildDescription(inv), Map.of(
-                        "productId",   String.valueOf(inv.getProduct().getId()),
-                        "warehouseId", String.valueOf(inv.getWarehouse().getId()),
-                        "inventoryId", String.valueOf(inv.getId())
-                )))
+                .map(inv -> new Document(
+                        String.valueOf(inv.getId()), // Đặt document ID bằng inventory ID
+                        buildDescription(inv), 
+                        Map.of(
+                                "productId",   String.valueOf(inv.getProduct().getId()),
+                                "warehouseId", String.valueOf(inv.getWarehouse().getId()),
+                                "inventoryId", String.valueOf(inv.getId())
+                        )
+                ))
                 .collect(Collectors.toList());
 
         vectorStore.add(documents);
@@ -128,8 +146,12 @@ public class AiRagServiceImpl implements AiRagService {
                    "Vui lòng gọi /api/ai/ingest-all để nạp dữ liệu kho vào hệ thống AI trước.";
         }
 
-        // 3. Tính cosine similarity và lấy top-5
+        // 3. Tính cosine similarity — lấy tất cả bản ghi có score >= 0.5,
+        //    tối đa 20 bản ghi để đảm bảo không bỏ sót khi hỏi về nhiều kho.
         record ScoredContent(String content, double score) {}
+
+        final double MIN_SCORE = 0.5;  // Ngưỡng tối thiểu — lọc những bản ghi không liên quan
+        final int    MAX_RESULTS = 20; // Đủ để chứa tất cả inventory records thực tế
 
         List<String> topContents = rows.stream()
                 .map(row -> {
@@ -144,8 +166,9 @@ public class AiRagServiceImpl implements AiRagService {
                     }
                 })
                 .filter(Objects::nonNull)
+                .filter(sc -> sc.score() >= MIN_SCORE)
                 .sorted(Comparator.comparingDouble((ScoredContent sc) -> sc.score()).reversed())
-                .limit(5)
+                .limit(MAX_RESULTS)
                 .map(sc -> sc.content())
                 .collect(Collectors.toList());
 

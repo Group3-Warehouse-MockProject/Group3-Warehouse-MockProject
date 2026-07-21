@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class InventoryDTO {
+    private Long productId;
     private String sku;
     private String name;
     private String category;
@@ -29,6 +30,7 @@ public class InventoryDTO {
         }
         
         return InventoryDTO.builder()
+                .productId(inventory.getProduct().getId())
                 .sku(inventory.getProduct().getCode())
                 .name(inventory.getProduct().getName())
                 .category(inventory.getProduct().getCategory().getName())

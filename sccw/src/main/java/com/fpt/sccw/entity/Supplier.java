@@ -1,6 +1,7 @@
 package com.fpt.sccw.entity;
 
 import java.util.*;
+import java.math.BigDecimal;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -38,6 +39,21 @@ public class Supplier extends BaseEntity{
     @NotBlank(message = "Supplier country is required")
     @Column(name = "country", nullable = false)
     private String country;
+
+    @Column(name = "contact_person", length = 100)
+    private String contactPerson;
+
+    @Column(name = "categories", length = 500)
+    private String categories;
+
+    @Column(name = "rating", precision = 2, scale = 1)
+    private BigDecimal rating;
+
+    @Column(name = "on_time_delivery")
+    private Integer onTimeDelivery;
+
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
 
     @OneToMany(mappedBy = "supplier", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default

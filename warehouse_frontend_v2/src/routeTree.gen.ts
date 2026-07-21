@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TransferRouteImport } from './routes/transfer'
+import { Route as TrackingRouteImport } from './routes/tracking'
 import { Route as SuppliersRouteImport } from './routes/suppliers'
 import { Route as StocktakeRouteImport } from './routes/stocktake'
 import { Route as StaffRouteImport } from './routes/staff'
@@ -26,6 +27,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const TransferRoute = TransferRouteImport.update({
   id: '/transfer',
   path: '/transfer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrackingRoute = TrackingRouteImport.update({
+  id: '/tracking',
+  path: '/tracking',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SuppliersRoute = SuppliersRouteImport.update({
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/tracking': typeof TrackingRoute
   '/transfer': typeof TransferRoute
 }
 export interface FileRoutesByTo {
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/tracking': typeof TrackingRoute
   '/transfer': typeof TransferRoute
 }
 export interface FileRoutesById {
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/tracking': typeof TrackingRoute
   '/transfer': typeof TransferRoute
 }
 export interface FileRouteTypes {
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/tracking'
     | '/transfer'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/tracking'
     | '/transfer'
   id:
     | '__root__'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/tracking'
     | '/transfer'
   fileRoutesById: FileRoutesById
 }
@@ -196,6 +208,7 @@ export interface RootRouteChildren {
   StaffRoute: typeof StaffRoute
   StocktakeRoute: typeof StocktakeRoute
   SuppliersRoute: typeof SuppliersRoute
+  TrackingRoute: typeof TrackingRoute
   TransferRoute: typeof TransferRoute
 }
 
@@ -206,6 +219,13 @@ declare module '@tanstack/react-router' {
       path: '/transfer'
       fullPath: '/transfer'
       preLoaderRoute: typeof TransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tracking': {
+      id: '/tracking'
+      path: '/tracking'
+      fullPath: '/tracking'
+      preLoaderRoute: typeof TrackingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/suppliers': {
@@ -308,6 +328,7 @@ const rootRouteChildren: RootRouteChildren = {
   StaffRoute: StaffRoute,
   StocktakeRoute: StocktakeRoute,
   SuppliersRoute: SuppliersRoute,
+  TrackingRoute: TrackingRoute,
   TransferRoute: TransferRoute,
 }
 export const routeTree = rootRouteImport

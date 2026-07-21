@@ -10,7 +10,9 @@ public class Status{
     public enum ReceiptStatus{
         PENDING,
         APPROVED,
-        REJECTED
+        REJECTED,
+        COMPLETED,
+        CANCELLED
     }
 
     public enum TransferType{
