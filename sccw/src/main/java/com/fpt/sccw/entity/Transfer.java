@@ -39,6 +39,10 @@ public class Transfer extends BaseEntity{
     private User createdByUser;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User legacyUser;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_by_id", nullable = true)
     private User assignedByUser;
 

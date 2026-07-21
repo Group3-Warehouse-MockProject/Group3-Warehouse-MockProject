@@ -18,6 +18,8 @@ public class Status{
     public enum TransferType{
         Cross_Warehouse,
         Internal_Warehouse,
+        INBOUND,
+        OUTBOUND,
     }
 
     public enum TransactionType{
