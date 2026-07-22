@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
-import { ArrowRightLeft, MapPin, Search, Plus, Trash2, ChevronLeft, ChevronRight, CheckCircle2, Truck } from "lucide-react";
+import { ArrowRightLeft, MapPin, Search, Plus, Trash2, ChevronLeft, ChevronRight, CheckCircle2, Truck, XCircle } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/components/modal-shell";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -46,7 +46,7 @@ const statusTone: Record<Transfer["status"], string> = {
 };
 
 function TransferPage() {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, currentUser } = useApp();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -111,6 +111,11 @@ function TransferPage() {
   const inTransit = list.filter((t) => t.status === "InTransit").length;
   const crossWarehouse = list.filter((t) => t.type === "Cross-Warehouse").length;
   const internal = list.filter((t) => t.type === "Internal Movement").length;
+  const isGlobalManager = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+  const isSourceWarehouse = (transfer: Transfer) =>
+    isGlobalManager || String(currentUser?.warehouseId) === String(transfer.sourceWarehouseId);
+  const isDestinationWarehouse = (transfer: Transfer) =>
+    isGlobalManager || String(currentUser?.warehouseId) === String(transfer.destinationWarehouseId);
 
   if (isLoading) return <AppShell><div className="p-8">Loading transfers...</div></AppShell>;
   if (error) return <AppShell><div className="p-8 text-destructive">Error loading transfers</div></AppShell>;
@@ -188,7 +193,7 @@ function TransferPage() {
                     </td>
                     <td className="p-4">
                       <div className="flex justify-end gap-2">
-                        {t.status === "Pending" && (
+                        {t.type === "Cross-Warehouse" && t.status === "Pending" && isSourceWarehouse(t) && (
                           <button
                             onClick={() => statusMutation.mutate({ id: t.id, status: "InTransit" })}
                             disabled={statusMutation.isPending}
@@ -197,13 +202,23 @@ function TransferPage() {
                             <Truck className="size-3.5" />Dispatch
                           </button>
                         )}
-                        {(t.status === "Pending" || t.status === "InTransit") && (
+                        {((t.type === "Internal Movement" && t.status === "Pending" && isSourceWarehouse(t))
+                          || (t.type === "Cross-Warehouse" && t.status === "InTransit" && isDestinationWarehouse(t))) && (
                           <button
                             onClick={() => statusMutation.mutate({ id: t.id, status: "Completed" })}
                             disabled={statusMutation.isPending}
                             className="h-8 px-2 rounded-md bg-success/15 text-success text-xs hover:bg-success/20 inline-flex items-center gap-1"
                           >
                             <CheckCircle2 className="size-3.5" />Complete
+                          </button>
+                        )}
+                        {(t.status === "Pending" || t.status === "InTransit") && isSourceWarehouse(t) && (
+                          <button
+                            onClick={() => statusMutation.mutate({ id: t.id, status: "Cancelled" })}
+                            disabled={statusMutation.isPending}
+                            className="h-8 px-2 rounded-md bg-destructive/15 text-destructive text-xs hover:bg-destructive/20 inline-flex items-center gap-1"
+                          >
+                            <XCircle className="size-3.5" />Cancel
                           </button>
                         )}
                       </div>
@@ -282,23 +297,18 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
     enabled: open && Boolean(sourceWarehouse),
   });
 
-  const { data: dynamicWarehouses } = useQuery({
-    queryKey: ["warehouses"],
-    queryFn: async () => {
-      const res = await api.get<any[]>("/warehouses");
-      return res.data;
-    },
-  });
-
-  const activeWarehouses = (dynamicWarehouses || warehouses).filter(
+  const activeWarehouses = warehouses.filter(
     (w: any) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE"
   );
 
   useEffect(() => {
     if (!open) return;
-    const defaultWarehouse = activeWarehouseId ?? warehouses[0]?.id ?? "";
+    const activeSelection = activeWarehouses.some((w: any) => String(w.id) === String(activeWarehouseId))
+      ? activeWarehouseId
+      : canSwitchWarehouse ? activeWarehouses[0]?.id : "";
+    const defaultWarehouse = activeSelection ?? "";
     setSourceWarehouse(String(defaultWarehouse));
-  }, [activeWarehouseId, open, warehouses]);
+  }, [activeWarehouseId, canSwitchWarehouse, open, warehouses]);
 
   const availableProducts = products.filter((p: any) => String(p.warehouseId) === String(sourceWarehouse) && p.stock > 0);
 
@@ -399,13 +409,13 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
         {type === "cross" ? (
           <>
             <Field label="Source Warehouse" required>
-              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setLines([]); }}>
+              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setDestWarehouse(""); setAssignedById(""); setLines([]); }}>
                 <option value="" disabled>Select source</option>
                 {activeWarehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
               </select>
             </Field>
             <Field label="Destination Warehouse" required>
-              <select className={selectCls} value={destWarehouse} onChange={(e) => setDestWarehouse(e.target.value)}>
+              <select className={selectCls} value={destWarehouse} onChange={(e) => { setDestWarehouse(e.target.value); setAssignedById(""); }}>
                 <option value="" disabled>Select destination</option>
                 {activeWarehouses.filter((w: any) => String(w.id) !== String(sourceWarehouse)).map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
               </select>
@@ -414,7 +424,7 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
         ) : (
           <>
             <Field label="Warehouse" required className="sm:col-span-2">
-              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setLines([]); }}>
+              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setAssignedById(""); setLines([]); }}>
                 <option value="" disabled>Select warehouse</option>
                 {activeWarehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
               </select>
@@ -431,7 +441,10 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
         <Field label="Assigned manager">
           <select className={selectCls} value={assignedById} onChange={(e) => setAssignedById(e.target.value)}>
             <option value="">No assignee</option>
-            {users.map((u: any) => <option key={u.id} value={u.id}>{u.fullName} - {u.role}</option>)}
+            {users
+              .filter((u: any) => u.role === "WAREHOUSE_MANAGER" && !u.isDeleted
+                && [sourceWarehouse, destWarehouse].includes(String(u.warehouseId)))
+              .map((u: any) => <option key={u.id} value={u.id}>{u.fullName} - {u.role}</option>)}
           </select>
         </Field>
       </div>

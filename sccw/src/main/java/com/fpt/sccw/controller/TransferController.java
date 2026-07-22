@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fpt.sccw.dto.request.TransferRequest;
 import com.fpt.sccw.dto.response.TransferDTO;
 import com.fpt.sccw.entity.Inventory;
+import com.fpt.sccw.entity.Location;
 import com.fpt.sccw.entity.Product;
 import com.fpt.sccw.entity.Status;
 import com.fpt.sccw.entity.Transfer;
@@ -30,6 +31,7 @@ import com.fpt.sccw.entity.TransferDetail;
 import com.fpt.sccw.entity.User;
 import com.fpt.sccw.entity.Warehouse;
 import com.fpt.sccw.repository.InventoryRepository;
+import com.fpt.sccw.repository.LocationRepository;
 import com.fpt.sccw.repository.ProductRepository;
 import com.fpt.sccw.repository.TransferRepository;
 import com.fpt.sccw.repository.UserRepository;
@@ -48,6 +50,7 @@ public class TransferController {
     private final WarehouseRepository warehouseRepository;
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
+    private final LocationRepository locationRepository;
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -82,17 +85,19 @@ public class TransferController {
 
         Warehouse source = warehouseRepository.findById(request.getSourceWarehouseId())
                 .orElseThrow(() -> new RuntimeException("Source warehouse not found"));
+        ensureActiveWarehouse(source, "Source");
         Warehouse destination = null;
         Status.TransferType transferType = parseType(request.getType());
         if (isCrossWarehouse(transferType)) {
             destination = warehouseRepository.findById(request.getDestinationWarehouseId())
                     .orElseThrow(() -> new RuntimeException("Destination warehouse not found"));
+            ensureActiveWarehouse(destination, "Destination");
             if (source.getId().equals(destination.getId())) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Destination must differ from source warehouse"));
             }
         }
 
-        User assignee = request.getAssignedById() == null ? null : userRepository.findById(request.getAssignedById()).orElse(null);
+        User assignee = resolveAssignee(request.getAssignedById(), source, destination);
         Transfer transfer = Transfer.builder()
                 .transferType(transferType)
                 .status(Status.TransactionStatus.PENDING)
@@ -135,12 +140,15 @@ public class TransferController {
         ensureCanAccess(user, transfer.getWarehouse().getId());
 
         Status.TransactionStatus nextStatus = parseStatus(request.get("status"));
-        if (transfer.getStatus() == Status.TransactionStatus.COMPLETED) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Completed transfers cannot be changed"));
-        }
+        validateTransition(transfer, nextStatus);
+        ensureCanTransition(user, transfer, nextStatus);
+
+        if (transfer.getStatus() == nextStatus) return ResponseEntity.ok(TransferDTO.fromEntity(transfer));
 
         if (nextStatus == Status.TransactionStatus.COMPLETED && isCrossWarehouse(transfer.getTransferType())) {
             applyCrossWarehouseInventory(transfer);
+        } else if (nextStatus == Status.TransactionStatus.COMPLETED) {
+            applyInternalMovementLocation(transfer);
         }
 
         transfer.setStatus(nextStatus);
@@ -185,7 +193,10 @@ public class TransferController {
         if ("internal".equalsIgnoreCase(type) || "Internal Movement".equalsIgnoreCase(type)) {
             return Status.TransferType.INBOUND;
         }
-        return Status.TransferType.OUTBOUND;
+        if ("cross".equalsIgnoreCase(type) || "Cross-Warehouse".equalsIgnoreCase(type)) {
+            return Status.TransferType.OUTBOUND;
+        }
+        throw new RuntimeException("Transfer type must be cross or internal");
     }
 
     private boolean isCrossWarehouse(Status.TransferType type) {
@@ -202,7 +213,74 @@ public class TransferController {
         if ("Cancelled".equalsIgnoreCase(status) || "CANCEL".equalsIgnoreCase(status)) {
             return Status.TransactionStatus.CANCEL;
         }
-        return Status.TransactionStatus.PENDING;
+        if ("Pending".equalsIgnoreCase(status) || "PENDING".equalsIgnoreCase(status)) {
+            return Status.TransactionStatus.PENDING;
+        }
+        throw new RuntimeException("Invalid transfer status: " + status);
+    }
+
+    private void validateTransition(Transfer transfer, Status.TransactionStatus nextStatus) {
+        Status.TransactionStatus current = transfer.getStatus();
+        if (current == nextStatus) return;
+
+        boolean allowed;
+        if (isCrossWarehouse(transfer.getTransferType())) {
+            allowed = (current == Status.TransactionStatus.PENDING
+                    && (nextStatus == Status.TransactionStatus.DELIVERING || nextStatus == Status.TransactionStatus.CANCEL))
+                    || ((current == Status.TransactionStatus.DELIVERING || current == Status.TransactionStatus.DELIVERED)
+                    && (nextStatus == Status.TransactionStatus.COMPLETED || nextStatus == Status.TransactionStatus.CANCEL));
+        } else {
+            allowed = current == Status.TransactionStatus.PENDING
+                    && (nextStatus == Status.TransactionStatus.COMPLETED || nextStatus == Status.TransactionStatus.CANCEL);
+        }
+
+        if (!allowed) {
+            throw new RuntimeException("Invalid transfer status transition: " + current + " -> " + nextStatus);
+        }
+    }
+
+    private void ensureCanTransition(User user, Transfer transfer, Status.TransactionStatus nextStatus) {
+        String roleName = user.getRole().getRoleName().name();
+        if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) return;
+
+        Long userWarehouseId = user.getWarehouse() == null ? null : user.getWarehouse().getId();
+        Long sourceId = transfer.getWarehouse().getId();
+        Long destinationId = transfer.getWarehouseDestination() == null ? null : transfer.getWarehouseDestination().getId();
+
+        boolean allowed = !isCrossWarehouse(transfer.getTransferType())
+                ? sourceId.equals(userWarehouseId)
+                : nextStatus == Status.TransactionStatus.COMPLETED
+                    ? destinationId != null && destinationId.equals(userWarehouseId)
+                    : sourceId.equals(userWarehouseId);
+
+        if (!allowed) {
+            throw new RuntimeException("Your warehouse cannot perform this transfer action");
+        }
+    }
+
+    private void ensureActiveWarehouse(Warehouse warehouse, String label) {
+        if (warehouse.getStatus() != null && !"ACTIVE".equalsIgnoreCase(warehouse.getStatus())) {
+            throw new RuntimeException(label + " warehouse is inactive");
+        }
+    }
+
+    private User resolveAssignee(Long assigneeId, Warehouse source, Warehouse destination) {
+        if (assigneeId == null) return null;
+        User assignee = userRepository.findById(assigneeId)
+                .orElseThrow(() -> new RuntimeException("Assigned manager not found"));
+        if (assignee.getRole() == null || !"WAREHOUSE_MANAGER".equals(assignee.getRole().getRoleName().name())) {
+            throw new RuntimeException("Assignee must be a Warehouse Manager");
+        }
+        if (Boolean.TRUE.equals(assignee.getIsDeleted()) || assignee.getWarehouse() == null) {
+            throw new RuntimeException("Assigned manager is inactive or has no warehouse");
+        }
+        Long assigneeWarehouseId = assignee.getWarehouse().getId();
+        boolean involved = source.getId().equals(assigneeWarehouseId)
+                || (destination != null && destination.getId().equals(assigneeWarehouseId));
+        if (!involved) {
+            throw new RuntimeException("Assigned manager must belong to the source or destination warehouse");
+        }
+        return assignee;
     }
 
     private String buildRemark(TransferRequest request) {
@@ -240,5 +318,41 @@ public class TransferController {
             inventoryRepository.save(source);
             inventoryRepository.save(dest);
         }
+    }
+
+    private void applyInternalMovementLocation(Transfer transfer) {
+        String destinationText = extractRemarkPart(transfer.getRemark(), "To: ");
+        if (destinationText == null || destinationText.isBlank()) {
+            throw new RuntimeException("Destination location is required to complete internal movement");
+        }
+
+        String[] parts = destinationText.split("\\s*-\\s*", 3);
+        String zone = parts[0].trim();
+        String rack = parts.length > 1 ? parts[1].trim() : "";
+        String bin = parts.length > 2 ? parts[2].trim() : "";
+        Location destination = locationRepository
+                .findFirstByZoneCodeIgnoreCaseAndRackCodeIgnoreCaseAndBinCodeIgnoreCase(zone, rack, bin)
+                .orElseGet(() -> locationRepository.save(Location.builder()
+                        .zoneCode(zone)
+                        .rackCode(rack)
+                        .binCode(bin)
+                        .status("ACTIVE")
+                        .build()));
+
+        for (TransferDetail detail : transfer.getDetails()) {
+            Inventory inventory = inventoryRepository
+                    .findByWarehouseIdAndProductId(transfer.getWarehouse().getId(), detail.getProduct().getId())
+                    .orElseThrow(() -> new RuntimeException("Inventory not found for " + detail.getProduct().getCode()));
+            inventory.setLocation(destination);
+            inventoryRepository.save(inventory);
+        }
+    }
+
+    private String extractRemarkPart(String remark, String prefix) {
+        if (remark == null) return null;
+        for (String part : remark.split(" \\| ")) {
+            if (part.startsWith(prefix)) return part.substring(prefix.length()).trim();
+        }
+        return null;
     }
 }
