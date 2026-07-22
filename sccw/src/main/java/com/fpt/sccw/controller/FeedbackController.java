@@ -59,7 +59,9 @@ public class FeedbackController {
         feedback.setUser(user);
         feedback.setCategory(request.getCategory().trim());
         feedback.setMessage(request.getMessage().trim());
-        feedback.setRating(request.getRating());
+        // Keep a neutral value for compatibility with databases where the
+        // legacy rating column is still NOT NULL.
+        feedback.setRating(0);
         feedbackRepository.save(feedback);
 
         return ResponseEntity.ok(Map.of("message", "Thank you for your feedback."));
