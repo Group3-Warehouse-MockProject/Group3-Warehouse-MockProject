@@ -142,8 +142,8 @@ public class AiRagServiceImpl implements AiRagService {
         );
 
         if (rows.isEmpty()) {
-            return "Tôi không tìm thấy thông tin nào trong hệ thống. " +
-                   "Vui lòng gọi /api/ai/ingest-all để nạp dữ liệu kho vào hệ thống AI trước.";
+            return "I couldn't find any information in the system. " +
+                   "Please call /api/ai/ingest-all to load warehouse data into the AI system first.";
         }
 
         // 3. Tính cosine similarity — lấy tất cả bản ghi có score >= 0.5,
@@ -173,7 +173,7 @@ public class AiRagServiceImpl implements AiRagService {
                 .collect(Collectors.toList());
 
         if (topContents.isEmpty()) {
-            return "Không thể xử lý dữ liệu vector. Vui lòng thử gọi /api/ai/ingest-all lại.";
+            return "Cannot process vector data. Please try calling /api/ai/ingest-all again.";
         }
 
         String context = String.join("\n---\n", topContents);
@@ -182,12 +182,12 @@ public class AiRagServiceImpl implements AiRagService {
         // 4. Gọi Gemini với context
         return chatClient.prompt()  
                 .system("""
-                        Bạn là trợ lý AI của hệ thống quản lý kho hàng TechStock.
-                        Hãy trả lời câu hỏi của người dùng DỰA TRÊN thông tin kho bên dưới.
-                        Trả lời bằng tiếng Việt, ngắn gọn và chính xác.
-                        Nếu thông tin không đủ, hãy nói rõ.
+                        You are the AI assistant for the TechStock warehouse management system.
+                        Please answer the user's question BASED ON the warehouse information below.
+                        Answer in English, concisely and accurately.
+                        If the information is not sufficient, please state it clearly.
 
-                        Thông tin kho hàng:
+                        Warehouse information:
                         """ + context)
                 .user(question)
                 .call()

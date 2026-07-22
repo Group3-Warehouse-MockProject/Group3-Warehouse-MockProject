@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, Pencil, Power } from "lucide-react";
+import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, Pencil, Power, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ModalShell, Field, inputCls } from "@/components/modal-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -34,6 +34,7 @@ function SettingsPage() {
   const { currentUser } = useApp();
   const [open, setOpen] = useState(false);
   const [editWarehouse, setEditWarehouse] = useState<WarehouseData | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: warehousesData, isLoading } = useQuery<WarehouseData[]>({
     queryKey: ["warehouses"],
@@ -44,6 +45,17 @@ function SettingsPage() {
   });
 
   const warehouses = warehousesData ?? [];
+  const filteredWarehouses = warehouses.filter((w) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      w.name.toLowerCase().includes(q) ||
+      w.code.toLowerCase().includes(q) ||
+      (w.address && w.address.toLowerCase().includes(q)) ||
+      (w.city && w.city.toLowerCase().includes(q)) ||
+      (w.managerName && w.managerName.toLowerCase().includes(q))
+    );
+  });
 
   const totalCap = warehouses.reduce((s, w) => s + (w.capacity ?? 0), 0);
   const totalUsed = warehouses.reduce((s, w) => s + (w.usedCapacity ?? 0), 0);
@@ -97,15 +109,31 @@ function SettingsPage() {
 
             {/* Warehouse list */}
             <div className="surface-card p-6">
-              <h2 className="font-semibold flex items-center gap-2">
-                <Building2 className="size-4 text-primary" />Warehouses
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1">All warehouses and their addresses.</p>
-              {warehouses.length === 0 ? (
-                <div className="mt-6 text-center text-sm text-muted-foreground py-8">No warehouses found.</div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold flex items-center gap-2">
+                    <Building2 className="size-4 text-primary" />Warehouses
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">All warehouses and their addresses.</p>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search warehouse..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 rounded-lg bg-input border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                  />
+                </div>
+              </div>
+              {filteredWarehouses.length === 0 ? (
+                <div className="mt-6 text-center text-sm text-muted-foreground py-8">
+                  {searchQuery ? `No warehouses found matching "${searchQuery}".` : "No warehouses found."}
+                </div>
               ) : (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {warehouses.map((w) => {
+                <div className="mt-4 max-h-[460px] overflow-y-auto pr-1.5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredWarehouses.map((w) => {
                     const usedPct = w.capacity > 0 ? Math.round((w.usedCapacity / w.capacity) * 100) : 0;
                     const isActive = (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE";
                     return (
