@@ -52,7 +52,7 @@ public class SecurityConfig {
                     "/login/oauth2/**",
                     "/error"
                 ).permitAll()
-                .requestMatchers("/api/auth/register").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers("/api/auth/register").hasAnyAuthority("ADMIN", "MANAGER")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
