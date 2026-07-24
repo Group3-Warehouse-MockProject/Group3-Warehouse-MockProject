@@ -17,6 +17,8 @@ public class MovementDTO {
     private String product;
     private String partner;          // Supplier name or destination
     private String staff;            // fullName of creator
+    private Long assignedUserId;     // ID of assigned staff
+    private String assignedUserName; // Name of assigned staff
     private String warehouseId;
     private Long qty;
     private String date;             // yyyy-MM-dd
@@ -30,5 +32,6 @@ public class MovementDTO {
     private String paymentStatus;    // UNPAID | PARTIAL | PAID
     private java.math.BigDecimal totalAmount;
     private java.math.BigDecimal paidAmount;
+    private java.util.List<ApprovalHistoryDTO> history;
 }
 

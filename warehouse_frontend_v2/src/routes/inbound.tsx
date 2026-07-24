@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ReceiptModal } from "@/components/receipt-modal";
-import { InboundDetailModal, type ReceiptMovement } from "@/components/inbound-detail-modal";
+import { InboundDetailModal } from "@/components/inbound-detail-modal";
+import { type ReceiptMovement } from "@/types";
 import { useApp } from "@/lib/app-context";
 import { api } from "@/lib/api";
 import {
@@ -51,14 +52,18 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 function InboundPage() {
-  const { activeWarehouseId, canSwitchWarehouse } = useApp();
+  const { activeWarehouseId, canSwitchWarehouse, refreshTick } = useApp();
 
   const [movements, setMovements] = useState<ReceiptMovement[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
-  const [page, setPage]             = useState(1);
-  const limit = 10;
+  
+  // Server-side pagination state
+  const [page, setPage]             = useState(0); // 0-indexed for backend
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const limit = 15;
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -86,14 +91,18 @@ function InboundPage() {
     api.get<WarehouseInfo[]>("/warehouses").then((res) => setWarehouses(res.data)).catch(() => {});
   }, []);
 
-  useEffect(() => { fetchReceipts(); }, [activeWarehouseId]);
+  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick]);
 
-  function fetchReceipts() {
-    setLoading(true); setError(null); setPage(1);
-    const params: Record<string, string> = { type: "INBOUND" };
+  function fetchReceipts(currentPage: number) {
+    setLoading(true); setError(null);
+    const params: Record<string, string | number> = { type: "INBOUND", page: currentPage, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
-    api.get<ReceiptMovement[]>("/receipts", { params })
-      .then((res) => setMovements(res.data))
+    api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params })
+      .then((res) => {
+        setMovements(res.data?.content ?? (res.data as any));
+        setTotalPages(res.data?.totalPages ?? 1);
+        setTotalElements(res.data?.totalElements ?? 0);
+      })
       .catch(() => setError("Failed to load inbound receipts. Please try again."))
       .finally(() => setLoading(false));
   }
@@ -175,15 +184,11 @@ function InboundPage() {
   }, [movements, searchQuery, filters]);
 
   // Reset page whenever filters change
-  useEffect(() => { setPage(1); }, [searchQuery, filters]);
+  useEffect(() => { setPage(0); }, [searchQuery, filters, activeWarehouseId]);
 
   const uniqueReceiptIds = new Set(filteredMovements.map((m) => m.receiptId));
   const totalIn          = filteredMovements.reduce((s, m) => s + (m.qty ?? 0), 0);
   const suppliersSet     = new Set(filteredMovements.map((m) => m.partner));
-
-  const totalPages    = Math.max(1, Math.ceil(filteredMovements.length / limit));
-  const safePage      = Math.min(page, totalPages);
-  const paginatedList = filteredMovements.slice((safePage - 1) * limit, safePage * limit);
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -240,13 +245,13 @@ function InboundPage() {
               onClick={() => setImportOpen(true)}
               className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"
             >
-              <Upload className="size-4" /> Import
+              <Download className="size-4" /> Import
             </button>
             <button
               onClick={handleExport}
               className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"
             >
-              <Download className="size-4" /> Export
+              <Upload className="size-4" /> Export
             </button>
             <button
               onClick={() => setCreateOpen(true)}
@@ -446,26 +451,22 @@ function InboundPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <div className="min-w-[950px] text-sm">
+                <div className="min-w-[850px] text-sm">
                   {/* Grid Table Header */}
-                  <div className="grid grid-cols-[100px_minmax(180px,2fr)_minmax(140px,1.5fr)_110px_70px_110px_110px_130px_48px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
-                    <div>Receipt #{isSearchMatchingReceipt ? <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" /> : null}</div>
-                    <div>Product{isSearchMatchingProduct ? <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" /> : null}</div>
-                    <div>Supplier{isSearchMatchingSupplier ? <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" /> : null}</div>
-                    <div>Warehouse{filters.warehouse && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
-                    <div className="text-right">Qty{(filters.qtyMin || filters.qtyMax) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                  <div className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
                     <div>Date{(filters.dateFrom || filters.dateTo) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Status{filters.status && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Received by{filters.staff && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Assignee</div>
                     <div />
                   </div>
 
                   {/* Grid Table Body */}
                   <div className="divide-y divide-border/60">
-                    {paginatedList.map((m) => (
+                    {filteredMovements.map((m) => (
                       <div
                         key={m.id}
-                        className="grid grid-cols-[100px_minmax(180px,2fr)_minmax(140px,1.5fr)_110px_70px_110px_110px_130px_48px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                        className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
                       >
                         <div className="font-mono text-xs">R-{m.receiptId}</div>
                         <div>
@@ -478,6 +479,7 @@ function InboundPage() {
                         <div className="text-muted-foreground">{m.date}</div>
                         <div><StatusBadge status={m.status} /></div>
                         <div className="text-muted-foreground truncate">{m.staff}</div>
+                        <div className="text-muted-foreground truncate">{m.assignedUserName ?? "—"}</div>
                         <div className="text-center">
                           <button
                             onClick={() => setSelectedMovement(m)}
@@ -497,33 +499,30 @@ function InboundPage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
                   <div className="text-muted-foreground text-xs">
-                    Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, filteredMovements.length)} of {filteredMovements.length} entries
-                    {filteredMovements.length < movements.length && (
-                      <span className="ml-1 text-primary">(filtered from {movements.length})</span>
-                    )}
+                    Showing {page * limit + 1}–{Math.min((page + 1) * limit, totalElements)} of {totalElements} entries
                   </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={safePage === 1}
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={page === 0}
                       className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
                     >
                       <ChevronLeft className="size-4" />
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                    {Array.from({ length: totalPages }, (_, i) => i).map((n) => (
                       <button
                         key={n}
                         onClick={() => setPage(n)}
                         className={`size-8 rounded-md text-xs font-medium ${
-                          n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"
+                          n === page ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"
                         }`}
                       >
-                        {n}
+                        {n + 1}
                       </button>
                     ))}
                     <button
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={safePage === totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                      disabled={page >= totalPages - 1}
                       className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
                     >
                       <ChevronRight className="size-4" />

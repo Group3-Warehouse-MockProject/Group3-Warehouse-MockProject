@@ -1,8 +1,11 @@
 /* eslint-disable */
 // @ts-nocheck
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
+import { useApp } from "@/lib/app-context";
 import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power, Filter, X, ChevronDown } from "lucide-react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
 
@@ -23,7 +26,7 @@ const getAuthHeaders = () => {
 };
 
 function SuppliersPage() {
-  const [suppliersList, setSuppliersList] = useState([]);
+  const queryClient = useQueryClient();
   const [deletedIds, setDeletedIds] = useState([]);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -37,49 +40,38 @@ function SuppliersPage() {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
 
   const defaultCountries = ["Vietnam", "Singapore", "Taiwan"];
+  const { data: supplierPage, isLoading } = useQuery({
+    queryKey: ["suppliers", page],
+    queryFn: async () => {
+      const res = await api.get(API_URL, { params: { page: page - 1, size: PAGE_SIZE } });
+      return res.data as { content: any[]; totalPages: number; totalElements: number };
+    },
+  });
+  const suppliersList = supplierPage?.content ?? [];
   const allAvailableCountries = Array.from(
     new Set([...defaultCountries, ...suppliersList.map((s) => s.country).filter(Boolean)])
   );
 
-  const fetchSuppliers = async () => {
-    try {
-      const res = await fetch(API_URL, {
-        method: "GET",
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSuppliersList(data);
-      } else if (res.status === 401) {
-        console.error("Chưa đăng nhập hoặc mã token đã hết hạn!");
-      }
-    } catch (err) {
-      console.error("Lỗi kết nối API lấy danh sách:", err);
-    }
-  };
+  const invalidateSuppliers = () => queryClient.invalidateQueries({ queryKey: ["suppliers"] });
 
-  useEffect(() => {
-    fetchSuppliers();
-  }, []);
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`${API_URL}/${id}`),
+    onSuccess: invalidateSuppliers,
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      api.patch(`${API_URL}/${id}/status`, { status }),
+    onSuccess: invalidateSuppliers,
+  });
 
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this supplier?")) {
       try {
-        const res = await fetch(`${API_URL}/${id}`, { 
-          method: "DELETE",
-          headers: getAuthHeaders(),
-        });
-        
-        if (res.ok || res.status === 204) {
-          alert("Delete successful!");
-          fetchSuppliers();
-        } else {
-          alert("Delete successful!"); 
-          setDeletedIds((prev) => [...prev, id]);
-        }
+        await deleteMutation.mutateAsync(id);
+        alert("Delete successful!");
       } catch (err) {
         console.error("Error deleting:", err);
-        alert("Delete successful!"); 
         setDeletedIds((prev) => [...prev, id]);
       }
     }
@@ -88,18 +80,10 @@ function SuppliersPage() {
   const handleToggleStatus = async (supplier) => {
     const newStatus = supplier.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
-      const res = await fetch(`${API_URL}/${supplier.id}/status`, {
-        method: "PATCH",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) {
-        fetchSuppliers();
-      } else {
-        alert("Failed to update status");
-      }
+      await statusMutation.mutateAsync({ id: supplier.id, status: newStatus });
     } catch (err) {
       console.error("Error updating status:", err);
+      alert("Failed to update status");
     }
   };
 
@@ -123,9 +107,9 @@ function SuppliersPage() {
     return matchesSearch && matchesStatus && matchesCountry;
   });
   
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, supplierPage?.totalPages ?? 1);
   const safePage = Math.min(page, totalPages);
-  const slice = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const slice = filtered;
 
   const hasActiveFilterOrSearch = q.trim() !== "" || selectedCountry !== "ALL" || selectedStatus !== "ALL";
 
@@ -350,7 +334,7 @@ function SuppliersPage() {
           </div>
 
           <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
-            <div className="text-muted-foreground text-xs">Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</div>
+            <div className="text-muted-foreground text-xs">Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, supplierPage?.totalElements ?? filtered.length)} of {supplierPage?.totalElements ?? filtered.length}</div>
             <div className="flex items-center gap-1">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="size-8 grid place-items-center rounded-md border bg-secondary disabled:opacity-40"><ChevronLeft className="size-4" /></button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
@@ -362,8 +346,8 @@ function SuppliersPage() {
         </div>
       </div>
 
-      {open && <AddSupplierModal open={open} onClose={() => setOpen(false)} onSave={fetchSuppliers} />}
-      {openEdit && <EditSupplierModal open={openEdit} supplier={editingSupplier} onClose={() => { setOpenEdit(false); setEditingSupplier(null); }} onSave={fetchSuppliers} />}
+      {open && <AddSupplierModal open={open} onClose={() => setOpen(false)} onSave={invalidateSuppliers} />}
+      {openEdit && <EditSupplierModal open={openEdit} supplier={editingSupplier} onClose={() => { setOpenEdit(false); setEditingSupplier(null); }} onSave={invalidateSuppliers} />}
     </AppShell>
   );
 }

@@ -1,7 +1,6 @@
 package com.fpt.sccw.controller;
 
 import com.fpt.sccw.dto.response.LocationDTO;
-import com.fpt.sccw.entity.Location;
 import com.fpt.sccw.repository.LocationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

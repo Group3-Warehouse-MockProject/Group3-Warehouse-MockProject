@@ -150,7 +150,7 @@ public class AiRagServiceImpl implements AiRagService {
         //    tối đa 20 bản ghi để đảm bảo không bỏ sót khi hỏi về nhiều kho.
         record ScoredContent(String content, double score) {}
 
-        final double MIN_SCORE = 0.5;  // Ngưỡng tối thiểu — lọc những bản ghi không liên quan
+        final double MIN_SCORE = 0.3;  // Ngưỡng tối thiểu — đủ thấp để hỗ trợ cả câu hỏi tiếng Anh
         final int    MAX_RESULTS = 20; // Đủ để chứa tất cả inventory records thực tế
 
         List<String> topContents = rows.stream()

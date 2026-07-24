@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ReceiptModal } from "@/components/receipt-modal";
-import { OutboundDetailModal, type ReceiptMovement } from "@/components/outbound-detail-modal";
+import { OutboundDetailModal } from "@/components/outbound-detail-modal";
 import { useApp } from "@/lib/app-context";
 import { api } from "@/lib/api";
 import { formatVND } from "@/lib/warehouse-data";
+import { ReceiptMovement } from "@/types";
 import {
   ClipboardList, TrendingUp, Clock, Truck, Plus, Eye,
   Search, Filter, X, ChevronLeft, ChevronRight, Loader2, AlertCircle,
@@ -20,26 +21,6 @@ export const Route = createFileRoute("/outbound")({
 interface WarehouseInfo { id: string; code: string; }
 interface ProductInfo { sku: string; name: string; price: number; stock: number; warehouseId: string; }
 
-export interface ReceiptMovement {
-  id: string;
-  receiptId: number;
-  type: string;
-  sku: string;
-  product: string;
-  partner: string;
-  staff: string;
-  warehouseId: string;
-  qty: number;
-  date: string;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELLED";
-  remark?: string;
-  createdAt: string;
-  updatedAt?: string;
-  paymentTerm?: "PREPAID" | "COD" | "DEBT";
-  paymentStatus?: "UNPAID" | "PARTIAL" | "PAID";
-  totalAmount?: number;
-  paidAmount?: number;
-}
 
 const PAYMENT_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   PAID:     { label: "Paid",    className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
@@ -108,15 +89,19 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 function OutboundPage() {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, refreshTick } = useApp();
 
   const [movements, setMovements] = useState<ReceiptMovement[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
   const [products, setProducts]     = useState<ProductInfo[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
-  const [page, setPage]             = useState(1);
-  const limit = 10;
+
+  // Server-side pagination state
+  const [page, setPage]             = useState(0); // 0-indexed for backend
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const limit = 15;
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -142,21 +127,25 @@ function OutboundPage() {
   useEffect(() => {
     Promise.all([
       api.get<WarehouseInfo[]>("/warehouses"),
-      api.get<ProductInfo[]>("/products")
+      api.get<{ content: ProductInfo[] }>("/products", { params: { page: 0, size: 15 } })
     ]).then(([wRes, pRes]) => {
       setWarehouses(wRes.data);
-      setProducts(pRes.data);
+      setProducts(pRes.data?.content ?? (pRes.data as any));
     }).catch(() => {});
   }, []);
 
-  useEffect(() => { fetchReceipts(); }, [activeWarehouseId]);
+  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick]);
 
-  function fetchReceipts() {
-    setLoading(true); setError(null); setPage(1);
-    const params: Record<string, string> = { type: "OUTBOUND" };
+  function fetchReceipts(currentPage: number) {
+    setLoading(true); setError(null);
+    const params: Record<string, string | number> = { type: "OUTBOUND", page: currentPage, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
-    api.get<ReceiptMovement[]>("/receipts", { params })
-      .then((res) => setMovements(res.data))
+    api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params })
+      .then((res) => {
+        setMovements(res.data?.content ?? (res.data as any));
+        setTotalPages(res.data?.totalPages ?? 1);
+        setTotalElements(res.data?.totalElements ?? 0);
+      })
       .catch(() => setError("Failed to load outbound requests. Please try again."))
       .finally(() => setLoading(false));
   }
@@ -201,13 +190,14 @@ function OutboundPage() {
       if (q) {
         const { reference, assignee } = parseRemark(m.remark);
         const receiptNum = `r-${m.receiptId}`;
+        const finalAssignee = m.assignedUserName || assignee || "";
         if (
           !receiptNum.includes(q) &&
           !m.product.toLowerCase().includes(q) &&
           !m.sku.toLowerCase().includes(q) &&
           !m.partner.toLowerCase().includes(q) &&
           !reference.toLowerCase().includes(q) &&
-          !assignee.toLowerCase().includes(q)
+          !finalAssignee.toLowerCase().includes(q)
         ) return false;
       }
 
@@ -250,9 +240,8 @@ function OutboundPage() {
     return approvedReceipts.size;
   }, [filteredMovements]);
 
-  const totalPages    = Math.max(1, Math.ceil(filteredMovements.length / limit));
-  const safePage      = Math.min(page, totalPages);
-  const paginatedList = filteredMovements.slice((safePage - 1) * limit, safePage * limit);
+  const totalPagesCount = Math.max(1, totalPages);
+  const safePage        = Math.min(page, totalPagesCount - 1);
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -442,7 +431,7 @@ function OutboundPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedList.map((m) => {
+                    {filteredMovements.map((m) => {
                       const prod = products.find((p) => p.sku === m.sku && p.warehouseId === m.warehouseId);
                       const itemTotal = prod ? prod.price * m.qty : 0;
                       const { reference, assignee } = parseRemark(m.remark);
@@ -463,7 +452,7 @@ function OutboundPage() {
                           <td className="p-4"><StatusBadge status={m.status} /></td>
                           <td className="p-4"><PaymentStatusBadge status={m.paymentStatus} /></td>
                           <td className="p-4 text-muted-foreground">{m.staff}</td>
-                          <td className="p-4 text-muted-foreground">{assignee || "—"}</td>
+                          <td className="p-4 text-muted-foreground">{m.assignedUserName || assignee || "—"}</td>
                           <td className="p-2 text-center">
                             <button
                               onClick={() => setSelectedMovement(m)}
@@ -484,33 +473,30 @@ function OutboundPage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
                   <div className="text-muted-foreground text-xs">
-                    Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, filteredMovements.length)} of {filteredMovements.length} entries
-                    {filteredMovements.length < movements.length && (
-                      <span className="ml-1 text-primary">(filtered from {movements.length})</span>
-                    )}
+                    Showing {page * limit + 1}–{Math.min((page + 1) * limit, totalElements)} of {totalElements} entries
                   </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={safePage === 1}
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={page === 0}
                       className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
                     >
                       <ChevronLeft className="size-4" />
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                    {Array.from({ length: totalPages }, (_, i) => i).map((n) => (
                       <button
                         key={n}
                         onClick={() => setPage(n)}
                         className={`size-8 rounded-md text-xs font-medium ${
-                          n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"
+                          n === page ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"
                         }`}
                       >
-                        {n}
+                        {n + 1}
                       </button>
                     ))}
                     <button
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={safePage === totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                      disabled={page >= totalPages - 1}
                       className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
                     >
                       <ChevronRight className="size-4" />

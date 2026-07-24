@@ -36,9 +36,14 @@ function Dashboard() {
     queryKey: ["inventory", activeWarehouseId],
     queryFn: async () => {
       const res = await api.get("/inventory", {
-        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          page: 0,
+          size: 100, // Dashboard summary only needs a reasonable top-N
+        }
       });
-      return res.data;
+      // Backend now returns PageResponse; extract content array
+      return (res.data?.content ?? res.data) as any[];
     }
   });
 

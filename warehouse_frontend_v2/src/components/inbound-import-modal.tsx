@@ -28,26 +28,26 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const [wRes, sRes, pRes] = await Promise.all([
         api.get<any[]>("/warehouses"),
         api.get<any[]>("/suppliers"),
-        api.get<any[]>("/products"),
+        api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
       ]);
 
       const warehouses = wRes.data;
       const suppliers = sRes.data;
-      const products = pRes.data;
+      const products = pRes.data?.content ?? (pRes.data as any);
 
       // Populate DataSheet with available choices
       dataSheet.getCell("A1").value = "Warehouses";
-      warehouses.forEach((w, idx) => {
+      warehouses.forEach((w: any, idx: number) => {
         dataSheet.getCell(`A${idx + 2}`).value = w.code;
       });
 
       dataSheet.getCell("B1").value = "Suppliers";
-      suppliers.forEach((s, idx) => {
+      suppliers.forEach((s: any, idx: number) => {
         dataSheet.getCell(`B${idx + 2}`).value = s.name;
       });
 
       dataSheet.getCell("C1").value = "Products";
-      products.forEach((p, idx) => {
+      products.forEach((p: any, idx: number) => {
         dataSheet.getCell(`C${idx + 2}`).value = p.sku;
       });
 
