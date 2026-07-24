@@ -63,6 +63,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const [partner, setPartner] = useState<string>("");
   const [reference, setReference] = useState<string>("");
   const [assignedStaff, setAssignedStaff] = useState<string>("");
+  const [paymentTerm, setPaymentTerm] = useState<string>("COD");
   const [note, setNote] = useState<string>("");
   const [lines, setLines] = useState<LineItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -89,11 +90,21 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         setUsers(uRes.data);
         // Default warehouse
         const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
-        const defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
+        let defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
+        if (currentUser?.role === "Staff" && currentUser?.warehouseId) {
+          defaultWh = currentUser.warehouseId;
+        }
         setWarehouseId(defaultWh);
 
         if (!isInbound) {
           setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
+          // Default staff assignee for Staff role
+          if (currentUser?.role === "Staff") {
+            const me = uRes.data.find((u) => String(u.id) === currentUser.id);
+            if (me) {
+              setAssignedStaff(me.fullName);
+            }
+          }
         }
       })
       .catch(() => setSubmitError("Failed to load form data. Please try again."))
@@ -217,6 +228,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         warehouseId: Number(warehouseId),
         type: isInbound ? "INBOUND" : "OUTBOUND",
         partner: partner || null,
+        paymentTerm: isInbound ? null : paymentTerm,
         remark: [
           reference ? `Ref: ${reference}` : "",
           assignedStaff ? `Assignee: ${assignedStaff}` : "",
@@ -294,8 +306,8 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   <select
                     value={warehouseId}
                     onChange={(e) => setWarehouseId(e.target.value)}
-                    className="input"
-                    disabled={!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager"}
+                    className="input disabled:opacity-50 disabled:bg-muted disabled:cursor-not-allowed"
+                    disabled={currentUser?.role === "Staff" || (!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager")}
                   >
                     {warehouses
                       .filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
@@ -350,6 +362,19 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   </Field>
                 )}
                 {!isInbound && (
+                  <Field label="Payment term">
+                    <select
+                      value={paymentTerm}
+                      onChange={(e) => setPaymentTerm(e.target.value)}
+                      className="input"
+                    >
+                      <option value="PREPAID">Prepaid</option>
+                      <option value="COD">COD</option>
+                      <option value="DEBT">Debt</option>
+                    </select>
+                  </Field>
+                )}
+                {!isInbound && (
                   <Field label="Assign to Staff">
                     <select
                       value={assignedStaff}
@@ -389,13 +414,13 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   <table className="w-full text-sm">
                     <thead className="bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground">
                       <tr>
-                        <th className="text-left px-3 py-2">Product</th>
-                        {!isInbound && <th className="text-right px-3 py-2 w-32">System Stock</th>}
-                        <th className="text-right px-3 py-2 w-24">Qty</th>
-                        <th className="text-right px-3 py-2 w-40">
+                        <th className="text-left px-3 py-2 min-w-[260px]">Product</th>
+                        {!isInbound && <th className="text-right px-3 py-2 w-24">Stock</th>}
+                        <th className="text-right px-3 py-2 w-20">Qty</th>
+                        <th className="text-right px-3 py-2 w-28">
                           {isInbound ? "Unit cost" : "Unit price"}
                         </th>
-                        <th className="text-right px-3 py-2 w-40">Subtotal</th>
+                        <th className="text-right px-3 py-2 w-28">Subtotal</th>
                         <th className="w-10" />
                       </tr>
                     </thead>

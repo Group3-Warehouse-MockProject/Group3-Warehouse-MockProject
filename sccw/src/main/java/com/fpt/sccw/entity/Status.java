@@ -47,4 +47,23 @@ public class Status{
         INVENTORY_CHECK,
         WAREHOUSE_RECEIPT
     }
+
+    public enum PaymentStatus {
+        UNPAID,
+        PARTIAL,
+        PAID
+    }
+
+    public enum PaymentTerm {
+        PREPAID,
+        COD,
+        DEBT
+    }
+
+    public enum PaymentMethod {
+        CASH,
+        BANK_TRANSFER,
+        CARD,
+        OTHER
+    }
 }

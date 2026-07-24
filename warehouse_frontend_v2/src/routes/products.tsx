@@ -245,51 +245,55 @@ function ProductsPage() {
 
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                <tr>
-                  <th className="text-left p-4">SKU</th>
-                  <th className="text-left p-4">Product</th>
-                  <th className="text-left p-4">Category</th>
-                  <th className="text-left p-4">Warehouse</th>
-                  <th className="text-left p-4">Location</th>
-                  <th className="text-right p-4">Stock</th>
-                  <th className="text-right p-4">Cost</th>
-                  <th className="text-right p-4">Price</th>
-                  <th className="text-center p-4">Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="min-w-[1000px] text-sm">
+              {/* Grid Table Header */}
+              <div className="grid grid-cols-[130px_minmax(220px,2fr)_120px_100px_100px_80px_110px_110px_90px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                <div>SKU</div>
+                <div>Product</div>
+                <div>Category</div>
+                <div>Warehouse</div>
+                <div>Location</div>
+                <div className="text-right">Stock</div>
+                <div className="text-right">Cost</div>
+                <div className="text-right">Price</div>
+                <div className="text-center">Status</div>
+              </div>
+
+              {/* Grid Table Body */}
+              <div className="divide-y divide-border/60">
                 {paginatedList.map((p: any) => {
                   const low = p.stock < p.reorder;
                   const out = p.stock === 0;
                   return (
-                    <tr key={`${p.sku}-${p.warehouseId}`} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                      <td className="p-4 font-mono text-xs text-muted-foreground">{p.sku}</td>
-                      <td className="p-4">
+                    <div
+                      key={`${p.sku}-${p.warehouseId}`}
+                      className="grid grid-cols-[130px_minmax(220px,2fr)_120px_100px_100px_80px_110px_110px_90px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                    >
+                      <div className="font-mono text-xs text-muted-foreground truncate">{p.sku}</div>
+                      <div>
                         <div className="flex items-center gap-3">
                           {p.imageUrl ? (
-                            <img src={p.imageUrl} alt={p.name} className="size-10 rounded-md object-cover border border-border" />
+                            <img src={p.imageUrl} alt={p.name} className="size-10 rounded-md object-cover border border-border shrink-0" />
                           ) : (
-                            <div className="size-10 rounded-md bg-secondary/80 flex items-center justify-center border border-border">
+                            <div className="size-10 rounded-md bg-secondary/80 flex items-center justify-center border border-border shrink-0">
                               <Package className="size-5 text-muted-foreground" />
                             </div>
                           )}
-                          <div>
-                            <div className="font-medium">{p.name}</div>
-                            <div className="text-xs text-muted-foreground">{p.brand}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{p.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">{p.brand}</div>
                           </div>
                         </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2 py-1 rounded-md text-xs bg-secondary border border-border">{p.category}</span>
-                      </td>
-                      <td className="p-4 font-mono text-xs">{getWarehouseCode(p.warehouseId)}</td>
-                      <td className="p-4 font-mono text-xs">{p.location}</td>
-                      <td className="p-4 text-right font-semibold">{p.stock}</td>
-                      <td className="p-4 text-right">{formatVND(p.cost)}</td>
-                      <td className="p-4 text-right">{formatVND(p.price)}</td>
-                      <td className="p-4 text-center">
+                      </div>
+                      <div>
+                        <span className="px-2 py-1 rounded-md text-xs bg-secondary border border-border inline-block truncate max-w-full">{p.category}</span>
+                      </div>
+                      <div className="font-mono text-xs truncate">{getWarehouseCode(p.warehouseId)}</div>
+                      <div className="font-mono text-xs truncate">{p.location}</div>
+                      <div className="text-right font-semibold">{p.stock}</div>
+                      <div className="text-right">{formatVND(p.cost)}</div>
+                      <div className="text-right">{formatVND(p.price)}</div>
+                      <div className="text-center">
                         {out ? (
                           <span className="px-2 py-1 rounded-md text-xs bg-destructive/15 text-destructive">Out</span>
                         ) : low ? (
@@ -297,19 +301,17 @@ function ProductsPage() {
                         ) : (
                           <span className="px-2 py-1 rounded-md text-xs bg-success/15 text-success">In stock</span>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
                 {paginatedList.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
-                      No products match your filters.
-                    </td>
-                  </tr>
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    No products match your filters.
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
           {totalPages > 1 && <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
               <div className="text-muted-foreground text-xs">

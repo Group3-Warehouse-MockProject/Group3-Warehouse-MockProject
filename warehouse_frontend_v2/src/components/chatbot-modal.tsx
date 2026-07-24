@@ -18,7 +18,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
             role: "bot",
-            text: "Xin chào! Tôi là trợ lý AI của hệ thống TechStock. Bạn có thể hỏi tôi về tồn kho, sản phẩm, hoặc kho hàng.",
+            text: "Hello! I am the TechStock AI assistant. You can ask me about inventory, products, or warehouses.",
         },
     ]);
     const [input, setInput] = useState("");
@@ -62,7 +62,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
             const answer =
                 typeof response.data === "string"
                     ? response.data
-                    : response.data?.answer ?? "Không có phản hồi.";
+                    : response.data?.answer ?? "No response.";
 
             setMessages((prev) => [...prev, { role: "bot", text: answer }]);
         } catch (error) {
@@ -71,7 +71,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                 ...prev,
                 {
                     role: "bot",
-                    text: "Đã xảy ra lỗi khi kết nối với AI. Vui lòng thử lại sau.",
+                    text: "An error occurred while connecting to the AI. Please try again later.",
                 },
             ]);
         } finally {
@@ -167,13 +167,13 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                                 display: "inline-block",
                                 boxShadow: "0 0 6px var(--accent)",
                             }} />
-                            Trực tuyến
+                            Online
                         </p>
                     </div>
 
                     <button
                         onClick={onClose}
-                        title="Đóng"
+                        title="Close"
                         style={{
                             background: "transparent",
                             border: "none",
@@ -300,7 +300,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Nhập câu hỏi về kho hàng..."
+                        placeholder="Ask a question about the warehouse..."
                         disabled={isTyping}
                         style={{
                             flex: 1,
@@ -325,7 +325,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                     <button
                         onClick={sendMessage}
                         disabled={isTyping || !input.trim()}
-                        title="Gửi"
+                        title="Send"
                         style={{
                             width: "40px",
                             height: "40px",
@@ -392,7 +392,7 @@ export function ChatBotButton() {
             <button
                 id="chatbot-open-btn"
                 onClick={() => setIsOpen((prev) => !prev)}
-                title="Trợ lý AI TechStock"
+                title="TechStock AI Assistant"
                 style={{
                     position: "fixed",
                     bottom: "24px",
