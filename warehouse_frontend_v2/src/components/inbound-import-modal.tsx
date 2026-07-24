@@ -58,7 +58,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       templateSheet.columns = [
         { header: "GroupKey", key: "groupKey", width: 12 },
         { header: "WAREHOUSE", key: "warehouse", width: 18 },
-        { header: "DATE", key: "date", width: 15 },
+        { header: "DATE (yyyy-mm-dd)", key: "date", width: 20 },
         { header: "SUPPLIER", key: "supplier", width: 25 },
         { header: "PRODUCT", key: "product", width: 22 },
         { header: "QTY", key: "qty", width: 10 },
@@ -66,39 +66,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         { header: "NOTES", key: "notes", width: 30 }
       ];
 
-      // Add 3 sample rows illustrating grouping
-      templateSheet.addRow({
-        groupKey: 1,
-        warehouse: warehouses[0]?.code || "TS-HCM-01",
-        date: "15/07/2026",
-        supplier: suppliers[0]?.name || "FPT Distribution",
-        product: products[0]?.sku || "CPU-INT-14700K",
-        qty: 50,
-        unitCost: products[0]?.cost || 8000000,
-        notes: "Imported batch A"
-      });
-
-      templateSheet.addRow({
-        groupKey: 1,
-        warehouse: warehouses[0]?.code || "TS-HCM-01",
-        date: "15/07/2026",
-        supplier: suppliers[0]?.name || "FPT Distribution",
-        product: products[1]?.sku || "CPU-AMD-7800X3D",
-        qty: 20,
-        unitCost: products[1]?.cost || 8500000,
-        notes: "Imported batch A"
-      });
-
-      templateSheet.addRow({
-        groupKey: 2,
-        warehouse: warehouses[1]?.code || warehouses[0]?.code || "TS-HN-01",
-        date: "15/07/2026",
-        supplier: suppliers[1]?.name || suppliers[0]?.name || "Digiworld",
-        product: products[0]?.sku || "CPU-INT-14700K",
-        qty: 30,
-        unitCost: products[0]?.cost || 8000000,
-        notes: "Imported batch B"
-      });
+      // Removed sample rows as requested by teacher
 
       // Apply Excel data validation (dropdowns) for rows 2 to 100
       const numWH = warehouses.length;
@@ -106,6 +74,36 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const numProd = products.length;
 
       for (let i = 2; i <= 100; i++) {
+        templateSheet.getCell(`C${i}`).dataValidation = {
+          type: "date",
+          operator: "greaterThan",
+          allowBlank: true,
+          showErrorMessage: true,
+          errorTitle: "Invalid Date",
+          error: "Please enter a valid date (e.g. 2026-07-15)",
+          formulae: [new Date("2000-01-01")]
+        };
+
+        templateSheet.getCell(`F${i}`).dataValidation = {
+          type: "whole",
+          operator: "greaterThan",
+          allowBlank: true,
+          showErrorMessage: true,
+          errorTitle: "Invalid Quantity",
+          error: "Quantity must be a whole number greater than 0.",
+          formulae: [0]
+        };
+
+        templateSheet.getCell(`G${i}`).dataValidation = {
+          type: "decimal",
+          operator: "greaterThanOrEqual",
+          allowBlank: true,
+          showErrorMessage: true,
+          errorTitle: "Invalid Unit Cost",
+          error: "Unit cost must be a number greater than or equal to 0.",
+          formulae: [0]
+        };
+
         if (numWH > 0) {
           templateSheet.getCell(`B${i}`).dataValidation = {
             type: "list",
@@ -158,21 +156,16 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as any[];
 
       if (jsonData.length === 0) {
         throw new Error("The Excel file is empty.");
       }
 
-      // Filter out exact sample rows from the template using their distinctive Notes
-      const cleanJsonData = jsonData.filter((row) => {
-        const note = String(row.NOTES || "").trim();
-        return note !== "Imported batch A" && note !== "Imported batch B";
-      });
-
+      const cleanJsonData = jsonData;
 
       if (cleanJsonData.length === 0) {
-        throw new Error("No valid data to import. Please delete the sample rows and fill in your own data.");
+        throw new Error("No valid data to import. Please fill in your own data.");
       }
 
       // Pre-fetch warehouses to resolve IDs by Warehouse Code
@@ -204,10 +197,11 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
         const warehouseId = whMatch.id;
 
-        // Build remark from Supplier and Notes
+        // Build remark from Date, Supplier and Notes
+        const dateStr = firstRow["DATE (yyyy-mm-dd)"] ? `Date: ${String(firstRow["DATE (yyyy-mm-dd)"]).trim()}` : (firstRow.DATE ? `Date: ${String(firstRow.DATE).trim()}` : "");
         const suppStr = firstRow.SUPPLIER ? `Supplier: ${String(firstRow.SUPPLIER).trim()}` : "";
         const noteStr = firstRow.NOTES ? String(firstRow.NOTES).trim() : "";
-        const remark = [suppStr, noteStr].filter(Boolean).join(" | ") || null;
+        const remark = [dateStr, suppStr, noteStr].filter(Boolean).join(" | ") || null;
 
         const items = rows.map((row, idx) => {
           const code = row.PRODUCT ? String(row.PRODUCT).trim() : "";

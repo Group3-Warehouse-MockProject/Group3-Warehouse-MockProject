@@ -113,11 +113,6 @@ function InboundPage() {
     setSelectedMovement((prev) => (prev?.receiptId === rid ? updated[0] : prev));
   }
 
-
-  function handleDeleted(receiptId: number) {
-    setMovements((prev) => prev.filter((m) => m.receiptId !== receiptId));
-  }
-
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
 
   // Unique dropdown options derived from data
@@ -177,13 +172,23 @@ function InboundPage() {
   // Reset page whenever filters change
   useEffect(() => { setPage(1); }, [searchQuery, filters]);
 
-  const uniqueReceiptIds = new Set(filteredMovements.map((m) => m.receiptId));
+  // Group movements by receiptId after filtering
+  const groupedMovements = useMemo(() => {
+    const groups = new Map<number, ReceiptMovement[]>();
+    for (const m of filteredMovements) {
+      if (!groups.has(m.receiptId)) groups.set(m.receiptId, []);
+      groups.get(m.receiptId)!.push(m);
+    }
+    return Array.from(groups.values());
+  }, [filteredMovements]);
+
+  const totalReceiptsCount = new Set(movements.map((m) => m.receiptId)).size;
   const totalIn          = filteredMovements.reduce((s, m) => s + (m.qty ?? 0), 0);
   const suppliersSet     = new Set(filteredMovements.map((m) => m.partner));
 
-  const totalPages    = Math.max(1, Math.ceil(filteredMovements.length / limit));
+  const totalPages    = Math.max(1, Math.ceil(groupedMovements.length / limit));
   const safePage      = Math.min(page, totalPages);
-  const paginatedList = filteredMovements.slice((safePage - 1) * limit, safePage * limit);
+  const paginatedList = groupedMovements.slice((safePage - 1) * limit, safePage * limit);
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -272,7 +277,7 @@ function InboundPage() {
           </div>
           <div className="surface-card p-5">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Receipts</div>
-            <div className="mt-2 text-3xl font-bold">{loading ? "—" : uniqueReceiptIds.size}</div>
+            <div className="mt-2 text-3xl font-bold">{loading ? "—" : groupedMovements.length}</div>
             <div className="text-xs text-muted-foreground mt-1">All time</div>
           </div>
           <div className="surface-card p-5">
@@ -462,33 +467,43 @@ function InboundPage() {
 
                   {/* Grid Table Body */}
                   <div className="divide-y divide-border/60">
-                    {paginatedList.map((m) => (
-                      <div
-                        key={m.id}
-                        className="grid grid-cols-[100px_minmax(180px,2fr)_minmax(140px,1.5fr)_110px_70px_110px_110px_130px_48px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
-                      >
-                        <div className="font-mono text-xs">R-{m.receiptId}</div>
-                        <div>
-                          <div className="font-medium">{m.product}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{m.sku}</div>
+                    {paginatedList.map((group) => {
+                      const m = group[0];
+                      const groupQty = group.reduce((sum, item) => sum + item.qty, 0);
+                      const isMulti = group.length > 1;
+
+                      return (
+                        <div
+                          key={`receipt-group-${m.receiptId}`}
+                          className="grid grid-cols-[100px_minmax(180px,2fr)_minmax(140px,1.5fr)_110px_70px_110px_110px_130px_48px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                        >
+                          <div className="font-mono text-xs">R-{m.receiptId}</div>
+                          <div>
+                            <div className="font-medium">
+                              {m.product} {isMulti && <span className="text-muted-foreground text-xs font-normal ml-1">+{group.length - 1} more</span>}
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono">
+                              {isMulti ? `${group.length} items total` : m.sku}
+                            </div>
+                          </div>
+                          <div className="truncate">{m.partner}</div>
+                          <div className="font-mono text-xs">{warehouseCode(m.warehouseId)}</div>
+                          <div className="text-right font-semibold text-primary">+{groupQty}</div>
+                          <div className="text-muted-foreground">{m.date}</div>
+                          <div><StatusBadge status={m.status} /></div>
+                          <div className="text-muted-foreground truncate">{m.staff}</div>
+                          <div className="text-center">
+                            <button
+                              onClick={() => setSelectedMovement(m)}
+                              title="View detail"
+                              className="size-8 rounded-md grid place-items-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors"
+                            >
+                              <Eye className="size-4" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="truncate">{m.partner}</div>
-                        <div className="font-mono text-xs">{warehouseCode(m.warehouseId)}</div>
-                        <div className="text-right font-semibold text-primary">+{m.qty}</div>
-                        <div className="text-muted-foreground">{m.date}</div>
-                        <div><StatusBadge status={m.status} /></div>
-                        <div className="text-muted-foreground truncate">{m.staff}</div>
-                        <div className="text-center">
-                          <button
-                            onClick={() => setSelectedMovement(m)}
-                            title="View detail"
-                            className="size-8 rounded-md grid place-items-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors"
-                          >
-                            <Eye className="size-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -497,9 +512,9 @@ function InboundPage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
                   <div className="text-muted-foreground text-xs">
-                    Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, filteredMovements.length)} of {filteredMovements.length} entries
-                    {filteredMovements.length < movements.length && (
-                      <span className="ml-1 text-primary">(filtered from {movements.length})</span>
+                    Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, groupedMovements.length)} of {groupedMovements.length} entries
+                    {groupedMovements.length < totalReceiptsCount && (
+                      <span className="ml-1 text-primary">(filtered from {totalReceiptsCount} receipts)</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
@@ -547,7 +562,6 @@ function InboundPage() {
           warehouseCode={warehouseCode}
           onClose={() => setSelectedMovement(null)}
           onUpdated={handleUpdated}
-          onDeleted={handleDeleted}
         />
       )}
 
