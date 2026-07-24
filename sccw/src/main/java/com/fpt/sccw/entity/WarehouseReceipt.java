@@ -49,4 +49,18 @@ public class WarehouseReceipt extends BaseEntity{
     @OneToMany(mappedBy = "warehouseReceipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @Builder.Default
     private List<ApprovalHistory> approvalHistories = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_term")
+    @Builder.Default
+    private Status.PaymentTerm paymentTerm = Status.PaymentTerm.COD;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status")
+    @Builder.Default
+    private Status.PaymentStatus paymentStatus = Status.PaymentStatus.UNPAID;
+
+    @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<Payment> payments = new ArrayList<>();
 }

@@ -20,6 +20,42 @@ export const Route = createFileRoute("/outbound")({
 interface WarehouseInfo { id: string; code: string; }
 interface ProductInfo { sku: string; name: string; price: number; stock: number; warehouseId: string; }
 
+export interface ReceiptMovement {
+  id: string;
+  receiptId: number;
+  type: string;
+  sku: string;
+  product: string;
+  partner: string;
+  staff: string;
+  warehouseId: string;
+  qty: number;
+  date: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELLED";
+  remark?: string;
+  createdAt: string;
+  updatedAt?: string;
+  paymentTerm?: "PREPAID" | "COD" | "DEBT";
+  paymentStatus?: "UNPAID" | "PARTIAL" | "PAID";
+  totalAmount?: number;
+  paidAmount?: number;
+}
+
+const PAYMENT_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  PAID:     { label: "Paid",    className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  PARTIAL:  { label: "Partial", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  UNPAID:   { label: "Unpaid",  className: "bg-red-500/15 text-red-400 border-red-500/30" },
+};
+
+function PaymentStatusBadge({ status }: { status?: string }) {
+  const cfg = PAYMENT_STATUS_CONFIG[status ?? "UNPAID"] ?? PAYMENT_STATUS_CONFIG["UNPAID"];
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
 function parseRemark(remark?: string) {
   if (!remark) return { reference: "", assignee: "", note: "" };
   const parts = remark.split(" | ");
@@ -61,13 +97,14 @@ function StatusBadge({ status }: { status?: string }) {
 interface Filters {
   warehouse: string;
   status: string;
+  paymentStatus: string;
   staff: string;
   dateFrom: string;
   dateTo: string;
 }
 
 const DEFAULT_FILTERS: Filters = {
-  warehouse: "", status: "", staff: "", dateFrom: "", dateTo: "",
+  warehouse: "", status: "", paymentStatus: "", staff: "", dateFrom: "", dateTo: "",
 };
 
 function OutboundPage() {
@@ -176,6 +213,7 @@ function OutboundPage() {
 
       if (filters.warehouse && m.warehouseId !== filters.warehouse) return false;
       if (filters.status && m.status !== filters.status) return false;
+      if (filters.paymentStatus && m.paymentStatus !== filters.paymentStatus) return false;
       if (filters.staff && m.staff !== filters.staff) return false;
       if (filters.dateFrom && m.date < filters.dateFrom) return false;
       if (filters.dateTo   && m.date > filters.dateTo)   return false;
@@ -306,6 +344,15 @@ function OutboundPage() {
                   </select>
                 </FilterField>
 
+                <FilterField label="Payment">
+                  <select value={filters.paymentStatus} onChange={(e) => setFilter("paymentStatus", e.target.value)} className="filter-select">
+                    <option value="">All Payments</option>
+                    <option value="UNPAID">Unpaid</option>
+                    <option value="PARTIAL">Partial</option>
+                    <option value="PAID">Paid</option>
+                  </select>
+                </FilterField>
+
                 <FilterField label="Created by">
                   <select value={filters.staff} onChange={(e) => setFilter("staff", e.target.value)} className="filter-select">
                     <option value="">All Staff</option>
@@ -388,6 +435,7 @@ function OutboundPage() {
                       <th className="text-right p-4">Item Total</th>
                       <th className="text-left p-4">Date</th>
                       <th className="text-left p-4">Status</th>
+                      <th className="text-left p-4">Payment</th>
                       <th className="text-left p-4">Created by</th>
                       <th className="text-left p-4">Assigned to</th>
                       <th className="w-12" />
@@ -413,6 +461,7 @@ function OutboundPage() {
                           <td className="p-4 text-right font-semibold">{prod ? formatVND(itemTotal) : "—"}</td>
                           <td className="p-4 text-muted-foreground">{m.date}</td>
                           <td className="p-4"><StatusBadge status={m.status} /></td>
+                          <td className="p-4"><PaymentStatusBadge status={m.paymentStatus} /></td>
                           <td className="p-4 text-muted-foreground">{m.staff}</td>
                           <td className="p-4 text-muted-foreground">{assignee || "—"}</td>
                           <td className="p-2 text-center">
