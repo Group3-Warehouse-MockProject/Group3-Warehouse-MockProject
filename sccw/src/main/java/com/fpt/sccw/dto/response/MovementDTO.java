@@ -24,5 +24,11 @@ public class MovementDTO {
     private String remark;           // ghi chú receipt
     private String createdAt;        // yyyy-MM-dd HH:mm
     private String updatedAt;        // yyyy-MM-dd HH:mm
+
+    // Payment info
+    private String paymentTerm;      // PREPAID | COD | DEBT
+    private String paymentStatus;    // UNPAID | PARTIAL | PAID
+    private java.math.BigDecimal totalAmount;
+    private java.math.BigDecimal paidAmount;
 }
 

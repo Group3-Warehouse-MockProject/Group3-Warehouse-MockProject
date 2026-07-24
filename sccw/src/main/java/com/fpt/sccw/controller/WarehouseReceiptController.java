@@ -33,6 +33,7 @@ public class WarehouseReceiptController {
     private final InventoryRepository inventoryRepository;
     private final WarehouseRepository warehouseRepository;
     private final ActivityLogService activityLogService;
+    private final PaymentRepository paymentRepository;
 
     private static final DateTimeFormatter DATE_FMT     = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -129,6 +130,8 @@ public class WarehouseReceiptController {
                 .partner(request.getPartner())
                 .user(user)
                 .warehouse(warehouse)
+                .paymentTerm(resolvePaymentTerm(request.getPaymentTerm(), !isInbound))
+                .paymentStatus(Status.PaymentStatus.UNPAID)
                 .build();
 
         List<ReceiptDetail> details = new ArrayList<>();
@@ -224,6 +227,11 @@ public class WarehouseReceiptController {
                     receipt.setStatus(newStatus);
                 } else if (currentStatus == Status.ReceiptStatus.APPROVED) {
                     if (newStatus == Status.ReceiptStatus.COMPLETED) {
+                        if (receipt.getPaymentTerm() == Status.PaymentTerm.PREPAID
+                                && receipt.getPaymentStatus() != Status.PaymentStatus.PAID) {
+                            return ResponseEntity.badRequest()
+                                    .body("Prepaid outbound order must be fully paid before completion");
+                        }
                         Warehouse warehouse = receipt.getWarehouse();
                         // Verify inventory for all items
                         for (ReceiptDetail d : receipt.getDetails()) {
@@ -299,6 +307,9 @@ public class WarehouseReceiptController {
         boolean isInbound = receipt.getType().name().equals("INBOUND");
         Warehouse warehouse = receipt.getWarehouse();
 
+        // Delete associated payments first to avoid FK constraint issues
+        paymentRepository.deleteByReceiptId(receiptId);
+
         // Rollback inventory
         for (ReceiptDetail d : receipt.getDetails()) {
             if (isInbound) {
@@ -329,6 +340,33 @@ public class WarehouseReceiptController {
         if (r.getPartner() != null && !r.getPartner().isBlank()) return r.getPartner();
         if (isInbound && d.getProduct().getSupplier() != null) return d.getProduct().getSupplier().getName();
         return isInbound ? "Supplier" : "Customer";
+    }
+
+    private Status.PaymentTerm resolvePaymentTerm(String term, boolean outbound) {
+        if (!outbound || term == null || term.isBlank()) {
+            return outbound ? Status.PaymentTerm.COD : null;
+        }
+        try {
+            return Status.PaymentTerm.valueOf(term.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return Status.PaymentTerm.COD;
+        }
+    }
+
+    private BigDecimal calculateTotalAmount(WarehouseReceipt receipt) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (ReceiptDetail d : receipt.getDetails()) {
+            total = total.add(d.getPrice().multiply(BigDecimal.valueOf(d.getQuantity())));
+        }
+        return total;
+    }
+
+    private BigDecimal calculatePaidAmount(WarehouseReceipt receipt) {
+        BigDecimal paid = BigDecimal.ZERO;
+        for (Payment p : receipt.getPayments()) {
+            paid = paid.add(p.getAmount());
+        }
+        return paid;
     }
 
     private User resolveUser() {
@@ -365,6 +403,8 @@ public class WarehouseReceiptController {
 
     private MovementDTO buildReceiptMovement(WarehouseReceipt r, ReceiptDetail d,
                                               boolean isInbound, String partner) {
+        BigDecimal totalAmount = calculateTotalAmount(r);
+        BigDecimal paidAmount = calculatePaidAmount(r);
         return MovementDTO.builder()
                 .id("R-" + r.getId() + "-" + d.getId())
                 .receiptId(r.getId())
@@ -380,6 +420,10 @@ public class WarehouseReceiptController {
                 .remark(r.getRemark())
                 .createdAt(r.getCreatedAt().format(DATETIME_FMT))
                 .updatedAt(r.getUpdatedAt() != null ? r.getUpdatedAt().format(DATETIME_FMT) : null)
+                .paymentTerm(r.getPaymentTerm() != null ? r.getPaymentTerm().name() : null)
+                .paymentStatus(r.getPaymentStatus() != null ? r.getPaymentStatus().name() : null)
+                .totalAmount(totalAmount)
+                .paidAmount(paidAmount)
                 .build();
     }
 

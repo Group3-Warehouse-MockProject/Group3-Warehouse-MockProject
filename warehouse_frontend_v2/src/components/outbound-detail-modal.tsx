@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X, Calendar, User, Warehouse, FileText, Package,
   CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save,
-  Truck, Ban, Check, AlertTriangle
+  Truck, Ban, Check, AlertTriangle, Banknote, Wallet, CreditCard,
+  QrCode, ChevronDown, ChevronUp
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
+import { formatVND } from "@/lib/warehouse-data";
 
 function parseRemark(remark?: string) {
   if (!remark) return { reference: "", assignee: "", note: "" };
@@ -40,6 +42,20 @@ export interface ReceiptMovement {
   remark?: string;
   createdAt: string;
   updatedAt?: string;
+  paymentTerm?: "PREPAID" | "COD" | "DEBT";
+  paymentStatus?: "UNPAID" | "PARTIAL" | "PAID";
+  totalAmount?: number;
+  paidAmount?: number;
+}
+
+export interface PaymentRecord {
+  id: number;
+  amount: number;
+  paymentMethod: string;
+  referenceCode?: string;
+  note?: string;
+  createdAt: string;
+  createdBy: string;
 }
 
 interface Props {
@@ -61,6 +77,22 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; cl
   CANCELLED: { label: "Cancelled", icon: Ban,          className: "bg-gray-500/15 text-gray-400 border-gray-500/30" },
 };
 
+const PAYMENT_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  PAID:     { label: "Paid",     className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  PARTIAL:  { label: "Partial",  className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  UNPAID:   { label: "Unpaid",   className: "bg-red-500/15 text-red-400 border-red-500/30" },
+};
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  CASH: "Cash",
+  BANK_TRANSFER: "Bank Transfer",
+  CARD: "Card",
+  OTHER: "Other",
+};
+
+// Replace this URL with your actual bank transfer QR image link
+const BANK_TRANSFER_QR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRUeShVJgPUYZ8BLgnFQ1-3NT4kK7J4qTfci9k6kADXRMAek03SePMKQnKF&s=10";
+
 export function OutboundDetailModal({
   allMovements,
   movement,
@@ -74,6 +106,8 @@ export function OutboundDetailModal({
   // Role checks
   const isAdminOrManager = currentUser?.role === "Admin" || currentUser?.role === "Manager";
   const canEditRemark    = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
+  const canRecordPayment = canEditRemark;
+  const canPayNow = (movement.status === "APPROVED" || movement.status === "COMPLETED") && canRecordPayment;
   const canDelete        = isAdminOrManager;
 
   // All lines belonging to this receipt
@@ -87,10 +121,38 @@ export function OutboundDetailModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
+  // Payment state
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [fetchingPayments, setFetchingPayments] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [payAmount, setPayAmount] = useState<string>("");
+  const [payMethod, setPayMethod] = useState("CASH");
+  const [payNote, setPayNote] = useState("");
+  const [submittingPayment, setSubmittingPayment] = useState(false);
+
   const statusCfg = STATUS_CONFIG[movement.status] ?? STATUS_CONFIG["PENDING"];
   const StatusIcon = statusCfg.icon;
   const parsed = parseRemark(movement.remark);
   const displayId = parsed.reference || `R-${movement.receiptId}`;
+
+  const totalAmount = movement.totalAmount ?? 0;
+  const paidAmount = movement.paidAmount ?? 0;
+  const remainingAmount = Math.max(0, totalAmount - paidAmount);
+
+  useEffect(() => {
+    async function fetchPayments() {
+      setFetchingPayments(true);
+      try {
+        const res = await api.get<PaymentRecord[]>(`/receipts/${movement.receiptId}/payments`);
+        setPayments(res.data);
+      } catch (err: any) {
+        console.error("Failed to fetch payments", err);
+      } finally {
+        setFetchingPayments(false);
+      }
+    }
+    fetchPayments();
+  }, [movement.receiptId]);
 
   async function handleStatusTransition(newStatus: string) {
     setActionLoading(true);
@@ -151,6 +213,50 @@ export function OutboundDetailModal({
       setDeleting(false);
     }
   }
+
+  async function handleRecordPayment(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    const amountNum = Number(payAmount.replace(/[^\d.]/g, ""));
+    if (!amountNum || amountNum <= 0) {
+      setError("Amount must be greater than 0.");
+      return;
+    }
+    if (amountNum > remainingAmount) {
+      setError("Amount cannot exceed remaining balance.");
+      return;
+    }
+
+    setSubmittingPayment(true);
+    try {
+      await api.post(`/receipts/${movement.receiptId}/payments`, {
+        amount: amountNum,
+        paymentMethod: payMethod,
+        note: payNote || null,
+      });
+
+      const pRes = await api.get<PaymentRecord[]>(`/receipts/${movement.receiptId}/payments`);
+      setPayments(pRes.data);
+
+      // Refresh movement data so payment status updates in the parent list
+      const mRes = await api.get<ReceiptMovement[]>("/receipts", { params: { type: "OUTBOUND" } });
+      onUpdated(mRes.data);
+
+      setShowPaymentForm(false);
+      setPayAmount("");
+      setPayMethod("CASH");
+      setPayNote("");
+    } catch (err: any) {
+      const data = err.response?.data;
+      setError(typeof data === "string" ? data : "Failed to record payment.");
+    } finally {
+      setSubmittingPayment(false);
+    }
+  }
+
+  const paymentStatus = movement.paymentStatus ?? "UNPAID";
+  const paymentStatusCfg = PAYMENT_STATUS_CONFIG[paymentStatus] ?? PAYMENT_STATUS_CONFIG["UNPAID"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/70 backdrop-blur-sm">
@@ -242,6 +348,174 @@ export function OutboundDetailModal({
               )}
             </div>
 
+          </div>
+
+          {/* Payment summary */}
+          <div className="mx-6 mb-5 p-4 rounded-xl border border-border bg-secondary/20">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <Banknote className="size-4 text-primary" /> Payment
+              </h3>
+              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${paymentStatusCfg.className}`}>
+                {paymentStatusCfg.label}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="p-2.5 rounded-lg bg-secondary/40">
+                <div className="text-xs text-muted-foreground mb-0.5">Term</div>
+                <div className="text-sm font-medium">{movement.paymentTerm ?? "COD"}</div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-secondary/40">
+                <div className="text-xs text-muted-foreground mb-0.5">Total</div>
+                <div className="text-sm font-medium">{formatVND(totalAmount)}</div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-secondary/40">
+                <div className="text-xs text-muted-foreground mb-0.5">Remaining</div>
+                <div className={`text-sm font-medium ${remainingAmount === 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                  {formatVND(remainingAmount)}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment history */}
+            <div className="mb-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Payment history</div>
+              {fetchingPayments ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                  <Loader2 className="size-3.5 animate-spin" /> Loading…
+                </div>
+              ) : payments.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No payments recorded yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {payments.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 text-sm">
+                      <div className="flex items-center gap-2">
+                        {p.paymentMethod === "CASH" && <Wallet className="size-3.5 text-muted-foreground" />}
+                        {p.paymentMethod === "BANK_TRANSFER" && <QrCode className="size-3.5 text-muted-foreground" />}
+                        {p.paymentMethod === "CARD" && <CreditCard className="size-3.5 text-muted-foreground" />}
+                        {p.paymentMethod === "OTHER" && <Banknote className="size-3.5 text-muted-foreground" />}
+                        <div>
+                          <div className="font-medium">{formatVND(p.amount)}</div>
+                          <div className="text-xs text-muted-foreground">{PAYMENT_METHOD_LABEL[p.paymentMethod] || p.paymentMethod}</div>
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground">
+                        <div>{p.createdBy}</div>
+                        <div>{p.createdAt}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {(!canPayNow || remainingAmount === 0) && (
+              <p className="text-xs text-muted-foreground italic">
+                {remainingAmount === 0
+                  ? "This order is fully paid."
+                  : movement.status === "PENDING"
+                  ? "Payment recording will be available after the request is approved."
+                  : "Payment recording is not available for this order."}
+              </p>
+            )}
+
+            {/* Record payment button / form */}
+            {canPayNow && remainingAmount > 0 && (
+              <div className="space-y-3">
+                {!showPaymentForm ? (
+                  <button
+                    onClick={() => {
+                      setShowPaymentForm(true);
+                      setPayAmount(String(remainingAmount));
+                      setPayMethod("CASH");
+                      setPayNote("");
+                      setError(null);
+                    }}
+                    className="h-9 px-4 rounded-lg text-sm font-medium border border-primary text-primary hover:bg-primary/10 flex items-center gap-2 transition-colors"
+                  >
+                    <Banknote className="size-4" /> Record payment
+                  </button>
+                ) : (
+                  <form onSubmit={handleRecordPayment} className="p-3 rounded-lg border border-border bg-background/50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Record payment</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowPaymentForm(false)}
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+                      >
+                        <ChevronUp className="size-3" /> Hide
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">Amount (VND)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={remainingAmount}
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                          className="input h-9 w-full"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">Method</label>
+                        <select
+                          value={payMethod}
+                          onChange={(e) => setPayMethod(e.target.value)}
+                          className="input h-9 w-full"
+                        >
+                          <option value="CASH">Cash</option>
+                          <option value="BANK_TRANSFER">Bank Transfer</option>
+                          <option value="CARD">Card</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                    {payMethod === "BANK_TRANSFER" && (
+                      <div className="p-3 rounded-lg border border-dashed border-border bg-secondary/20">
+                        <div className="text-xs text-muted-foreground mb-2">Scan the QR code below to transfer</div>
+                        <img
+                          src={BANK_TRANSFER_QR_URL}
+                          alt="Bank transfer QR"
+                          className="w-40 h-40 rounded-lg border border-border object-contain bg-white"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Note</label>
+                      <textarea
+                        value={payNote}
+                        onChange={(e) => setPayNote(e.target.value)}
+                        rows={2}
+                        className="input w-full min-h-[60px] py-2"
+                        placeholder="Optional note…"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowPaymentForm(false)}
+                        className="h-8 px-3 rounded-md text-xs border border-border hover:bg-secondary"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submittingPayment}
+                        className="h-8 px-3 rounded-md text-xs bg-primary text-primary-foreground font-medium flex items-center gap-1"
+                      >
+                        {submittingPayment && <Loader2 className="size-3 animate-spin" />}
+                        Save payment
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Items table */}
@@ -389,6 +663,20 @@ export function OutboundDetailModal({
           </button>
         </div>
       </div>
+
+      <style>{`
+        .input {
+          width: 100%;
+          height: 2.5rem;
+          padding: 0 0.75rem;
+          border-radius: 0.5rem;
+          background: var(--input);
+          border: 1px solid var(--border);
+          font-size: 0.875rem;
+          color: var(--foreground);
+        }
+        .input:focus { outline: none; box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 40%, transparent); }
+      `}</style>
     </div>
   );
 }
