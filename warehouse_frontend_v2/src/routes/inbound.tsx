@@ -93,7 +93,7 @@ function InboundPage() {
 
   useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick]);
 
-  function fetchReceipts(currentPage: number) {
+  function fetchReceipts(currentPage: number = page) {
     setLoading(true); setError(null);
     const params: Record<string, string | number> = { type: "INBOUND", page: currentPage, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
@@ -459,6 +459,11 @@ function InboundPage() {
                 <div className="min-w-[850px] text-sm">
                   {/* Grid Table Header */}
                   <div className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                    <div>Receipt #</div>
+                    <div>Product</div>
+                    <div>Supplier</div>
+                    <div>Warehouse</div>
+                    <div className="text-right">Qty</div>
                     <div>Date{(filters.dateFrom || filters.dateTo) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Status{filters.status && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Received by{filters.staff && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
@@ -540,9 +545,9 @@ function InboundPage() {
         </div>
       </div>
 
-      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Inbound" onSaved={fetchReceipts} />
+      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Inbound" onSaved={() => fetchReceipts()} />
 
-      <InboundImportModal open={importOpen} onClose={() => setImportOpen(false)} onSaved={fetchReceipts} />
+      <InboundImportModal open={importOpen} onClose={() => setImportOpen(false)} onSaved={() => fetchReceipts()} />
 
       {selectedMovement && (
         <InboundDetailModal

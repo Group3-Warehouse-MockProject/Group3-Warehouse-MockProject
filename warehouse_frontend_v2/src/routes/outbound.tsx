@@ -136,7 +136,7 @@ function OutboundPage() {
 
   useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick]);
 
-  function fetchReceipts(currentPage: number) {
+  function fetchReceipts(currentPage: number = page) {
     setLoading(true); setError(null);
     const params: Record<string, string | number> = { type: "OUTBOUND", page: currentPage, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
@@ -241,7 +241,6 @@ function OutboundPage() {
   }, [filteredMovements]);
 
   const totalPagesCount = Math.max(1, totalPages);
-  const safePage        = Math.min(page, totalPagesCount - 1);
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -509,7 +508,7 @@ function OutboundPage() {
         </div>
       </div>
 
-      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Outbound" onSaved={fetchReceipts} />
+      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Outbound" onSaved={() => fetchReceipts()} />
 
       {selectedMovement && (
         <OutboundDetailModal
