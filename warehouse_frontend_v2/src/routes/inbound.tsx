@@ -122,11 +122,6 @@ function InboundPage() {
     setSelectedMovement((prev) => (prev?.receiptId === rid ? updated[0] : prev));
   }
 
-
-  function handleDeleted(receiptId: number) {
-    setMovements((prev) => prev.filter((m) => m.receiptId !== receiptId));
-  }
-
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
 
   // Unique dropdown options derived from data
@@ -186,7 +181,17 @@ function InboundPage() {
   // Reset page whenever filters change
   useEffect(() => { setPage(0); }, [searchQuery, filters, activeWarehouseId]);
 
-  const uniqueReceiptIds = new Set(filteredMovements.map((m) => m.receiptId));
+  // Group movements by receiptId after filtering
+  const groupedMovements = useMemo(() => {
+    const groups = new Map<number, ReceiptMovement[]>();
+    for (const m of filteredMovements) {
+      if (!groups.has(m.receiptId)) groups.set(m.receiptId, []);
+      groups.get(m.receiptId)!.push(m);
+    }
+    return Array.from(groups.values());
+  }, [filteredMovements]);
+
+  const totalReceiptsCount = new Set(movements.map((m) => m.receiptId)).size;
   const totalIn          = filteredMovements.reduce((s, m) => s + (m.qty ?? 0), 0);
   const suppliersSet     = new Set(filteredMovements.map((m) => m.partner));
 
@@ -277,7 +282,7 @@ function InboundPage() {
           </div>
           <div className="surface-card p-5">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Receipts</div>
-            <div className="mt-2 text-3xl font-bold">{loading ? "—" : uniqueReceiptIds.size}</div>
+            <div className="mt-2 text-3xl font-bold">{loading ? "—" : groupedMovements.length}</div>
             <div className="text-xs text-muted-foreground mt-1">All time</div>
           </div>
           <div className="surface-card p-5">
@@ -546,7 +551,6 @@ function InboundPage() {
           warehouseCode={warehouseCode}
           onClose={() => setSelectedMovement(null)}
           onUpdated={handleUpdated}
-          onDeleted={handleDeleted}
         />
       )}
 

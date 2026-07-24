@@ -15,7 +15,6 @@ interface Props {
   warehouseCode: (id: string) => string;
   onClose: () => void;
   onUpdated: (updated: ReceiptMovement[]) => void;
-  onDeleted: (receiptId: number) => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
@@ -30,33 +29,47 @@ export function InboundDetailModal({
   warehouseCode,
   onClose,
   onUpdated,
-  onDeleted,
 }: Props) {
   const { currentUser } = useApp();
   const canEdit   = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
-  const canDelete = currentUser?.role === "Admin" || currentUser?.role === "Manager";
 
   // All lines belonging to this receipt
   const lines = allMovements.filter((m) => m.receiptId === movement.receiptId);
 
   const [editing, setEditing]         = useState(false);
-  const [editStatus, setEditStatus]   = useState(movement.status);
   const [editRemark, setEditRemark]   = useState(movement.remark ?? "");
   const [saving, setSaving]           = useState(false);
-  const [deleting, setDeleting]       = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"APPROVED" | "REJECTED" | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
   const statusCfg = STATUS_CONFIG[movement.status] ?? STATUS_CONFIG["PENDING"];
   const StatusIcon = statusCfg.icon;
 
+  async function handleQuickAction(status: "APPROVED" | "REJECTED") {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await api.patch<ReceiptMovement[]>(`/receipts/${movement.receiptId}`, {
+        status,
+        remark: movement.remark || null,
+      });
+      onUpdated(res.data);
+      setConfirmAction(null);
+    } catch (err: any) {
+      const data = err.response?.data;
+      const msg = typeof data === "string" ? data : (data?.message || "Failed to update status. Please try again.");
+      setError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSave() {
     // Check no changes
-    const statusUnchanged = editStatus === movement.status;
     const remarkUnchanged = editRemark.trim() === (movement.remark ?? "").trim();
-    if (statusUnchanged && remarkUnchanged) {
-      setSaveWarning("No changes detected. Please modify the status or remark before saving.");
+    if (remarkUnchanged) {
+      setSaveWarning("No changes detected. Please modify the remark before saving.");
       return;
     }
     setSaveWarning(null);
@@ -64,7 +77,7 @@ export function InboundDetailModal({
     setError(null);
     try {
       const res = await api.patch<ReceiptMovement[]>(`/receipts/${movement.receiptId}`, {
-        status: editStatus,
+        status: movement.status,
         remark: editRemark || null,
       });
       onUpdated(res.data);
@@ -80,22 +93,6 @@ export function InboundDetailModal({
       setError(msg);
     } finally {
       setSaving(false);
-    }
-  }
-
-
-  async function handleDelete() {
-    setDeleting(true);
-    setError(null);
-    try {
-      await api.delete(`/receipts/${movement.receiptId}`);
-      onDeleted(movement.receiptId);
-      onClose();
-    } catch {
-      setError("Failed to delete receipt. Please try again.");
-      setConfirmDelete(false);
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -133,32 +130,10 @@ export function InboundDetailModal({
             {/* Status */}
             <div className="col-span-2">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Status</div>
-              {editing ? (
-                <div className="space-y-1.5">
-                  <select
-                    value={editStatus}
-                    onChange={(e) => { setEditStatus(e.target.value); setSaveWarning(null); }}
-                    className="h-9 px-3 rounded-lg bg-input border border-border text-sm w-48 text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={movement.status !== "PENDING"}
-                  >
-                    <option value="PENDING">Pending</option>
-                    <option value="APPROVED">Approved</option>
-                    <option value="REJECTED">Rejected</option>
-                  </select>
-                  {movement.status !== "PENDING" ? (
-                    <p className="text-xs text-muted-foreground">Status is finalized and cannot be changed.</p>
-                  ) : (
-                    editStatus === movement.status && (
-                      <p className="text-xs text-muted-foreground">Current status — change to update</p>
-                    )
-                  )}
-                </div>
-              ) : (
-                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${statusCfg.className}`}>
-                  <StatusIcon className="size-3.5" />
-                  {statusCfg.label}
-                </span>
-              )}
+              <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${statusCfg.className}`}>
+                <StatusIcon className="size-3.5" />
+                {statusCfg.label}
+              </span>
             </div>
 
             {/* Notes */}
@@ -277,50 +252,14 @@ export function InboundDetailModal({
 
         {/* Footer actions */}
         <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-border bg-secondary/20">
-          {/* Delete */}
-          <div>
-            {canDelete && !confirmDelete && (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="h-9 px-4 rounded-lg text-sm border border-destructive/40 text-destructive hover:bg-destructive/10 flex items-center gap-2 transition-colors"
-              >
-                <Trash2 className="size-4" /> Delete
-              </button>
-            )}
-            {canDelete && confirmDelete && (
-              <div className="flex flex-col gap-2">
-                {movement.status === "APPROVED" && (
-                  <p className="text-xs text-amber-400 font-medium">
-                    ⚠ This receipt is <strong>APPROVED</strong>. Deleting it will reverse the inventory changes.
-                  </p>
-                )}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-destructive">Are you sure?</span>
-                  <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="h-8 px-3 rounded-md text-xs bg-destructive text-white flex items-center gap-1.5 disabled:opacity-60"
-                  >
-                    {deleting && <Loader2 className="size-3.5 animate-spin" />}
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => setConfirmDelete(false)}
-                    className="h-8 px-3 rounded-md text-xs border border-border hover:bg-secondary"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <div /> {/* Empty div to keep the edit/save block on the right */}
 
           {/* Edit / Save */}
           <div className="flex items-center gap-2">
             {editing ? (
               <>
                 <button
-                  onClick={() => { setEditing(false); setEditStatus(movement.status); setEditRemark(movement.remark ?? ""); setError(null); setSaveWarning(null); }}
+                  onClick={() => { setEditing(false); setEditRemark(movement.remark ?? ""); setError(null); setSaveWarning(null); }}
                   className="h-9 px-4 rounded-lg text-sm border border-border hover:bg-secondary"
                   disabled={saving}
                 >
@@ -336,11 +275,49 @@ export function InboundDetailModal({
                   Save changes
                 </button>
               </>
+            ) : confirmAction ? (
+              <div className="flex items-center gap-2 bg-secondary/40 rounded-lg p-1 pl-3 border border-border">
+                <span className="text-xs text-muted-foreground mr-1">
+                  Confirm {confirmAction === "APPROVED" ? "Approve" : "Reject"}?
+                </span>
+                <button
+                  onClick={() => handleQuickAction(confirmAction)}
+                  disabled={saving}
+                  className={`h-7 px-3 rounded-md text-xs font-medium text-white flex items-center gap-1.5 disabled:opacity-60 ${
+                    confirmAction === "APPROVED" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"
+                  }`}
+                >
+                  {saving && <Loader2 className="size-3.5 animate-spin" />} Yes
+                </button>
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  disabled={saving}
+                  className="h-7 px-3 rounded-md text-xs border border-border bg-background hover:bg-secondary disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
             ) : (
               <>
                 <button onClick={onClose} className="h-9 px-4 rounded-lg text-sm border border-border hover:bg-secondary">
                   Close
                 </button>
+                {canEdit && movement.status === "PENDING" && (
+                  <>
+                    <button
+                      onClick={() => setConfirmAction("REJECTED")}
+                      className="h-9 px-4 rounded-lg text-sm font-medium border border-red-500/30 text-red-500 bg-red-500/10 hover:bg-red-500/20 flex items-center gap-1.5"
+                    >
+                      <XCircle className="size-4" /> Reject
+                    </button>
+                    <button
+                      onClick={() => setConfirmAction("APPROVED")}
+                      className="h-9 px-4 rounded-lg text-sm font-medium border border-emerald-500/30 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="size-4" /> Approve
+                    </button>
+                  </>
+                )}
                 {canEdit && (
                   <button
                     onClick={() => setEditing(true)}
