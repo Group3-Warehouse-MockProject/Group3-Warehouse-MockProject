@@ -6,11 +6,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { warehouses } from "@/lib/warehouse-data";
+import { ApprovalHistoryItem } from "@/types";
 import {
   ClipboardCheck, Plus, X, Save, ListChecks,
   AlertTriangle, CheckCircle2, Boxes,
   ChevronLeft, ChevronRight, Loader2,
-  Search, Filter
+  Search, Filter, History, Clock
 } from "lucide-react";
 
 export const Route = createFileRoute("/stocktake")({
@@ -46,6 +47,7 @@ interface Stocktake {
   items: number;
   variance: number;
   details: StocktakeDetail[];
+  history?: ApprovalHistoryItem[];
 }
 
 // Map status DB → label hiển thị
@@ -158,21 +160,25 @@ function StocktakePage() {
     setPage(1);
   }
 
-  // --- Lấy danh sách phiếu từ API ---
-  const { data: rawStocktakes = [], isLoading } = useQuery<Stocktake[]>({
-    queryKey: ["stocktake", activeWarehouseId],
+  // --- Lấy một trang phiếu từ API ---
+  const { data: stocktakePage, isLoading } = useQuery<{
+    content: Stocktake[];
+    totalPages: number;
+    totalElements: number;
+  }>({
+    queryKey: ["stocktake", activeWarehouseId, page],
     queryFn: async () => {
-      try {
-        const res = await api.get("/stocktake", {
-          params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {},
-        });
-        return Array.isArray(res.data) ? res.data : [];
-      } catch {
-        return [];
-      }
+      const res = await api.get("/stocktake", {
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          page: page - 1,
+          size: limit,
+        },
+      });
+      return res.data;
     },
   });
-  const stocktakes = Array.isArray(rawStocktakes) ? rawStocktakes : [];
+  const stocktakes = stocktakePage?.content ?? [];
 
   // Lấy danh sách tất cả các kho phục vụ filter
   const { data: rawApiWarehouses = [] } = useQuery<any[]>({
@@ -283,10 +289,10 @@ function StocktakePage() {
     return count;
   }, [filters]);
 
-  // Phân trang
-  const totalPages = Math.max(1, Math.ceil(filteredStocktakes.length / limit));
+  // The server applies page boundaries. Filters currently apply to this page.
+  const totalPages = Math.max(1, stocktakePage?.totalPages ?? 1);
   const safePage = Math.min(page, totalPages);
-  const paginatedList = filteredStocktakes.slice((safePage - 1) * limit, safePage * limit);
+  const paginatedList = filteredStocktakes;
 
   // KPI (tính dựa trên filteredStocktakes)
   const totalItems = filteredStocktakes.reduce((s, x) => s + (x?.items || 0), 0);
@@ -606,7 +612,7 @@ function StocktakePage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
                   <div className="text-muted-foreground text-xs">
-                    Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, stocktakes.length)} of {stocktakes.length} entries
+                    Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, stocktakePage?.totalElements ?? stocktakes.length)} of {stocktakePage?.totalElements ?? stocktakes.length} entries
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -820,6 +826,56 @@ function StocktakePage() {
               </table>
             </div>
 
+            {/* Approval History Timeline */}
+            <div className="pt-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
+                <History className="size-3.5" /> Approval History
+              </div>
+              
+              <div className="relative border-l-2 border-border/60 ml-2 space-y-6">
+                {[...(viewing.history || [])]
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map((event, idx, arr) => {
+                    const isLatest = idx === 0;
+                    
+                    let ringColor = "bg-muted-foreground";
+                    if (isLatest) {
+                        if (event.newStatus === "COMPLETED" || event.newStatus === "APPROVED") ringColor = "bg-emerald-500";
+                        else if (event.newStatus === "CANCELLED" || event.newStatus === "REJECTED") ringColor = "bg-red-500";
+                        else if (event.newStatus === "IN_PROGRESS" || event.newStatus === "DELIVERING") ringColor = "bg-warning";
+                        else ringColor = "bg-blue-500";
+                    }
+
+                    return (
+                      <div key={event.id} className="relative pl-6">
+                        <div className={`absolute -left-[9px] top-1 size-4 rounded-full border-[3px] border-background ${ringColor}`} />
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold text-foreground">
+                              {statusLabel[event.newStatus] || event.newStatus}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              By: <strong className="text-foreground">{event.approverName}</strong>
+                            </div>
+                            {event.note && (
+                              <div className="text-xs mt-0.5 text-muted-foreground italic">
+                                "{event.note}"
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5 bg-secondary px-2 py-1 rounded-md">
+                            <Clock className="size-3" /> {new Date(event.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {(!viewing.history || viewing.history.length === 0) && (
+                  <div className="text-sm text-muted-foreground italic pl-4">No history recorded</div>
+                )}
+              </div>
+            </div>
+
             {/* Footer action buttons */}
             <div className="flex items-center justify-between pt-2">
               <div>
@@ -918,9 +974,11 @@ function CreateForm({
       if (!selectedWarehouseId) return [];
       try {
         const res = await api.get("/inventory", {
-          params: { warehouseIdParam: selectedWarehouseId },
+          params: { warehouseIdParam: selectedWarehouseId, page: 0, size: 15 },
         });
-        return Array.isArray(res.data) ? res.data : [];
+        // Backend returns PageResponse; extract content
+        const arr = res.data?.content ?? res.data;
+        return Array.isArray(arr) ? arr : [];
       } catch {
         return [];
       }

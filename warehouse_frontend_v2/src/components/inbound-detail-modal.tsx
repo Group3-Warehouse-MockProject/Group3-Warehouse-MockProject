@@ -1,27 +1,11 @@
 import { useState } from "react";
 import {
-  X, Calendar, User, Warehouse, FileText, Package,
+  X, Calendar, User, Warehouse, FileText, Package, History,
   CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
-
-export interface ReceiptMovement {
-  id: string;
-  receiptId: number;
-  type: string;
-  sku: string;
-  product: string;
-  partner: string;
-  staff: string;
-  warehouseId: string;
-  qty: number;
-  date: string;
-  status: string;
-  remark?: string;
-  createdAt: string;
-  updatedAt?: string;
-}
+import { ReceiptMovement } from "@/types";
 
 interface Props {
   /** All movements — modal will filter by receiptId to show sibling lines */
@@ -198,6 +182,60 @@ export function InboundDetailModal({
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Approval History Timeline */}
+          <div className="px-6 pb-6">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
+              <History className="size-3.5" /> Approval History
+            </div>
+            
+            <div className="relative border-l-2 border-border/60 ml-2 space-y-6">
+              {[...(movement.history || [])]
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map((event, idx) => {
+                  const isLatest = idx === 0;
+                  
+                  let ringColor = "bg-muted-foreground";
+                  if (isLatest) {
+                      if (event.newStatus === "COMPLETED" || event.newStatus === "APPROVED") ringColor = "bg-emerald-500";
+                      else if (event.newStatus === "CANCELLED" || event.newStatus === "REJECTED") ringColor = "bg-red-500";
+                      else if (event.newStatus === "IN_PROGRESS" || event.newStatus === "DELIVERING") ringColor = "bg-warning";
+                      else ringColor = "bg-blue-500";
+                  }
+
+                  return (
+                    <div key={event.id} className="relative pl-6">
+                      <div className={`absolute -left-[9px] top-1 size-4 rounded-full border-[3px] border-background ${ringColor}`} />
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold text-foreground">
+                            {event.newStatus === 'APPROVED' ? 'Approved' : 
+                             event.newStatus === 'REJECTED' ? 'Rejected' : 
+                             event.newStatus === 'COMPLETED' ? 'Completed' :
+                             event.newStatus === 'PENDING' ? 'Created (Draft)' :
+                             event.newStatus}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            By: <strong className="text-foreground">{event.approverName}</strong>
+                          </div>
+                          {event.note && (
+                            <div className="text-xs mt-0.5 text-muted-foreground italic">
+                              "{event.note}"
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5 bg-secondary px-2 py-1 rounded-md">
+                          <Clock className="size-3" /> {new Date(event.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              {(!movement.history || movement.history.length === 0) && (
+                <div className="text-sm text-muted-foreground italic pl-4">No history recorded</div>
+              )}
             </div>
           </div>
 

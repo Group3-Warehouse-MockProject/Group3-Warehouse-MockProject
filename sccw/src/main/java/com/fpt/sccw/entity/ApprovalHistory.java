@@ -16,13 +16,11 @@ public class ApprovalHistory extends BaseEntity {
     @Column(name = "document_type", nullable = false)
     private Status.DocumentType documentType;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "old_status", nullable = false)
-    private Status.TransactionStatus oldStatus;
+    @Column(name = "old_status")
+    private String oldStatus;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "new_status", nullable = false)
-    private Status.TransactionStatus newStatus;
+    private String newStatus;
 
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
@@ -32,15 +30,15 @@ public class ApprovalHistory extends BaseEntity {
     private User approver;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "inventory_check_id", nullable = false)
+    @JoinColumn(name = "inventory_check_id")
     private InventoryCheck inventoryCheck;
  
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "transfer_id", nullable = false)
+    @JoinColumn(name = "transfer_id")
     private Transfer transfer;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "warehouse_receipt_id", nullable = false)
+    @JoinColumn(name = "warehouse_receipt_id")
     private WarehouseReceipt warehouseReceipt;
 
 }

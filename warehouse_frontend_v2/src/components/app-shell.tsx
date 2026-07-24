@@ -26,6 +26,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { NotificationModal } from "@/components/notification-modal";
 
 interface NavItem {
   to: string;
@@ -204,10 +205,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </button>
 
-            <button className="size-10 rounded-lg bg-secondary border border-border grid place-items-center hover:bg-muted transition-colors relative">
-              <Bell className="size-4" />
-              <span className="absolute top-2 right-2 size-2 rounded-full bg-destructive" />
-            </button>
+            <NotificationModal />
+
 
             <div className="relative">
               <button

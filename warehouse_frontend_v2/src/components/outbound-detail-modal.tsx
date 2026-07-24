@@ -8,6 +8,7 @@ import {
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
 import { formatVND } from "@/lib/warehouse-data";
+import { ReceiptMovement } from "@/types";
 
 function parseRemark(remark?: string) {
   if (!remark) return { reference: "", assignee: "", note: "" };
@@ -27,26 +28,6 @@ function parseRemark(remark?: string) {
   return { reference, assignee, note };
 }
 
-export interface ReceiptMovement {
-  id: string;
-  receiptId: number;
-  type: string;
-  sku: string;
-  product: string;
-  partner: string;
-  staff: string;
-  warehouseId: string;
-  qty: number;
-  date: string;
-  status: string;
-  remark?: string;
-  createdAt: string;
-  updatedAt?: string;
-  paymentTerm?: "PREPAID" | "COD" | "DEBT";
-  paymentStatus?: "UNPAID" | "PARTIAL" | "PAID";
-  totalAmount?: number;
-  paidAmount?: number;
-}
 
 export interface PaymentRecord {
   id: number;
@@ -239,9 +220,15 @@ export function OutboundDetailModal({
       const pRes = await api.get<PaymentRecord[]>(`/receipts/${movement.receiptId}/payments`);
       setPayments(pRes.data);
 
-      // Refresh movement data so payment status updates in the parent list
-      const mRes = await api.get<ReceiptMovement[]>("/receipts", { params: { type: "OUTBOUND" } });
-      onUpdated(mRes.data);
+      // The payment endpoint updates one receipt; reload only that receipt's page
+      // rather than loading every outbound movement into the browser.
+      const mRes = await api.get<{ content: ReceiptMovement[] }>("/receipts", {
+        params: { type: "OUTBOUND", page: 0, size: 100 },
+      });
+      const updatedLines = (mRes.data?.content ?? []).filter(
+        (m: ReceiptMovement) => m.receiptId === movement.receiptId,
+      );
+      if (updatedLines.length) onUpdated(updatedLines);
 
       setShowPaymentForm(false);
       setPayAmount("");
@@ -287,7 +274,7 @@ export function OutboundDetailModal({
             <MetaRow icon={Calendar} label="Updated at"  value={movement.updatedAt ?? "—"} />
             <MetaRow icon={User}     label="Created by"  value={movement.staff} />
             <MetaRow icon={Warehouse} label="Warehouse"  value={warehouseCode(movement.warehouseId)} />
-            <MetaRow icon={User}     label="Assigned to" value={parsed.assignee || "Unassigned"} />
+            <MetaRow icon={User}     label="Assigned to" value={movement.assignedUserName || parsed.assignee || "Unassigned"} />
             <MetaRow icon={FileText} label="Reference #" value={parsed.reference || "—"} />
 
             {/* Status */}

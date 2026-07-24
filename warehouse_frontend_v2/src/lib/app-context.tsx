@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, useEffect, type ReactNode } from "react";
-import { type AppUser, type Role } from "@/lib/warehouse-data";
+import { type AppUser, type Role } from "@/types";
 import { parseJwt } from "@/lib/api";
 
 interface AppContextValue {
@@ -10,6 +10,8 @@ interface AppContextValue {
   canSwitchWarehouse: boolean;
   logout: () => void;
   updateCurrentUser: (data: Partial<AppUser>) => void;
+  refreshTick: number;
+  triggerGlobalRefresh: () => void;
 }
 
 const AppCtx = createContext<AppContextValue | null>(null);
@@ -53,6 +55,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeWarehouseId, setActiveWarehouseId] = useState<string | null>(
     currentUser?.warehouseId ?? null
   );
+  
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     // Listen for storage changes (e.g. login from another tab)
@@ -79,9 +83,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       updateCurrentUser: (data: Partial<AppUser>) => {
         setCurrentUser(prev => prev ? { ...prev, ...data } : null);
-      }
+      },
+      refreshTick,
+      triggerGlobalRefresh: () => setRefreshTick(t => t + 1)
     };
-  }, [currentUser, activeWarehouseId, canSwitchWarehouse]);
+  }, [currentUser, activeWarehouseId, canSwitchWarehouse, refreshTick]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

@@ -19,8 +19,11 @@ function ProductsPage() {
   const { activeWarehouseId } = useApp();
   const [open, setOpen] = useState(false);
   const [openImport, setOpenImport] = useState(false);
-  const [page, setPage] = useState(1);
-  const limit = 10;
+  
+  // Server-side pagination state
+  const [page, setPage] = useState(0); // 0-indexed for backend
+  const limit = 15;
+  
   const [q, setQ] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
@@ -30,16 +33,30 @@ function ProductsPage() {
   const [filterPriceMin, setFilterPriceMin] = useState("");
   const [filterPriceMax, setFilterPriceMax] = useState("");
 
-  
-  const { data: productData, isLoading, error } = useQuery({
-    queryKey: ["products", activeWarehouseId],
+  // Reset page whenever filters change
+  useEffect(() => { setPage(0); }, [q, filterCategory, filterStatus, filterCostMin, filterCostMax, filterPriceMin, filterPriceMax, activeWarehouseId]);
+
+  const { data: pageData, isLoading, error } = useQuery({
+    queryKey: ["products", activeWarehouseId, page],
     queryFn: async () => {
       const res = await api.get("/products", {
-        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          page,
+          size: limit,
+        }
       });
-      return res.data;
+      return res.data as {
+        content: any[];
+        totalPages: number;
+        totalElements: number;
+      };
     }
   });
+
+  const productData = pageData?.content ?? [];
+  const totalPages = pageData?.totalPages ?? 1;
+  const totalElements = pageData?.totalElements ?? 0;
 
   const { data: warehouses } = useQuery({
     queryKey: ["warehouses"],
@@ -57,12 +74,13 @@ function ProductsPage() {
     }
   });
 
-  const { data: suppliers } = useQuery({
-    queryKey: ["suppliers"],
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers", "reference"],
     queryFn: async () => {
-      const res = await api.get("/suppliers");
-      return res.data;
-    }
+      const res = await api.get("/suppliers", { params: { page: 0, size: 100 } });
+      return res.data?.content ?? [];
+    },
+    staleTime: 5 * 60_000,
   });
 
   const { data: locations } = useQuery({
@@ -99,10 +117,6 @@ function ProductsPage() {
 
     return matchesQ && matchesCategory && matchesStatus && matchesCost && matchesPrice;
   });
-  
-  const totalPages = Math.max(1, Math.ceil(list.length / limit));
-  const safePage = Math.min(page, totalPages);
-  const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
   
   const units = list.reduce((s: number, p: any) => s + p.stock, 0);
   const low = list.filter((p: any) => p.stock < p.reorder).length;
@@ -261,7 +275,7 @@ function ProductsPage() {
 
               {/* Grid Table Body */}
               <div className="divide-y divide-border/60">
-                {paginatedList.map((p: any) => {
+                {list.map((p: any) => {
                   const low = p.stock < p.reorder;
                   const out = p.stock === 0;
                   return (
@@ -305,7 +319,7 @@ function ProductsPage() {
                     </div>
                   );
                 })}
-                {paginatedList.length === 0 && (
+                {list.length === 0 && (
                   <div className="p-8 text-center text-muted-foreground text-sm">
                     No products match your filters.
                   </div>
@@ -313,41 +327,42 @@ function ProductsPage() {
               </div>
             </div>
           </div>
-          {totalPages > 1 && <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
               <div className="text-muted-foreground text-xs">
-                Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, list.length)} of {list.length} entries
+                Showing {page * limit + 1}–{Math.min((page + 1) * limit, totalElements)} of {totalElements} entries
               </div>
-            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
                   className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
                 >
-                <ChevronLeft className="size-4" />
-              </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                  <ChevronLeft className="size-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i).map((n) => (
                   <button
                     key={n}
                     onClick={() => setPage(n)}
                     className={`size-8 rounded-md text-xs font-medium ${
-                      n === safePage
+                      n === page
                         ? "bg-primary text-primary-foreground"
                         : "bg-secondary border border-border hover:bg-muted"
                     }`}
                   >
-                    {n}
+                    {n + 1}
                   </button>
                 ))}
                 <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
                   className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
                 >
-                <ChevronRight className="size-4" />
-              </button>
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
             </div>
-          </div>
-          }
+          )}
         </div>
       </div>
       <AddSkuModal open={open} onClose={() => setOpen(false)} warehouses={warehouses || []} categories={categories || []} suppliers={suppliers || []} locations={locations || []} />
@@ -367,20 +382,18 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
     }
   }, [open]);
 
-  const { data: allProducts } = useQuery({
-    queryKey: ["all-products-for-locations"],
+  const { data: occupiedLocationsData = [] } = useQuery<string[]>({
+    queryKey: ["occupied-locations", selectedWarehouse],
     queryFn: async () => {
-      const res = await api.get("/products");
+      const res = await api.get("/products/occupied-locations", {
+        params: { warehouseId: selectedWarehouse },
+      });
       return res.data;
     },
-    enabled: open
+    enabled: open && Boolean(selectedWarehouse),
   });
 
-  const occupiedLocations = new Set(
-    (allProducts || [])
-      .filter((p: any) => p.warehouseId === selectedWarehouse)
-      .map((p: any) => p.location)
-  );
+  const occupiedLocations = new Set(occupiedLocationsData);
 
   const availableLocations = locations.filter((loc: any) => {
     const locStr = `${loc.zoneCode}-${loc.rackCode}-${loc.binCode}`;
