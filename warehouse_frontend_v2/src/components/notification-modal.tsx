@@ -1,6 +1,6 @@
 import { useApp } from "@/lib/app-context";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, API_BASE } from "@/lib/api";
 import { Bell, Check, Info, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,7 +51,7 @@ export function NotificationModal() {
 
         const token = localStorage.getItem("token") || "";
         const eventSource: EventSource = new EventSource(
-            `http://localhost:8080/api/notifications/subscribe/${userId}?token=${token}`
+            `${API_BASE}/notifications/subscribe/${userId}?token=${token}`
         );
 
         eventSource.addEventListener('INIT', (event: MessageEvent): void => {
