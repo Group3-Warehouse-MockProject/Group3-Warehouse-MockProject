@@ -81,7 +81,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           showErrorMessage: true,
           errorTitle: "Invalid Date",
           error: "Please enter a valid date (e.g. 2026-07-15)",
-          formulae: [new Date("2000-01-01")]
+          formulae: ['DATE(2000,1,1)']
         };
 
         templateSheet.getCell(`F${i}`).dataValidation = {
@@ -91,7 +91,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           showErrorMessage: true,
           errorTitle: "Invalid Quantity",
           error: "Quantity must be a whole number greater than 0.",
-          formulae: [0]
+          formulae: ['0']
         };
 
         templateSheet.getCell(`G${i}`).dataValidation = {
@@ -101,7 +101,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           showErrorMessage: true,
           errorTitle: "Invalid Unit Cost",
           error: "Unit cost must be a number greater than or equal to 0.",
-          formulae: [0]
+          formulae: ['0']
         };
 
         if (numWH > 0) {
