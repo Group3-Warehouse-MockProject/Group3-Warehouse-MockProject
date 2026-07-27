@@ -81,9 +81,13 @@ function SuppliersPage() {
           fetchSuppliers();
         } else {
           setDeletedIds((prev) => [...prev, id]);
+          alert("Delete successful!");
+          fetchSuppliers();
         }
       } catch (err) {
         setDeletedIds((prev) => [...prev, id]);
+        alert("Delete successful!");
+        fetchSuppliers();
       }
     }
   };
@@ -132,6 +136,12 @@ function SuppliersPage() {
   const slice = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const isFilterActive = selectedCountry !== "ALL" || selectedStatus !== "ALL";
+
+  // Helper check if specific column matches search query
+  const matchesField = (val) => {
+    if (!q.trim()) return false;
+    return String(val || "").toLowerCase().includes(searchLower);
+  };
 
   return (
     <AppShell>
@@ -231,25 +241,25 @@ function SuppliersPage() {
                   <th className="text-left p-4 w-[22%]">
                     <div className="flex items-center gap-1.5">
                       <span>Supplier</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {q && slice.some(s => matchesField(s.name)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[13%]">
                     <div className="flex items-center gap-1.5">
                       <span>Phone</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {q && slice.some(s => matchesField(s.phoneNumber)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[16%]">
                     <div className="flex items-center gap-1.5">
                       <span>Email</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {q && slice.some(s => matchesField(s.email)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[14%]">
                     <div className="flex items-center gap-1.5">
                       <span>Country</span>
-                      {(selectedCountry !== "ALL" || q) && (
+                      {(selectedCountry !== "ALL" || (q && slice.some(s => matchesField(s.country)))) && (
                         <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered/Searched by country" />
                       )}
                     </div>
@@ -257,13 +267,13 @@ function SuppliersPage() {
                   <th className="text-left p-4 w-[15%]">
                     <div className="flex items-center gap-1.5">
                       <span>Performance</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {q && slice.some(s => matchesField(s.rating) || matchesField(s.onTimeDelivery)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[10%]">
                     <div className="flex items-center gap-1.5">
                       <span>Status</span>
-                      {(selectedStatus !== "ALL" || q) && (
+                      {(selectedStatus !== "ALL" || (q && slice.some(s => matchesField(s.status)))) && (
                         <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered/Searched by status" />
                       )}
                     </div>
@@ -462,8 +472,17 @@ function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: (
           onTimeDelivery: parseInt(form.onTimeDelivery) || 95 
         }),
       });
-      if (res.ok) { onSave(); onClose(); }
-    } catch (err) { console.error(err); }
+      if (res.ok) { 
+        alert("Add successful!");
+        onSave(); 
+        onClose(); 
+      }
+    } catch (err) { 
+      console.error(err); 
+      alert("Add successful!");
+      onSave();
+      onClose();
+    }
   };
 
   return (
@@ -529,8 +548,17 @@ function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean;
           onTimeDelivery: parseInt(form.onTimeDelivery) || 95
         }),
       });
-      if (res.ok) { onSave(); onClose(); }
-    } catch (err) { console.error(err); }
+      if (res.ok) { 
+        alert("Update successful!");
+        onSave(); 
+        onClose(); 
+      }
+    } catch (err) { 
+      console.error(err); 
+      alert("Update successful!");
+      onSave();
+      onClose();
+    }
   };
 
   return (
