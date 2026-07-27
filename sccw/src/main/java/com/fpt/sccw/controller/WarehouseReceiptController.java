@@ -458,7 +458,8 @@ public class WarehouseReceiptController {
                     .product(product)
                     .warehouse(warehouse)
                     .quantity(qty)
-                    .lowStockThreshold(0L)
+                    .lowStockThreshold(10L)
+                    .outOfStockWarningDays(3L)
                     .build());
         }
     }

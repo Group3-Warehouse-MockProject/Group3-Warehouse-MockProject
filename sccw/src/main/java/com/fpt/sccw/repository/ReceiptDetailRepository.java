@@ -24,4 +24,11 @@ public interface ReceiptDetailRepository extends JpaRepository<ReceiptDetail, Lo
     Page<ReceiptDetail> findMovementPage(@Param("warehouseId") Long warehouseId,
                                          @Param("type") com.fpt.sccw.entity.Status.TransactionType type,
                                          Pageable pageable);
+
+    @Query("SELECT COALESCE(SUM(d.quantity), 0) FROM ReceiptDetail d JOIN d.receipt r " +
+           "WHERE r.warehouse.id = :warehouseId AND d.product.id = :productId " +
+           "AND r.type = com.fpt.sccw.entity.Status.TransactionType.OUTBOUND " +
+           "AND r.status = com.fpt.sccw.entity.Status.ReceiptStatus.COMPLETED " +
+           "AND r.createdAt >= :since")
+    Long sumOutboundQuantitySince(@Param("warehouseId") Long warehouseId, @Param("productId") Long productId, @Param("since") java.time.Instant since);
 }

@@ -71,4 +71,22 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
            "WHERE i.warehouse.id = :warehouseId",
            countQuery = "SELECT COUNT(i) FROM Inventory i WHERE i.warehouse.id = :warehouseId")
     Page<Inventory> findByWarehouseIdEagerPaged(@Param("warehouseId") Long warehouseId, Pageable pageable);
+
+    @Query("SELECT i FROM Inventory i " +
+           "LEFT JOIN FETCH i.product p " +
+           "LEFT JOIN FETCH p.category " +
+           "LEFT JOIN FETCH p.supplier " +
+           "LEFT JOIN FETCH i.warehouse " +
+           "LEFT JOIN FETCH i.location " +
+           "WHERE i.quantity <= i.lowStockThreshold AND i.lowStockThreshold > 0")
+    List<Inventory> findLowStockItems();
+
+    @Query("SELECT i FROM Inventory i " +
+           "LEFT JOIN FETCH i.product p " +
+           "LEFT JOIN FETCH p.category " +
+           "LEFT JOIN FETCH p.supplier " +
+           "LEFT JOIN FETCH i.warehouse " +
+           "LEFT JOIN FETCH i.location " +
+           "WHERE i.quantity <= i.lowStockThreshold AND i.lowStockThreshold > 0 AND i.warehouse.id = :warehouseId")
+    List<Inventory> findLowStockItemsByWarehouseId(@Param("warehouseId") Long warehouseId);
 }
