@@ -119,17 +119,18 @@ export function NotificationModal() {
     };
 
     const markAsRead = async (notifId: string) => {
-        setNotifications(prev => prev.map(n => {
-            if (n.id === notifId && !n.isRead) {
-                setUnreadCount(c => Math.max(0, c - 1));
-                return { ...n, isRead: true };
+        const notifToUpdate = notifications.find(n => n.id === notifId);
+        if (notifToUpdate && !notifToUpdate.isRead) {
+            setUnreadCount(c => Math.max(0, c - 1));
+            setNotifications(prev => prev.map(n => 
+                n.id === notifId ? { ...n, isRead: true } : n
+            ));
+            
+            try {
+                await api.patch(`/notifications/${userId}/read/${notifId}`);
+            } catch (error) {
+                console.error("Failed to mark as read:", error);
             }
-            return n;
-        }));
-        try {
-            await api.patch(`/notifications/${userId}/read/${notifId}`);
-        } catch (error) {
-            console.error("Failed to mark as read:", error);
         }
     };
 

@@ -24,6 +24,15 @@ public class Inventory extends BaseEntity{
     @Column(name = "low_stock_threshold")
     private Long lowStockThreshold;
 
+    @Column(name = "out_of_stock_warning_days")
+    private Long outOfStockWarningDays;
+
+    @Column(name = "daily_velocity")
+    private Double dailyVelocity;
+
+    @Column(name = "estimated_days_left")
+    private Long estimatedDaysLeft;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;

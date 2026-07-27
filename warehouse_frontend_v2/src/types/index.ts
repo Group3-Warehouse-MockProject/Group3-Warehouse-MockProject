@@ -68,6 +68,9 @@ export interface Product {
   cost: number;
   location: string;
   warehouseId: string;
+  outOfStockWarningDays?: number;
+  dailyVelocity?: number;
+  estimatedDaysLeft?: number;
 }
 
 export interface Movement {

@@ -101,9 +101,17 @@ public class ProductController {
         long reorder = product.getInventories().stream()
                 .mapToLong(inv -> inv.getLowStockThreshold() != null ? inv.getLowStockThreshold() : 0L)
                 .sum();
+                
+        String warehouseIds = product.getInventories().stream()
+                .filter(inv -> inv.getWarehouse() != null)
+                .map(inv -> String.valueOf(inv.getWarehouse().getId()))
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(","));
+                
         ProductDTO dto = ProductDTO.fromEntity(product, null);
         dto.setStock(stock);
         dto.setReorder(reorder);
+        dto.setWarehouseId(warehouseIds);
         return dto;
     }
 
