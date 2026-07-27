@@ -26,8 +26,8 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
       // Fetch dynamic lookup data from backend
       const [wRes, sRes, pRes] = await Promise.all([
-        api.get<any[]>("/warehouses"),
-        api.get<any[]>("/suppliers"),
+        api.get<any>("/warehouses"),
+        api.get<any>("/suppliers"),
         api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
       ]);
 
