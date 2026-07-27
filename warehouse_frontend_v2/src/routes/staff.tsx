@@ -438,102 +438,104 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
           )}
         </div>
 
-        {activeTab === "details" && (
-        <div className="p-6 space-y-6">
-          <div className="flex items-center gap-4">
-            <div className="size-14 rounded-full grid place-items-center text-lg font-bold shrink-0" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
-              {user.initials}
-            </div>
-            <div>
-              <div className="text-lg font-bold">{user.fullName}</div>
-              <div className="text-sm text-muted-foreground font-mono">@{user.username}</div>
-            </div>
-          </div>
+        <div className="max-h-[70vh] overflow-y-auto">
+          {activeTab === "details" && (
+            <div className="p-6 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="size-14 rounded-full grid place-items-center text-lg font-bold shrink-0" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
+                  {user.initials}
+                </div>
+                <div>
+                  <div className="text-lg font-bold">{user.fullName}</div>
+                  <div className="text-sm text-muted-foreground font-mono">@{user.username}</div>
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Email</div>
-              <div className="font-medium truncate" title={user.email}>{user.email}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Phone</div>
-              <div className="font-medium">{user.phone || "—"}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Department</div>
-              <div className="font-medium">{user.department || "—"}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">System Title</div>
-              <div className="font-medium text-muted-foreground">{user.title}</div>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-border">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Access & Role</div>
-            
-            {!isEditing ? (
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">Role</div>
-                  <span className={`px-2 py-1 rounded-md text-xs font-medium ${roleTone[user.role] || roleTone.Staff}`}>{roleLabels[user.role as keyof typeof roleLabels] || user.role}</span>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Email</div>
+                  <div className="font-medium truncate" title={user.email}>{user.email}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">Status</div>
-                  <span className={`px-2 py-1 rounded-md text-xs font-medium ${user.isDeleted ? "bg-muted text-muted-foreground" : "bg-success/15 text-success"}`}>{user.isDeleted ? "Deactive" : "Active"}</span>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Phone</div>
+                  <div className="font-medium">{user.phone || "—"}</div>
                 </div>
-                <div className="col-span-2 mt-2">
-                  <div className="text-xs text-muted-foreground mb-1">Assigned Warehouse</div>
-                  <div className="font-medium truncate" title={getWarehouseName(user.warehouseId)}>{getWarehouseName(user.warehouseId)}</div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Department</div>
+                  <div className="font-medium">{user.department || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">System Title</div>
+                  <div className="font-medium text-muted-foreground">{user.title}</div>
                 </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Full Name" value={fullName} onChange={setFullName} />
-                <Input label="Email" value={email} onChange={setEmail} type="email" />
-                <Input label="Phone" value={phone} onChange={setPhone} />
-                <Input label="Department" value={department} onChange={setDepartment} />
-                
-                <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Role</div>
-                  <select 
-                    value={role} 
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  >
-                    <option value="Admin">Admin</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Warehouse_Manager">Warehouse Manager</option>
-                    <option value="Staff">Staff</option>
-                  </select>
-                </label>
-                {(role !== "Admin" && role !== "Manager") && (
-                  <label className="block">
-                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Warehouse</div>
-                    <select 
-                      value={warehouseId} 
-                      onChange={(e) => setWarehouseId(e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                    >
-                      <option value="" disabled>Select a warehouse</option>
-                      {dbWarehouses.map(w => (
-                        <option key={w.id} value={w.id}>{w.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {error && <div className="col-span-2 text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">{error}</div>}
-              </div>
-            )}
-          </div>
-        </div>
-        )} {/* End details tab */}
 
-        {activeTab === "activity" && canViewActivity && (
-          <div className="p-6">
-            <ActivityTimeline userId={user.id} />
-          </div>
-        )}
+              <div className="pt-4 border-t border-border">
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Access & Role</div>
+                
+                {!isEditing ? (
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Role</div>
+                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${roleTone[user.role] || roleTone.Staff}`}>{roleLabels[user.role as keyof typeof roleLabels] || user.role}</span>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Status</div>
+                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${user.isDeleted ? "bg-muted text-muted-foreground" : "bg-success/15 text-success"}`}>{user.isDeleted ? "Deactive" : "Active"}</span>
+                    </div>
+                    <div className="col-span-2 mt-2">
+                      <div className="text-xs text-muted-foreground mb-1">Assigned Warehouse</div>
+                      <div className="font-medium truncate" title={getWarehouseName(user.warehouseId)}>{getWarehouseName(user.warehouseId)}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="Full Name" value={fullName} onChange={setFullName} />
+                    <Input label="Email" value={email} onChange={setEmail} type="email" />
+                    <Input label="Phone" value={phone} onChange={setPhone} />
+                    <Input label="Department" value={department} onChange={setDepartment} />
+                    
+                    <label className="block">
+                      <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Role</div>
+                      <select 
+                        value={role} 
+                        onChange={(e) => setRole(e.target.value)}
+                        className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      >
+                        <option value="Admin">Admin</option>
+                        <option value="Manager">Manager</option>
+                        <option value="Warehouse_Manager">Warehouse Manager</option>
+                        <option value="Staff">Staff</option>
+                      </select>
+                    </label>
+                    {(role !== "Admin" && role !== "Manager") && (
+                      <label className="block">
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Warehouse</div>
+                        <select 
+                          value={warehouseId} 
+                          onChange={(e) => setWarehouseId(e.target.value)}
+                          className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                        >
+                          <option value="" disabled>Select a warehouse</option>
+                          {dbWarehouses.map(w => (
+                            <option key={w.id} value={w.id}>{w.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    {error && <div className="col-span-2 text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">{error}</div>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "activity" && canViewActivity && (
+            <div className="p-6">
+              <ActivityTimeline userId={user.id} />
+            </div>
+          )}
+        </div>
 
         {canEdit && (
           <div className="flex items-center justify-between px-6 py-4 bg-secondary/30 border-t border-border">
@@ -868,38 +870,43 @@ function ActivityTimeline({ userId }: { userId: number }) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
+      <div className="space-y-0">
         {logs.map((log: any, idx: number) => {
           const Icon = actionIcons[log.actionType] || Activity;
           const color = actionColors[log.actionType] || "text-muted-foreground bg-secondary";
           return (
-            <div key={log.id} className="flex gap-3 items-start group">
+            <div key={log.id} className="flex gap-4 items-stretch group">
               {/* Timeline line */}
               <div className="flex flex-col items-center">
-                <div className={`size-8 rounded-full grid place-items-center shrink-0 ${color}`}>
+                <div className={`size-8 rounded-full grid place-items-center shrink-0 shadow-sm ring-4 ring-background ${color} group-hover:scale-110 transition-transform duration-200`}>
                   <Icon className="size-3.5" />
                 </div>
-                {idx < logs.length - 1 && <div className="w-px flex-1 min-h-[24px] bg-border" />}
+                {idx < logs.length - 1 && (
+                  <div className="w-px flex-1 min-h-[1.5rem] bg-border group-hover:bg-primary/30 transition-colors my-1" />
+                )}
               </div>
+              
               {/* Content */}
-              <div className="flex-1 pb-4">
+              <div className="flex-1 pb-6 pt-1">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border border-border/60 bg-secondary/40">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-border/60 bg-secondary/40 text-foreground">
                       {log.actionType.replace(/_/g, " ")}
                     </span>
                     {log.details && (
-                      <p className="mt-1.5 text-sm text-foreground">{log.details}</p>
+                      <p className="mt-1.5 text-[13px] text-foreground/90 leading-relaxed font-medium">{log.details}</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                    <Clock className="size-3" />
-                    {new Date(log.timestamp).toLocaleString()}
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground shrink-0 bg-secondary/30 px-2.5 py-1 rounded-md border border-border/40">
+                    <Clock className="size-3 opacity-70" />
+                    {new Date(log.timestamp).toLocaleString(undefined, {
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })}
                   </div>
                 </div>
                 {log.ipAddress && (
-                  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Globe className="size-3" />
+                  <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+                    <Globe className="size-3 opacity-50" />
                     {log.ipAddress}
                   </div>
                 )}
