@@ -70,9 +70,7 @@ public class ProductController {
 
         final Long warehouseId = effectiveWarehouseId;
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "name"));
-        Page<Product> productPage = warehouseId != null
-                ? productRepository.findPageActiveWithInventory(warehouseId, pageable)
-                : productRepository.findPageActiveWithInventoryAll(pageable);
+        Page<Product> productPage = productRepository.findPageActiveWithInventoryAll(pageable);
 
         List<ProductDTO> pageContent = productPage.getContent().stream()
                 .map(product -> toProductDto(product, warehouseId))
