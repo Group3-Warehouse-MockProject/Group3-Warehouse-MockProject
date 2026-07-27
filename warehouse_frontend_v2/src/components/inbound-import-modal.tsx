@@ -31,8 +31,8 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
       ]);
 
-      const warehouses = wRes.data;
-      const suppliers = sRes.data;
+      const warehouses = wRes.data?.content ?? (wRes.data as any);
+      const suppliers = sRes.data?.content ?? (sRes.data as any);
       const products = pRes.data?.content ?? (pRes.data as any);
 
       // Populate DataSheet with available choices
