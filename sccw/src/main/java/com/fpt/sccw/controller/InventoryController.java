@@ -1,18 +1,20 @@
 package com.fpt.sccw.controller;
 
 import com.fpt.sccw.dto.response.InventoryDTO;
+import com.fpt.sccw.dto.response.PageResponse;
 import com.fpt.sccw.entity.Inventory;
 import com.fpt.sccw.repository.InventoryRepository;
 import com.fpt.sccw.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/inventory")
@@ -23,10 +25,21 @@ public class InventoryController {
     private final InventoryRepository inventoryRepository;
     private final UserRepository userRepository;
 
+    /**
+     * Returns a paginated list of inventory rows.
+     *
+     * Performance notes:
+     *  - Uses JOIN FETCH queries (findByWarehouseIdEagerPaged / findAllEagerPaged)
+     *    to load Inventory + Product + Category + Supplier + Warehouse + Location
+     *    in a single SQL round-trip, eliminating the previous N+1 problem.
+     *  - Separate countQuery avoids Hibernate's in-memory pagination.
+     */
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<List<InventoryDTO>> getAllInventory(
-            @RequestParam(required = false) Long warehouseIdParam
+    public ResponseEntity<PageResponse<InventoryDTO>> getAllInventory(
+            @RequestParam(required = false) Long warehouseIdParam,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
@@ -34,35 +47,29 @@ public class InventoryController {
         }
 
         String email = authentication.getName();
-        // Fetch user from DB to check role and warehouse
         var user = userRepository.findByEmail(email).orElseThrow();
-        
         String roleName = user.getRole().getRoleName().name();
-        
-        List<Inventory> inventories;
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").ascending());
+        Page<Inventory> inventoryPage;
 
         if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) {
-            // Admin and Manager can see all inventory, or filter by specific warehouse
             if (warehouseIdParam != null) {
-                inventories = inventoryRepository.findByWarehouseId(warehouseIdParam);
+                // Single JOIN FETCH query — no N+1
+                inventoryPage = inventoryRepository.findByWarehouseIdEagerPaged(warehouseIdParam, pageable);
             } else {
-                inventories = inventoryRepository.findAll();
+                inventoryPage = inventoryRepository.findAllEagerPaged(pageable);
             }
         } else {
-            // Warehouse Manager and Staff can only see their warehouse's inventory
             Long warehouseId = user.getWarehouse() != null ? user.getWarehouse().getId() : null;
             if (warehouseId == null) {
-                // If they don't have a warehouse assigned, they see nothing
-                inventories = List.of();
+                inventoryPage = Page.empty(pageable);
             } else {
-                inventories = inventoryRepository.findByWarehouseId(warehouseId);
+                inventoryPage = inventoryRepository.findByWarehouseIdEagerPaged(warehouseId, pageable);
             }
         }
 
-        List<InventoryDTO> result = inventories.stream()
-                .map(InventoryDTO::fromEntity)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(result);
+        Page<InventoryDTO> dtoPage = inventoryPage.map(InventoryDTO::fromEntity);
+        return ResponseEntity.ok(new PageResponse<>(dtoPage));
     }
 }

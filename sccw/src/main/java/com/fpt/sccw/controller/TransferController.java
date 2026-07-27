@@ -1,39 +1,22 @@
 package com.fpt.sccw.controller;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.*;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.fpt.sccw.dto.request.TransferRequest;
+import com.fpt.sccw.dto.response.PageResponse;
 import com.fpt.sccw.dto.response.TransferDTO;
-import com.fpt.sccw.entity.Inventory;
-import com.fpt.sccw.entity.Product;
-import com.fpt.sccw.entity.Status;
-import com.fpt.sccw.entity.Transfer;
-import com.fpt.sccw.entity.TransferDetail;
-import com.fpt.sccw.entity.User;
-import com.fpt.sccw.entity.Warehouse;
-import com.fpt.sccw.repository.InventoryRepository;
-import com.fpt.sccw.repository.ProductRepository;
-import com.fpt.sccw.repository.TransferRepository;
-import com.fpt.sccw.repository.UserRepository;
-import com.fpt.sccw.repository.WarehouseRepository;
+import com.fpt.sccw.entity.*;
+import com.fpt.sccw.repository.*;
 
 import lombok.RequiredArgsConstructor;
 
@@ -48,30 +31,39 @@ public class TransferController {
     private final WarehouseRepository warehouseRepository;
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
+    private final ApprovalHistoryRepository approvalHistoryRepository;
 
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<List<TransferDTO>> getTransfers(@RequestParam(required = false) Long warehouseIdParam) {
+    public ResponseEntity<PageResponse<TransferDTO>> getTransfers(
+            @RequestParam(required = false) Long warehouseIdParam,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
         User user = currentUser();
         String roleName = user.getRole().getRoleName().name();
 
-        List<Transfer> transfers;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Transfer> transferPage;
+
         if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) {
-            transfers = warehouseIdParam == null
-                    ? transferRepository.findAll()
-                    : transferRepository.findByWarehouseIdOrWarehouseDestinationId(warehouseIdParam, warehouseIdParam);
+            if (warehouseIdParam == null) {
+                // ── JOIN FETCH: load all relations in 2 SQL statements ─────────
+                transferPage = transferRepository.findAllEagerPaged(pageable);
+            } else {
+                transferPage = transferRepository.findByWarehouseEagerPaged(warehouseIdParam, pageable);
+            }
         } else {
             Long warehouseId = user.getWarehouse() != null ? user.getWarehouse().getId() : null;
-            transfers = warehouseId == null
-                    ? List.of()
-                    : transferRepository.findByWarehouseIdOrWarehouseDestinationId(warehouseId, warehouseId);
+            if (warehouseId == null) {
+                transferPage = Page.empty(pageable);
+            } else {
+                transferPage = transferRepository.findByWarehouseEagerPaged(warehouseId, pageable);
+            }
         }
 
-        List<TransferDTO> result = transfers.stream()
-                .sorted(Comparator.comparing(Transfer::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
-                .map(TransferDTO::fromEntity)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(result);
+        Page<TransferDTO> dtoPage = transferPage.map(TransferDTO::fromEntity);
+        return ResponseEntity.ok(new PageResponse<>(dtoPage));
     }
 
     @PostMapping
@@ -102,7 +94,7 @@ public class TransferController {
                 .createdByUser(user)
                 .legacyUser(user)
                 .assignedByUser(assignee)
-                .details(new ArrayList<>())
+                .details(new java.util.LinkedHashSet<>())
                 .build();
 
         for (TransferRequest.TransferLineRequest line : request.getLines()) {
@@ -123,7 +115,17 @@ public class TransferController {
         }
 
         Transfer saved = transferRepository.save(transfer);
-        return ResponseEntity.ok(TransferDTO.fromEntity(saved));
+
+        ApprovalHistory history = ApprovalHistory.builder()
+                .transfer(saved)
+                .documentType(Status.DocumentType.TRANSFER)
+                .newStatus(saved.getStatus().name())
+                .note("Transfer created")
+                .approver(user)
+                .build();
+        approvalHistoryRepository.save(history);
+
+        return ResponseEntity.ok(com.fpt.sccw.dto.response.TransferDTO.fromEntity(saved));
     }
 
     @PutMapping("/{id}/status")
@@ -143,9 +145,23 @@ public class TransferController {
             applyCrossWarehouseInventory(transfer);
         }
 
+        String oldStatus = transfer.getStatus().name();
         transfer.setStatus(nextStatus);
         Transfer saved = transferRepository.save(transfer);
-        return ResponseEntity.ok(TransferDTO.fromEntity(saved));
+
+        if (!oldStatus.equals(saved.getStatus().name())) {
+            ApprovalHistory history = ApprovalHistory.builder()
+                    .transfer(saved)
+                    .documentType(Status.DocumentType.TRANSFER)
+                    .oldStatus(oldStatus)
+                    .newStatus(saved.getStatus().name())
+                    .note("Status updated to " + saved.getStatus().name())
+                    .approver(user)
+                    .build();
+            approvalHistoryRepository.save(history);
+        }
+
+        return ResponseEntity.ok(com.fpt.sccw.dto.response.TransferDTO.fromEntity(saved));
     }
 
     private User currentUser() {

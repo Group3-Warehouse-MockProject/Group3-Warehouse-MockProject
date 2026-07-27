@@ -1,8 +1,6 @@
 package com.fpt.sccw.dto.response;
 
-import com.fpt.sccw.entity.InventoryCheck;
-import com.fpt.sccw.entity.InventoryCheckDetail;
-import com.fpt.sccw.entity.Status;
+import com.fpt.sccw.entity.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -37,6 +35,9 @@ public class InventoryCheckDTO {
 
     // Chi tiết sản phẩm
     private List<DetailDTO> details;
+
+    // Lịch sử duyệt
+    private List<ApprovalHistoryDTO> history;
 
     // Thống kê tổng hợp
     private Integer totalItems;
@@ -95,6 +96,12 @@ public class InventoryCheckDTO {
                 ? check.getCreatedAt().toLocalDate().toString()
                 : "";
 
+        List<ApprovalHistoryDTO> historyDTOs = check.getApprovalHistories() != null
+                ? check.getApprovalHistories().stream()
+                        .map(ApprovalHistoryDTO::fromEntity)
+                        .collect(Collectors.toList())
+                : List.of();
+
         return InventoryCheckDTO.builder()
                 .id(check.getId())
                 .status(check.getStatus() != null ? check.getStatus().name() : "PENDING")
@@ -113,6 +120,7 @@ public class InventoryCheckDTO {
                 .totalVariance(totalVariance)
                 .variance(totalVariance)
                 .details(detailDTOs)
+                .history(historyDTOs)
                 .build();
     }
 }

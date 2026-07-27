@@ -1,40 +1,21 @@
-export type Category =
-  | "CPU"
-  | "GPU"
-  | "RAM"
-  | "SSD"
-  | "Mainboard"
-  | "PSU"
-  | "Case"
-  | "Cooling"
-  | "Laptop";
-
-export type Role = "Admin" | "Manager" | "Warehouse_Manager" | "Staff";
-
-export interface Warehouse {
-  id: string;
-  name: string;
-  code: string;
-  address: string;
-  city: string;
-  capacity: number;
-}
+import {
+  ApprovalHistoryItem,
+  Category,
+  Role,
+  Warehouse,
+  AppUser,
+  Product,
+  Movement,
+  Order,
+  Supplier,
+  Stocktake
+} from "@/types";
 
 export const warehouses: Warehouse[] = [
   { id: "1", name: "TechStock Saigon Hub", code: "TS-HCM-01", address: "Lot B12, Tan Binh Industrial Park", city: "Ho Chi Minh City", capacity: 12400 },
   { id: "2", name: "TechStock Hanoi Center", code: "TS-HN-01", address: "No. 88 Pham Hung Street, Nam Tu Liem", city: "Hanoi", capacity: 9600 },
   { id: "3", name: "TechStock Danang Depot", code: "TS-DN-01", address: "FPT Complex, Ngu Hanh Son District", city: "Da Nang", capacity: 5200 },
 ];
-
-export interface AppUser {
-  id: string;
-  name: string;
-  role: Role;
-  warehouseId: string | null; // null => all warehouses
-  initials: string;
-  title: string;
-  avatarUrl?: string;
-}
 
 export const users: AppUser[] = [
   { id: "U-001", name: "Alex Tran", role: "Admin", warehouseId: null, initials: "AT", title: "System Administrator" },
@@ -48,19 +29,6 @@ export const users: AppUser[] = [
   { id: "U-009", name: "Kim Anh", role: "Staff", warehouseId: "3", initials: "KA", title: "Inventory Staff" },
   { id: "U-010", name: "Duc Huy", role: "Staff", warehouseId: "3", initials: "DH", title: "Loader" },
 ];
-
-export interface Product {
-  sku: string;
-  name: string;
-  category: Category;
-  brand: string;
-  stock: number;
-  reorder: number;
-  price: number;
-  cost: number;
-  location: string;
-  warehouseId: string;
-}
 
 export const products: Product[] = [
   { sku: "CPU-INT-14700K", name: "Intel Core i7-14700K", category: "CPU", brand: "Intel", stock: 42, reorder: 20, price: 10990000, cost: 9200000, location: "A-01-03", warehouseId: "1" },
@@ -79,18 +47,6 @@ export const products: Product[] = [
   { sku: "LAP-LEN-LOQ15", name: "Lenovo LOQ 15 i7 RTX 4060", category: "Laptop", brand: "Lenovo", stock: 6, reorder: 8, price: 27990000, cost: 24500000, location: "F-01-01", warehouseId: "1" },
 ];
 
-export interface Movement {
-  id: string;
-  date: string;
-  type: "Inbound" | "Outbound";
-  sku: string;
-  product: string;
-  qty: number;
-  partner: string;
-  staff: string;
-  warehouseId: string;
-}
-
 export const movements: Movement[] = [
   { id: "MV-2410", date: "2026-06-24", type: "Inbound", sku: "GPU-NV-RTX4080S", product: "NVIDIA RTX 4080 Super FE", qty: 10, partner: "FPT Distribution", staff: "Minh Quan", warehouseId: "1" },
   { id: "MV-2409", date: "2026-06-24", type: "Outbound", sku: "CPU-INT-14700K", product: "Intel Core i7-14700K", qty: 4, partner: "PC Build Saigon", staff: "Hoai Linh", warehouseId: "1" },
@@ -103,18 +59,6 @@ export const movements: Movement[] = [
   { id: "MV-2402", date: "2026-06-20", type: "Outbound", sku: "GPU-NV-RTX4070", product: "ASUS Dual RTX 4070", qty: 3, partner: "Phong Vu", staff: "Hoang Yen", warehouseId: "2" },
 ];
 
-export interface Order {
-  id: string;
-  customer: string;
-  items: number;
-  total: number;
-  status: "Pending" | "Shipping" | "Completed" | "Cancelled";
-  date: string;
-  warehouseId: string;
-  createdBy: string;
-  assignedTo: string;
-}
-
 export const orders: Order[] = [
   { id: "ORD-10241", customer: "PC Build Saigon", items: 12, total: 84500000, status: "Shipping", date: "2026-06-24", warehouseId: "1", createdBy: "Hoai Linh", assignedTo: "Minh Quan" },
   { id: "ORD-10240", customer: "GearVN Hanoi", items: 24, total: 156900000, status: "Completed", date: "2026-06-23", warehouseId: "2", createdBy: "Bao Tran", assignedTo: "Hoang Yen" },
@@ -125,18 +69,6 @@ export const orders: Order[] = [
   { id: "ORD-10235", customer: "TechZones Danang", items: 9, total: 36500000, status: "Completed", date: "2026-06-21", warehouseId: "3", createdBy: "Kim Anh", assignedTo: "Kim Anh" },
   { id: "ORD-10234", customer: "HACOM", items: 14, total: 92800000, status: "Pending", date: "2026-06-20", warehouseId: "2", createdBy: "Bao Tran", assignedTo: "Hoang Yen" },
 ];
-
-export interface Supplier {
-  id: string;
-  name: string;
-  contact: string;
-  phone: string;
-  email: string;
-  categories: string;
-  rating: number;
-  onTime: number;
-  country: string;
-}
 
 export const suppliers: Supplier[] = [
   { id: "SUP-01", name: "FPT Distribution", contact: "Nguyen V. Hung", phone: "+84 28 7300 2222", email: "sales@fpt-dist.vn", categories: "GPU, CPU, Laptop", rating: 4.8, onTime: 96, country: "Vietnam" },
@@ -152,17 +84,6 @@ export const suppliers: Supplier[] = [
   { id: "SUP-11", name: "Lenovo Vietnam", contact: "Nguyen T. Bao", phone: "+84 28 3939 2020", email: "b2b@lenovo.vn", categories: "Laptop", rating: 4.7, onTime: 94, country: "Vietnam" },
   { id: "SUP-12", name: "NVIDIA Partner Hub", contact: "Sarah Kim", phone: "+82 2 555 1212", email: "partners@nvidia.com", categories: "GPU", rating: 4.8, onTime: 95, country: "Korea" },
 ];
-
-export interface Stocktake {
-  id: string;
-  date: string;
-  warehouseId: string;
-  createdBy: string; // Warehouse_Manager
-  assignedTo: string; // Staff
-  status: "Draft" | "In Progress" | "Completed";
-  items: number;
-  variance: number;
-}
 
 export const stocktakes: Stocktake[] = [
   { id: "ST-0042", date: "2026-06-24", warehouseId: "1", createdBy: "Minh Quan", assignedTo: "Hoai Linh", status: "In Progress", items: 42, variance: 3 },

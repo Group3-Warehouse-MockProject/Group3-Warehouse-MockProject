@@ -47,10 +47,12 @@ public class Transfer extends BaseEntity{
     private User assignedByUser;
 
     @OneToMany(mappedBy = "transfer", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @org.hibernate.annotations.BatchSize(size = 100)
     @Builder.Default
-    private List<TransferDetail> details = new ArrayList<>();
+    private Set<TransferDetail> details = new LinkedHashSet<>();
 
     @OneToMany(mappedBy = "transfer", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @org.hibernate.annotations.BatchSize(size = 100)
     @Builder.Default
-    private List<ApprovalHistory> approvalHistories = new ArrayList<>();
+    private Set<ApprovalHistory> approvalHistories = new LinkedHashSet<>();
 }

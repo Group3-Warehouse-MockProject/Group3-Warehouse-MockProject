@@ -26,6 +26,8 @@ public class CreateReceiptRequest {
 
     /** Payment term for outbound receipts (PREPAID, COD, DEBT). Default COD. */
     private String paymentTerm;
+    /** Assigned user id (optional) */
+    private Long assignedUserId;
 
     /** Line items */
     private List<LineItemRequest> items;

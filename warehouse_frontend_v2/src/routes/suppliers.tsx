@@ -2,6 +2,8 @@
 // @ts-nocheck
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power, Filter, X, CheckCircle2, Phone, Mail, MapPin } from "lucide-react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
@@ -22,88 +24,86 @@ const getAuthHeaders = () => {
   };
 };
 
-const calculateRating = (onTime, quality) => {
+const calculateRating = (onTime: any, quality: any) => {
   const scoreOnTime = (Number(onTime) / 100) * 5;
   const scoreQuality = (Number(quality) / 100) * 5;
   const final = (scoreQuality * 0.5) + (scoreOnTime * 0.5);
-  return Math.min(5, Math.max(0, Number(final.toFixed(1))));
+  return Number(Math.min(5, Math.max(0, final)).toFixed(1));
 };
 
 function SuppliersPage() {
-  const [suppliersList, setSuppliersList] = useState([]);
-  const [deletedIds, setDeletedIds] = useState([]);
+  const queryClient = useQueryClient();
+  const [deletedIds, setDeletedIds] = useState<number[]>([]);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   
   const [openAdd, setOpenAdd] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState(null);
+  const [editingSupplier, setEditingSupplier] = useState<any>(null);
   const [openView, setOpenView] = useState(false);
-  const [viewingSupplier, setViewingSupplier] = useState(null);
+  const [viewingSupplier, setViewingSupplier] = useState<any>(null);
 
   const [selectedCountry, setSelectedCountry] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
 
   const defaultCountries = ["Vietnam", "Singapore", "Taiwan"];
+  
+  const { data: supplierPage } = useQuery({
+    queryKey: ["suppliers", page],
+    queryFn: async () => {
+      const res = await api.get(API_URL, { 
+        params: { 
+          page: page - 1, 
+          size: PAGE_SIZE,
+        } 
+      });
+      return res.data as { content: any[]; totalPages: number; totalElements: number };
+    },
+  });
+
+  const rawSuppliers = supplierPage?.content ?? [];
+  const suppliersList = [...rawSuppliers].sort((a, b) => Number(a.id) - Number(b.id));
+  
   const allAvailableCountries = Array.from(
     new Set([...defaultCountries, ...suppliersList.map((s) => s.country).filter(Boolean)])
   );
 
-  const fetchSuppliers = async () => {
-    try {
-      const res = await fetch(API_URL, {
-        method: "GET",
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSuppliersList(data);
-      }
-    } catch (err) {
-      console.error("Lỗi kết nối API lấy danh sách:", err);
-    }
-  };
+  const invalidateSuppliers = () => queryClient.invalidateQueries({ queryKey: ["suppliers"] });
 
-  useEffect(() => {
-    fetchSuppliers();
-  }, []);
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`${API_URL}/${id}`),
+    onSuccess: invalidateSuppliers,
+  });
 
-  const handleDelete = async (id) => {
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      api.patch(`${API_URL}/${id}/status`, { status }),
+    onSuccess: invalidateSuppliers,
+  });
+
+  const handleDelete = async (id: number) => {
     if (window.confirm("Are you sure you want to delete this supplier?")) {
       try {
-        const res = await fetch(`${API_URL}/${id}`, { 
-          method: "DELETE",
-          headers: getAuthHeaders(),
-        });
-        if (res.ok || res.status === 204) {
-          alert("Delete successful!");
-          fetchSuppliers();
-        } else {
-          setDeletedIds((prev) => [...prev, id]);
-          alert("Delete successful!");
-          fetchSuppliers();
-        }
+        await deleteMutation.mutateAsync(id);
+        alert("Delete successful!");
       } catch (err) {
+        console.error("Error deleting:", err);
         setDeletedIds((prev) => [...prev, id]);
         alert("Delete successful!");
-        fetchSuppliers();
+        invalidateSuppliers();
       }
     }
   };
 
-  const handleToggleStatus = async (supplier) => {
+  const handleToggleStatus = async (supplier: any) => {
     const currentStatus = String(supplier.status || "ACTIVE").toUpperCase();
     const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
-      const res = await fetch(`${API_URL}/${supplier.id}/status`, {
-        method: "PATCH",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) fetchSuppliers();
+      await statusMutation.mutateAsync({ id: supplier.id, status: newStatus });
     } catch (err) {
       console.error("Error updating status:", err);
+      alert("Failed to update status");
     }
   };
 
@@ -131,17 +131,11 @@ function SuppliersPage() {
     ? Math.round(filtered.reduce((acc, s) => acc + (Number(s.onTimeDelivery) || 0), 0) / filtered.length) + "%"
     : "0%";
   
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, supplierPage?.totalPages ?? 1);
   const safePage = Math.min(page, totalPages);
-  const slice = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const slice = filtered;
 
   const isFilterActive = selectedCountry !== "ALL" || selectedStatus !== "ALL";
-
-  // Helper check if specific column matches search query
-  const matchesField = (val) => {
-    if (!q.trim()) return false;
-    return String(val || "").toLowerCase().includes(searchLower);
-  };
 
   return (
     <AppShell>
@@ -238,46 +232,12 @@ function SuppliersPage() {
             <table className="w-full text-sm min-w-[950px]">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                 <tr>
-                  <th className="text-left p-4 w-[22%]">
-                    <div className="flex items-center gap-1.5">
-                      <span>Supplier</span>
-                      {q && slice.some(s => matchesField(s.name)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 w-[13%]">
-                    <div className="flex items-center gap-1.5">
-                      <span>Phone</span>
-                      {q && slice.some(s => matchesField(s.phoneNumber)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 w-[16%]">
-                    <div className="flex items-center gap-1.5">
-                      <span>Email</span>
-                      {q && slice.some(s => matchesField(s.email)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 w-[14%]">
-                    <div className="flex items-center gap-1.5">
-                      <span>Country</span>
-                      {(selectedCountry !== "ALL" || (q && slice.some(s => matchesField(s.country)))) && (
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered/Searched by country" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 w-[15%]">
-                    <div className="flex items-center gap-1.5">
-                      <span>Performance</span>
-                      {q && slice.some(s => matchesField(s.rating) || matchesField(s.onTimeDelivery)) && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 w-[10%]">
-                    <div className="flex items-center gap-1.5">
-                      <span>Status</span>
-                      {(selectedStatus !== "ALL" || (q && slice.some(s => matchesField(s.status)))) && (
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered/Searched by status" />
-                      )}
-                    </div>
-                  </th>
+                  <th className="text-left p-4 w-[22%]">Supplier</th>
+                  <th className="text-left p-4 w-[13%]">Phone</th>
+                  <th className="text-left p-4 w-[16%]">Email</th>
+                  <th className="text-left p-4 w-[14%]">Country</th>
+                  <th className="text-left p-4 w-[15%]">Performance</th>
+                  <th className="text-left p-4 w-[10%]">Status</th>
                   <th className="text-center p-4 w-[10%]">Actions</th>
                 </tr>
               </thead>
@@ -324,48 +284,21 @@ function SuppliersPage() {
             </table>
           </div>
 
-          <div className="flex items-center justify-between p-4 border-t border-border text-sm text-muted-foreground">
-            <div>Showing {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1} to {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} entries</div>
-            <div className="flex items-center gap-1.5">
-              <button 
-                onClick={() => setPage(p => Math.max(1, p - 1))} 
-                disabled={safePage === 1}
-                className="size-9 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-foreground"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => {
-                const isCurrent = pNum === safePage;
-                return (
-                  <button
-                    key={pNum}
-                    onClick={() => setPage(pNum)}
-                    className={`size-9 rounded-xl font-medium text-xs flex items-center justify-center transition-all ${
-                      isCurrent 
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-                        : "border border-border bg-card text-foreground hover:bg-secondary"
-                    }`}
-                  >
-                    {pNum}
-                  </button>
-                );
-              })}
-
-              <button 
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
-                disabled={safePage === totalPages}
-                className="size-9 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-foreground"
-              >
-                <ChevronRight className="size-4" />
-              </button>
+          <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
+            <div className="text-muted-foreground text-xs">Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, supplierPage?.totalElements ?? filtered.length)} of {supplierPage?.totalElements ?? filtered.length}</div>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="size-8 grid place-items-center rounded-md border bg-secondary disabled:opacity-40"><ChevronLeft className="size-4" /></button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button key={n} onClick={() => setPage(n)} className={`size-8 rounded-md text-xs font-medium ${n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border"}`}>{n}</button>
+              ))}
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="size-8 grid place-items-center rounded-md border bg-secondary disabled:opacity-40"><ChevronRight className="size-4" /></button>
             </div>
           </div>
         </div>
       </div>
 
-      {openAdd && <AddSupplierModal open={openAdd} onClose={() => setOpenAdd(false)} onSave={fetchSuppliers} />}
-      {openEdit && <EditSupplierModal open={openEdit} supplier={editingSupplier} onClose={() => { setOpenEdit(false); setEditingSupplier(null); }} onSave={fetchSuppliers} />}
+      {openAdd && <AddSupplierModal open={openAdd} onClose={() => setOpenAdd(false)} onSave={invalidateSuppliers} />}
+      {openEdit && <EditSupplierModal open={openEdit} supplier={editingSupplier} onClose={() => { setOpenEdit(false); setEditingSupplier(null); }} onSave={invalidateSuppliers} />}
       {openView && <ViewSupplierModal open={openView} supplier={viewingSupplier} onClose={() => { setOpenView(false); setViewingSupplier(null); }} />}
     </AppShell>
   );
@@ -466,8 +399,12 @@ function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: (
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          name: form.name, email: form.email, phoneNumber: form.phone,
-          address: form.address, status: form.status, country: form.country,
+          name: form.name, 
+          email: form.email, 
+          phoneNumber: form.phone,
+          address: form.address, 
+          status: form.status, 
+          country: form.country,
           rating: computedRating, 
           onTimeDelivery: parseInt(form.onTimeDelivery) || 95 
         }),
@@ -542,8 +479,12 @@ function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean;
         method: "PUT",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          name: form.name, email: form.email, phoneNumber: form.phone,
-          address: form.address, status: form.status, country: form.country,
+          name: form.name, 
+          email: form.email, 
+          phoneNumber: form.phone,
+          address: form.address, 
+          status: form.status, 
+          country: form.country,
           rating: computedRating,
           onTimeDelivery: parseInt(form.onTimeDelivery) || 95
         }),

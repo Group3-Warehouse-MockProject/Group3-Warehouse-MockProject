@@ -62,7 +62,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [partner, setPartner] = useState<string>("");
   const [reference, setReference] = useState<string>("");
-  const [assignedStaff, setAssignedStaff] = useState<string>("");
+  const [assignedUserId, setAssignedUserId] = useState<number | "">("");
   const [paymentTerm, setPaymentTerm] = useState<string>("COD");
   const [note, setNote] = useState<string>("");
   const [lines, setLines] = useState<LineItem[]>([]);
@@ -79,13 +79,13 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
 
     Promise.all([
       api.get<WarehouseOption[]>("/warehouses"),
-      api.get<ProductOption[]>("/products"),
+      api.get<{ content: ProductOption[] }>("/products", { params: { page: 0, size: 15 } }),
       api.get<SupplierOption[]>("/suppliers"),
       api.get<UserOption[]>("/users"),
     ])
       .then(([wRes, pRes, sRes, uRes]) => {
         setWarehouses(wRes.data);
-        setProducts(pRes.data);
+        setProducts(pRes.data?.content ?? (pRes.data as any));
         setSuppliers(sRes.data);
         setUsers(uRes.data);
         // Default warehouse
@@ -102,7 +102,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
           if (currentUser?.role === "Staff") {
             const me = uRes.data.find((u) => String(u.id) === currentUser.id);
             if (me) {
-              setAssignedStaff(me.fullName);
+              setAssignedUserId(me.id);
             }
           }
         }
@@ -162,7 +162,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
     setLines([]);
     setPartner("");
     setReference("");
-    setAssignedStaff("");
+    setAssignedUserId("");
     setNote("");
     setSubmitError(null);
     setLineErrors({});
@@ -229,9 +229,9 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         type: isInbound ? "INBOUND" : "OUTBOUND",
         partner: partner || null,
         paymentTerm: isInbound ? null : paymentTerm,
+        assignedUserId: assignedUserId !== "" ? Number(assignedUserId) : null,
         remark: [
           reference ? `Ref: ${reference}` : "",
-          assignedStaff ? `Assignee: ${assignedStaff}` : "",
           note
         ].filter(Boolean).join(" | ") || null,
         items: validLines.map((l) => ({
@@ -374,24 +374,22 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     </select>
                   </Field>
                 )}
-                {!isInbound && (
                   <Field label="Assign to Staff">
                     <select
-                      value={assignedStaff}
-                      onChange={(e) => setAssignedStaff(e.target.value)}
+                      value={assignedUserId}
+                      onChange={(e) => setAssignedUserId(e.target.value ? Number(e.target.value) : "")}
                       className="input"
                     >
                       <option value="">Select staff member…</option>
                       {users
                         .filter((u) => u.role === "STAFF" || u.role === "WAREHOUSE_MANAGER")
                         .map((u) => (
-                          <option key={u.id} value={u.fullName}>
+                          <option key={u.id} value={u.id}>
                             {u.fullName} — {u.role === "STAFF" ? "Staff" : "Warehouse Manager"}
                           </option>
                         ))}
                     </select>
                   </Field>
-                )}
               </div>
 
 
