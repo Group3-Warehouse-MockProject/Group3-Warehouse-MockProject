@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class InventoryDTO {
+    private Long inventoryId;
     private Long productId;
     private String sku;
     private String name;
@@ -20,6 +21,9 @@ public class InventoryDTO {
     private BigDecimal cost;
     private String location;
     private String warehouseId;
+    private Long outOfStockWarningDays;
+    private Double dailyVelocity;
+    private Long estimatedDaysLeft;
 
     public static InventoryDTO fromEntity(Inventory inventory) {
         String loc = "N/A";
@@ -30,6 +34,7 @@ public class InventoryDTO {
         }
         
         return InventoryDTO.builder()
+                .inventoryId(inventory.getId())
                 .productId(inventory.getProduct().getId())
                 .sku(inventory.getProduct().getCode())
                 .name(inventory.getProduct().getName())
@@ -41,6 +46,9 @@ public class InventoryDTO {
                 .cost(inventory.getProduct().getCost())
                 .location(loc)
                 .warehouseId(String.valueOf(inventory.getWarehouse().getId())) // Must match activeWarehouseId from JWT
+                .outOfStockWarningDays(inventory.getOutOfStockWarningDays())
+                .dailyVelocity(inventory.getDailyVelocity())
+                .estimatedDaysLeft(inventory.getEstimatedDaysLeft())
                 .build();
     }
 }

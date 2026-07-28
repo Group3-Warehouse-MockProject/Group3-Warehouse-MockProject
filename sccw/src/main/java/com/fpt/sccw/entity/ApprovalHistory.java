@@ -25,20 +25,13 @@ public class ApprovalHistory extends BaseEntity {
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "approver_id", nullable = false)
-    private User approver;
+    @Column(name = "approver_id", nullable = false)
+    private Long approverId;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "inventory_check_id")
-    private InventoryCheck inventoryCheck;
- 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "transfer_id")
-    private Transfer transfer;
+    @Column(name = "approver_name")
+    private String approverName;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "warehouse_receipt_id")
-    private WarehouseReceipt warehouseReceipt;
+    @Column(name = "document_id", nullable = false)
+    private Long documentId;
 
 }

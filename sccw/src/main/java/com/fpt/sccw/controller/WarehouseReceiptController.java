@@ -4,6 +4,7 @@ import com.fpt.sccw.dto.request.CreateReceiptRequest;
 import com.fpt.sccw.dto.request.UpdateReceiptRequest;
 import com.fpt.sccw.dto.response.MovementDTO;
 import com.fpt.sccw.dto.response.PageResponse;
+import com.fpt.sccw.dto.response.ReceiptStatsDTO;
 import com.fpt.sccw.entity.*;
 import com.fpt.sccw.repository.*;
 import com.fpt.sccw.service.ActivityLogService;
@@ -65,7 +66,15 @@ public class WarehouseReceiptController {
             @RequestParam(required = false) Long warehouseIdParam,
             @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String staffName,
+            @RequestParam(required = false) String assignedUserName,
+            @RequestParam(required = false) Long qtyMin,
+            @RequestParam(required = false) Long qtyMax,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo
     ) {
         User user = resolveUser();
         if (user == null) return ResponseEntity.status(401).build();
@@ -83,10 +92,36 @@ public class WarehouseReceiptController {
                 return ResponseEntity.badRequest().build();
             }
         }
+        
+        Status.ReceiptStatus receiptStatus = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                receiptStatus = Status.ReceiptStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+        
+        java.time.LocalDateTime ldtFrom = null;
+        if (dateFrom != null && !dateFrom.isBlank()) {
+            try {
+                ldtFrom = java.time.LocalDate.parse(dateFrom).atStartOfDay();
+            } catch (Exception ex) {
+                // ignore invalid format
+            }
+        }
+        java.time.LocalDateTime ldtTo = null;
+        if (dateTo != null && !dateTo.isBlank()) {
+            try {
+                ldtTo = java.time.LocalDate.parse(dateTo).atTime(23, 59, 59);
+            } catch (Exception ex) {
+                // ignore invalid format
+            }
+        }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "receipt.createdAt"));
         Page<ReceiptDetail> detailPage = receiptDetailRepository
-                .findMovementPage(effectiveWarehouseId, receiptType, pageable);
+                .findMovementPageFiltered(effectiveWarehouseId, receiptType, search, receiptStatus, staffName, assignedUserName, qtyMin, qtyMax, ldtFrom, ldtTo, pageable);
 
         List<MovementDTO> pageContent = detailPage.getContent().stream()
                 .map(detail -> {
@@ -100,10 +135,118 @@ public class WarehouseReceiptController {
         return ResponseEntity.ok(new PageResponse<>(pageContent, detailPage));
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // GET /api/receipts/stats
+    // ─────────────────────────────────────────────────────────────────────────
+    @GetMapping("/stats")
+    @Transactional(readOnly = true)
+    public ResponseEntity<ReceiptStatsDTO> getReceiptStats(
+            @RequestParam(required = false) Long warehouseIdParam,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String staffName,
+            @RequestParam(required = false) String assignedUserName,
+            @RequestParam(required = false) Long qtyMin,
+            @RequestParam(required = false) Long qtyMax,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo
+    ) {
+        User user = resolveUser();
+        if (user == null) return ResponseEntity.status(401).build();
+
+        String roleName = user.getRole().getRoleName().name();
+        Long effectiveWarehouseId = resolveWarehouseScope(user, roleName, warehouseIdParam);
+
+        Status.TransactionType receiptType = null;
+        if (type != null && !type.isBlank()) {
+            try {
+                receiptType = Status.TransactionType.valueOf(type.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+
+        Status.ReceiptStatus receiptStatus = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                receiptStatus = Status.ReceiptStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+
+        java.time.LocalDateTime ldtFrom = null;
+        if (dateFrom != null && !dateFrom.isBlank()) {
+            try {
+                ldtFrom = java.time.LocalDate.parse(dateFrom).atStartOfDay();
+            } catch (Exception ex) {}
+        }
+        java.time.LocalDateTime ldtTo = null;
+        if (dateTo != null && !dateTo.isBlank()) {
+            try {
+                ldtTo = java.time.LocalDate.parse(dateTo).atTime(23, 59, 59);
+            } catch (Exception ex) {}
+        }
+
+        List<ReceiptDetail> details = receiptDetailRepository
+                .findAllMovementsFiltered(effectiveWarehouseId, receiptType, search, receiptStatus, staffName, assignedUserName, qtyMin, qtyMax, ldtFrom, ldtTo);
+
+        java.util.Set<Long> uniqueReceiptIds = new java.util.HashSet<>();
+        java.util.Set<String> uniquePartners = new java.util.HashSet<>();
+        long totalUnits = 0;
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        long pendingRequests = 0;
+        long approvedRequests = 0;
+        java.util.Set<Long> pendingReceiptIds = new java.util.HashSet<>();
+        java.util.Set<Long> approvedReceiptIds = new java.util.HashSet<>();
+
+        for (ReceiptDetail d : details) {
+            WarehouseReceipt r = d.getReceipt();
+            boolean isInbound = r.getType() == Status.TransactionType.INBOUND;
+            uniqueReceiptIds.add(r.getId());
+
+            if (isInbound) {
+                if (d.getQuantity() != null) {
+                    totalUnits += d.getQuantity();
+                }
+                String partner = resolvePartner(r, d, true);
+                if (partner != null && !partner.isBlank() && !"—".equals(partner)) {
+                    uniquePartners.add(partner.trim());
+                }
+            } else {
+                if (r.getStatus() == Status.ReceiptStatus.PENDING) {
+                    pendingReceiptIds.add(r.getId());
+                } else if (r.getStatus() == Status.ReceiptStatus.APPROVED) {
+                    approvedReceiptIds.add(r.getId());
+                } else if (r.getStatus() == Status.ReceiptStatus.COMPLETED) {
+                    if (d.getPrice() != null && d.getQuantity() != null) {
+                        totalRevenue = totalRevenue.add(d.getPrice().multiply(BigDecimal.valueOf(d.getQuantity())));
+                    }
+                }
+            }
+        }
+
+        pendingRequests = pendingReceiptIds.size();
+        approvedRequests = approvedReceiptIds.size();
+
+        ReceiptStatsDTO dto = ReceiptStatsDTO.builder()
+                .totalReceipts(uniqueReceiptIds.size())
+                .totalUnits(totalUnits)
+                .totalPartners(uniquePartners.size())
+                .totalRevenue(totalRevenue)
+                .pendingRequests(pendingRequests)
+                .approvedRequests(approvedRequests)
+                .build();
+
+        return ResponseEntity.ok(dto);
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // POST /api/receipts
     // ─────────────────────────────────────────────────────────────────────────
+
     @PostMapping
     @Transactional
     public ResponseEntity<?> createReceipt(@RequestBody CreateReceiptRequest request) {
@@ -169,19 +312,14 @@ public class WarehouseReceiptController {
                 + " at " + warehouse.getCode());
 
         ApprovalHistory history = ApprovalHistory.builder()
-                .warehouseReceipt(saved)
+                .documentId(saved.getId())
                 .documentType(Status.DocumentType.WAREHOUSE_RECEIPT)
                 .newStatus(saved.getStatus().name())
                 .note((isInbound ? "Inbound" : "Outbound") + " receipt created")
-                .approver(user)
+                .approverId(user.getId())
+                .approverName(user.getFullName())
                 .build();
         approvalHistoryRepository.save(history);
-        
-        // Add history manually for the DTO response since it's not re-fetched
-        if (saved.getApprovalHistories() == null) {
-            saved.setApprovalHistories(new java.util.LinkedHashSet<>());
-        }
-        saved.getApprovalHistories().add(history);
 
         if (assignedUser != null) {
             NotificationEventDTO event = NotificationEventDTO.builder()
@@ -225,6 +363,9 @@ public class WarehouseReceiptController {
 
         WarehouseReceipt receipt = receiptRepository.findById(receiptId).orElse(null);
         if (receipt == null) return ResponseEntity.notFound().build();
+
+        // Capture old status BEFORE any changes
+        String oldStatus = receipt.getStatus().name();
 
         if (request.getStatus() != null && !request.getStatus().isBlank()) {
             Status.ReceiptStatus newStatus;
@@ -298,25 +439,87 @@ public class WarehouseReceiptController {
             receipt.setRemark(request.getRemark().isBlank() ? null : request.getRemark());
         }
 
+        // Update warehouse (only when PENDING)
+        if (request.getWarehouseId() != null) {
+            if (receipt.getStatus() != Status.ReceiptStatus.PENDING) {
+                return ResponseEntity.badRequest().body("Cannot change warehouse of a finalized receipt");
+            }
+            Warehouse newWarehouse = warehouseRepository.findById(request.getWarehouseId()).orElse(null);
+            if (newWarehouse == null) {
+                return ResponseEntity.badRequest().body("Warehouse not found: " + request.getWarehouseId());
+            }
+            receipt.setWarehouse(newWarehouse);
+        }
 
-        String oldStatus = receipt.getStatus().name();
+        // Update partner
+        if (request.getPartner() != null) {
+            receipt.setPartner(request.getPartner().isBlank() ? null : request.getPartner());
+        }
+
+        // Update assigned user
+        if (request.getAssignedUserId() != null) {
+            if (request.getAssignedUserId() <= 0) {
+                receipt.setAssignedUser(null);
+            } else {
+                User assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
+                if (assignedUser == null) {
+                    return ResponseEntity.badRequest().body("Assigned user not found: " + request.getAssignedUserId());
+                }
+                receipt.setAssignedUser(assignedUser);
+            }
+        }
+
+        // Update items (only when PENDING)
+        if (request.getItems() != null) {
+            if (receipt.getStatus() != Status.ReceiptStatus.PENDING) {
+                return ResponseEntity.badRequest().body("Cannot modify items of a finalized receipt");
+            }
+            if (request.getItems().isEmpty()) {
+                return ResponseEntity.badRequest().body("At least one item is required");
+            }
+
+            boolean isInboundReceipt = receipt.getType() == Status.TransactionType.INBOUND;
+            List<ReceiptDetail> newDetails = new ArrayList<>();
+
+            for (CreateReceiptRequest.LineItemRequest item : request.getItems()) {
+                if (item.getProductCode() == null || item.getProductCode().isBlank()) continue;
+                if (item.getQuantity() == null || item.getQuantity() <= 0) {
+                    return ResponseEntity.badRequest().body("Invalid quantity for product: " + item.getProductCode());
+                }
+
+                Product product = productRepository.findByCode(item.getProductCode()).orElse(null);
+                if (product == null) {
+                    return ResponseEntity.badRequest().body("Product not found: " + item.getProductCode());
+                }
+
+                BigDecimal resolvedPrice = item.getPrice() != null ? item.getPrice()
+                        : (isInboundReceipt ? product.getCost() : product.getPrice());
+
+                newDetails.add(ReceiptDetail.builder()
+                        .receipt(receipt)
+                        .product(product)
+                        .quantity(item.getQuantity())
+                        .price(resolvedPrice)
+                        .build());
+            }
+
+            receipt.getDetails().clear();
+            receipt.getDetails().addAll(newDetails);
+        }
+
         WarehouseReceipt saved = receiptRepository.save(receipt);
 
         if (!oldStatus.equals(saved.getStatus().name())) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .warehouseReceipt(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.WAREHOUSE_RECEIPT)
                     .oldStatus(oldStatus)
                     .newStatus(saved.getStatus().name())
                     .note(request.getRemark() != null && !request.getRemark().isBlank() ? request.getRemark() : "Status updated to " + saved.getStatus().name())
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
-            
-            if (saved.getApprovalHistories() == null) {
-                saved.setApprovalHistories(new java.util.LinkedHashSet<>());
-            }
-            saved.getApprovalHistories().add(history);
 
             if (saved.getAssignedUser() != null) {
                 NotificationEventDTO event = NotificationEventDTO.builder()
@@ -458,7 +661,8 @@ public class WarehouseReceiptController {
                     .product(product)
                     .warehouse(warehouse)
                     .quantity(qty)
-                    .lowStockThreshold(0L)
+                    .lowStockThreshold(10L)
+                    .outOfStockWarningDays(3L)
                     .build());
         }
     }
@@ -467,11 +671,11 @@ public class WarehouseReceiptController {
                                               boolean isInbound, String partner) {
         BigDecimal totalAmount = calculateTotalAmount(r);
         BigDecimal paidAmount = calculatePaidAmount(r);
-        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = r.getApprovalHistories() != null 
-                ? r.getApprovalHistories().stream()
-                        .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
-                        .collect(Collectors.toList())
-                : new ArrayList<>();
+        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = approvalHistoryRepository
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(r.getId(), Status.DocumentType.WAREHOUSE_RECEIPT)
+                .stream()
+                .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
+                .collect(Collectors.toList());
 
         return MovementDTO.builder()
                 .id("R-" + r.getId() + "-" + d.getId())
@@ -503,11 +707,11 @@ public class WarehouseReceiptController {
         String warehouseId = isOut
                 ? String.valueOf(t.getWarehouse().getId())
                 : (t.getWarehouseDestination() != null ? String.valueOf(t.getWarehouseDestination().getId()) : "");
-        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = t.getApprovalHistories() != null 
-                ? t.getApprovalHistories().stream()
-                        .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
-                        .collect(Collectors.toList())
-                : new ArrayList<>();
+        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = approvalHistoryRepository
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(t.getId(), Status.DocumentType.TRANSFER)
+                .stream()
+                .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
+                .collect(Collectors.toList());
 
         return MovementDTO.builder()
                 .id("T-" + t.getId() + "-" + d.getId())

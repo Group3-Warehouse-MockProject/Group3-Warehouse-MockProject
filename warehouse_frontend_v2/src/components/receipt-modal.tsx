@@ -89,7 +89,13 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         // Default warehouse
         const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
         let defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
-        if (currentUser?.role === "Staff" && currentUser?.warehouseId) {
+        const isStaffOrWhManager = 
+          currentUser?.role === "Staff" || 
+          currentUser?.role === "STAFF" || 
+          currentUser?.role === "Warehouse_Manager" || 
+          currentUser?.role === "Warehouse Manager" || 
+          currentUser?.role?.toUpperCase() === "WAREHOUSE_MANAGER";
+        if (isStaffOrWhManager && currentUser?.warehouseId) {
           defaultWh = currentUser.warehouseId;
         }
         setWarehouseId(defaultWh);
@@ -97,7 +103,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         if (!isInbound) {
           setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
           // Default staff assignee for Staff role
-          if (currentUser?.role === "Staff") {
+          if (currentUser?.role === "Staff" || currentUser?.role === "STAFF") {
             const me = uRes.data.find((u) => String(u.id) === currentUser.id);
             if (me) {
               setAssignedUserId(me.id);
@@ -312,7 +318,14 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     value={warehouseId}
                     onChange={(e) => setWarehouseId(e.target.value)}
                     className="input disabled:opacity-50 disabled:bg-muted disabled:cursor-not-allowed"
-                    disabled={currentUser?.role === "Staff" || (!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager")}
+                    disabled={
+                      currentUser?.role === "Staff" ||
+                      currentUser?.role === "STAFF" ||
+                      currentUser?.role === "Warehouse_Manager" ||
+                      currentUser?.role === "Warehouse Manager" ||
+                      currentUser?.role?.toUpperCase() === "WAREHOUSE_MANAGER" ||
+                      (!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager")
+                    }
                   >
                     {warehouses
                       .filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
@@ -387,10 +400,15 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     >
                       <option value="">Select staff member…</option>
                       {users
-                        .filter((u) => u.role === "STAFF" || u.role === "WAREHOUSE_MANAGER")
+                        .filter((u) => {
+                          const isStaff = u.role === "STAFF" || u.role === "Staff" || u.role?.toUpperCase() === "STAFF";
+                          if (!isStaff) return false;
+                          if (warehouseId && u.warehouseId && String(u.warehouseId) !== String(warehouseId)) return false;
+                          return true;
+                        })
                         .map((u) => (
                           <option key={u.id} value={u.id}>
-                            {u.fullName} — {u.role === "STAFF" ? "Staff" : "Warehouse Manager"}
+                            {u.fullName} (Staff)
                           </option>
                         ))}
                     </select>

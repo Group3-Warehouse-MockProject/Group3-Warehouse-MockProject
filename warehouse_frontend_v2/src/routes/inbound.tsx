@@ -40,6 +40,7 @@ interface Filters {
   warehouse: string;
   status: string;
   staff: string;
+  assignee: string;
   qtyMin: string;
   qtyMax: string;
   dateFrom: string;
@@ -47,7 +48,7 @@ interface Filters {
 }
 
 const DEFAULT_FILTERS: Filters = {
-  warehouse: "", status: "", staff: "",
+  warehouse: "", status: "", staff: "", assignee: "",
   qtyMin: "", qtyMax: "", dateFrom: "", dateTo: "",
 };
 
@@ -56,8 +57,10 @@ function InboundPage() {
 
   const [movements, setMovements] = useState<ReceiptMovement[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
+  const [allUsers, setAllUsers]     = useState<{ id: number; fullName: string; role: string }[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
+  const [stats, setStats]           = useState<{ totalReceipts: number; totalUnits: number; totalPartners: number } | null>(null);
   
   // Server-side pagination state
   const [page, setPage]             = useState(0); // 0-indexed for backend
@@ -89,14 +92,24 @@ function InboundPage() {
 
   useEffect(() => {
     api.get<WarehouseInfo[]>("/warehouses").then((res) => setWarehouses(res.data)).catch(() => {});
+    api.get<any>("/users").then((res) => setAllUsers(Array.isArray(res.data) ? res.data : (res.data?.content ?? []))).catch(() => {});
   }, []);
 
-  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick]);
+  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick, searchQuery, filters]);
 
   function fetchReceipts(currentPage: number = page) {
     setLoading(true); setError(null);
     const params: Record<string, string | number> = { type: "INBOUND", page: currentPage, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
+    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (filters.status) params.status = filters.status;
+    if (filters.staff) params.staffName = filters.staff;
+    if (filters.assignee) params.assignedUserName = filters.assignee;
+    if (filters.warehouse) params.warehouseIdParam = filters.warehouse;
+    if (filters.qtyMin) params.qtyMin = Number(filters.qtyMin);
+    if (filters.qtyMax) params.qtyMax = Number(filters.qtyMax);
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
     api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params })
       .then((res) => {
         setMovements(res.data?.content ?? (res.data as any));
@@ -105,6 +118,11 @@ function InboundPage() {
       })
       .catch(() => setError("Failed to load inbound receipts. Please try again."))
       .finally(() => setLoading(false));
+
+    const { page: _p, size: _s, ...statParams } = params;
+    api.get<{ totalReceipts: number; totalUnits: number; totalPartners: number }>("/receipts/stats", { params: statParams })
+      .then((res) => setStats(res.data))
+      .catch(() => {});
   }
 
   function handleUpdated(updated: ReceiptMovement[]) {
@@ -125,7 +143,15 @@ function InboundPage() {
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
 
   // Unique dropdown options derived from data
-  const staffOptions  = useMemo(() => [...new Set(movements.map((m) => m.staff))].sort(),  [movements]);
+  const staffOptions = useMemo(() => {
+    if (allUsers.length > 0) return allUsers.map(u => u.fullName).sort();
+    return [...new Set(movements.map((m) => m.staff))].sort();
+  }, [allUsers, movements]);
+
+  const assigneeOptions = useMemo(() => {
+    if (allUsers.length > 0) return allUsers.filter(u => u.role?.toUpperCase() === "STAFF" || u.role === "Staff").map(u => u.fullName).sort();
+    return [...new Set(movements.map((m) => m.assignedUserName).filter((name): name is string => !!name && name !== "—"))].sort();
+  }, [allUsers, movements]);
 
   // Active filter count (for badge on Filter button)
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
@@ -147,53 +173,18 @@ function InboundPage() {
 
   const hasFilterError = !!qtyRangeError || !!dateRangeError;
 
-  // Apply search + filters
-  const filteredMovements = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return movements.filter((m) => {
-      // Search: Receipt #, Product Name, SKU, Supplier
-      if (q) {
-        const receiptNum = `r-${m.receiptId}`;
-        if (
-          !receiptNum.includes(q) &&
-          !m.product.toLowerCase().includes(q) &&
-          !m.sku.toLowerCase().includes(q) &&
-          !m.partner.toLowerCase().includes(q)
-        ) return false;
-      }
-
-      // Warehouse dropdown
-      if (filters.warehouse && m.warehouseId !== filters.warehouse) return false;
-      // Status dropdown
-      if (filters.status && m.status !== filters.status) return false;
-      // Staff dropdown
-      if (filters.staff && m.staff !== filters.staff) return false;
-      // Qty range
-      if (filters.qtyMin && m.qty < Number(filters.qtyMin)) return false;
-      if (filters.qtyMax && m.qty > Number(filters.qtyMax)) return false;
-      // Date range
-      if (filters.dateFrom && m.date < filters.dateFrom) return false;
-      if (filters.dateTo   && m.date > filters.dateTo)   return false;
-      return true;
-    });
-  }, [movements, searchQuery, filters]);
-
   // Reset page whenever filters change
   useEffect(() => { setPage(0); }, [searchQuery, filters, activeWarehouseId]);
 
-  // Group movements by receiptId after filtering
+  // Group movements by receiptId (server already filtered)
   const groupedMovements = useMemo(() => {
     const groups = new Map<number, ReceiptMovement[]>();
-    for (const m of filteredMovements) {
+    for (const m of movements) {
       if (!groups.has(m.receiptId)) groups.set(m.receiptId, []);
       groups.get(m.receiptId)!.push(m);
     }
     return Array.from(groups.values());
-  }, [filteredMovements]);
-
-  const totalReceiptsCount = new Set(movements.map((m) => m.receiptId)).size;
-  const totalIn          = filteredMovements.reduce((s, m) => s + (m.qty ?? 0), 0);
-  const suppliersSet     = new Set(filteredMovements.map((m) => m.partner));
+  }, [movements]);
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -201,11 +192,11 @@ function InboundPage() {
   function clearFilters() { setFilters(DEFAULT_FILTERS); setSearchQuery(""); }
 
   const handleExport = () => {
-    if (filteredMovements.length === 0) return;
-    const headers = ["Receipt #", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Received by"];
+    if (movements.length === 0) return;
+    const headers = ["Receipt #", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Created by"];
     const csvContent = [
       headers.join(","),
-      ...filteredMovements.map((m) =>
+      ...movements.map((m) =>
         [
           `"R-${m.receiptId}"`,
           `"${m.product.replace(/"/g, '""')}"`,
@@ -231,9 +222,11 @@ function InboundPage() {
   };
 
   const sq = searchQuery.toLowerCase().trim();
-  const isSearchMatchingReceipt = sq && filteredMovements.some(m => `r-${m.receiptId}`.includes(sq));
-  const isSearchMatchingProduct = sq && filteredMovements.some(m => m.product.toLowerCase().includes(sq) || m.sku.toLowerCase().includes(sq));
-  const isSearchMatchingSupplier = sq && filteredMovements.some(m => m.partner.toLowerCase().includes(sq));
+  const isSearchMatchingReceipt = sq && movements.some(m => `r-${m.receiptId}`.includes(sq) || String(m.receiptId).includes(sq));
+  const isSearchMatchingProduct = sq && movements.some(m => m.product.toLowerCase().includes(sq) || m.sku.toLowerCase().includes(sq));
+  const isSearchMatchingSupplier = sq && movements.some(m => m.partner.toLowerCase().includes(sq));
+  const isSearchMatchingCreatedBy = sq && movements.some(m => (m.staff || "").toLowerCase().includes(sq));
+  const isSearchMatchingAssignee = sq && movements.some(m => (m.assignedUserName || "").toLowerCase().includes(sq));
 
   return (
     <AppShell>
@@ -277,17 +270,17 @@ function InboundPage() {
                 style={{ background: "color-mix(in oklab, var(--primary) 15%, transparent)" }}>
                 <ArrowDownToLine className="size-5" />
               </div>
-              <div className="text-3xl font-bold">{loading ? "—" : totalIn}</div>
+              <div className="text-3xl font-bold">{loading || !stats ? "—" : stats.totalUnits}</div>
             </div>
           </div>
           <div className="surface-card p-5">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Receipts</div>
-            <div className="mt-2 text-3xl font-bold">{loading ? "—" : groupedMovements.length}</div>
+            <div className="mt-2 text-3xl font-bold">{loading || !stats ? "—" : stats.totalReceipts}</div>
             <div className="text-xs text-muted-foreground mt-1">All time</div>
           </div>
           <div className="surface-card p-5">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Suppliers</div>
-            <div className="mt-2 text-3xl font-bold">{loading ? "—" : suppliersSet.size}</div>
+            <div className="mt-2 text-3xl font-bold">{loading || !stats ? "—" : stats.totalPartners}</div>
             <div className="text-xs text-muted-foreground mt-1">Active</div>
           </div>
         </div>
@@ -363,11 +356,21 @@ function InboundPage() {
                   </select>
                 </FilterField>
 
-                {/* Received by */}
-                <FilterField label="Received by" isActive={!!filters.staff}>
+                {/* Created by */}
+                <FilterField label="Created by" isActive={!!filters.staff}>
                   <select value={filters.staff} onChange={(e) => setFilter("staff", e.target.value)} className="filter-select">
                     <option value="">All Staff</option>
                     {staffOptions.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </FilterField>
+
+                {/* Assignee */}
+                <FilterField label="Assignee" isActive={!!filters.assignee}>
+                  <select value={filters.assignee} onChange={(e) => setFilter("assignee", e.target.value)} className="filter-select">
+                    <option value="">All Assignees</option>
+                    {assigneeOptions.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -439,7 +442,7 @@ function InboundPage() {
               <AlertCircle className="size-5" />
               <span className="text-sm">{error}</span>
             </div>
-          ) : filteredMovements.length === 0 ? (
+          ) : movements.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
               <Search className="size-8 opacity-30" />
               <span className="text-sm">
@@ -459,48 +462,62 @@ function InboundPage() {
                 <div className="min-w-[850px] text-sm">
                   {/* Grid Table Header */}
                   <div className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
-                    <div>Receipt #</div>
-                    <div>Product</div>
-                    <div>Supplier</div>
-                    <div>Warehouse</div>
-                    <div className="text-right">Qty</div>
+                    <div>Receipt #{isSearchMatchingReceipt && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Product{isSearchMatchingProduct && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Supplier{isSearchMatchingSupplier && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Warehouse{filters.warehouse && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div className="text-right">Qty{(filters.qtyMin || filters.qtyMax) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Date{(filters.dateFrom || filters.dateTo) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Status{filters.status && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
-                    <div>Received by{filters.staff && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
-                    <div>Assignee</div>
+                    <div>Created by{(filters.staff || isSearchMatchingCreatedBy) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Assignee{(filters.assignee || isSearchMatchingAssignee) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div />
                   </div>
 
                   {/* Grid Table Body */}
                   <div className="divide-y divide-border/60">
-                    {filteredMovements.map((m) => (
-                      <div
-                        key={m.id}
-                        className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
-                      >
-                        <div className="font-mono text-xs">R-{m.receiptId}</div>
-                        <div>
-                          <div className="font-medium">{m.product}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{m.sku}</div>
+                    {groupedMovements.map((group) => {
+                      const m = group[0];
+                      const totalQty = group.reduce((sum, item) => sum + (item.qty ?? 0), 0);
+                      const itemCount = group.length;
+                      return (
+                        <div
+                          key={m.receiptId}
+                          className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                        >
+                          <div className="font-mono text-xs">R-{m.receiptId}</div>
+                          <div>
+                            <div className="font-medium flex items-center gap-1.5">
+                              <span className="truncate">{m.product}</span>
+                              {itemCount > 1 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/15 text-primary whitespace-nowrap">
+                                  +{itemCount - 1} more
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono">
+                              {itemCount > 1 ? `${itemCount} items total` : m.sku}
+                            </div>
+                          </div>
+                          <div className="truncate">{m.partner}</div>
+                          <div className="font-mono text-xs">{warehouseCode(m.warehouseId)}</div>
+                          <div className="text-right font-semibold text-primary">+{totalQty}</div>
+                          <div className="text-muted-foreground">{m.date}</div>
+                          <div><StatusBadge status={m.status} /></div>
+                          <div className="text-muted-foreground truncate">{m.staff}</div>
+                          <div className="text-muted-foreground truncate">{m.assignedUserName ?? "—"}</div>
+                          <div className="text-center">
+                            <button
+                              onClick={() => setSelectedMovement(m)}
+                              title="View detail"
+                              className="size-8 rounded-md grid place-items-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors"
+                            >
+                              <Eye className="size-4" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="truncate">{m.partner}</div>
-                        <div className="font-mono text-xs">{warehouseCode(m.warehouseId)}</div>
-                        <div className="text-right font-semibold text-primary">+{m.qty}</div>
-                        <div className="text-muted-foreground">{m.date}</div>
-                        <div><StatusBadge status={m.status} /></div>
-                        <div className="text-muted-foreground truncate">{m.staff}</div>
-                        <div className="text-muted-foreground truncate">{m.assignedUserName ?? "—"}</div>
-                        <div className="text-center">
-                          <button
-                            onClick={() => setSelectedMovement(m)}
-                            title="View detail"
-                            className="size-8 rounded-md grid place-items-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors"
-                          >
-                            <Eye className="size-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>

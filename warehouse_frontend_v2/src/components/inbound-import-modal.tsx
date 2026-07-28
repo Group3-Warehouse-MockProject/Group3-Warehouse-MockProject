@@ -26,13 +26,13 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
       // Fetch dynamic lookup data from backend
       const [wRes, sRes, pRes] = await Promise.all([
-        api.get<any[]>("/warehouses"),
-        api.get<any[]>("/suppliers"),
+        api.get<any>("/warehouses"),
+        api.get<any>("/suppliers"),
         api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
       ]);
 
-      const warehouses = wRes.data;
-      const suppliers = sRes.data;
+      const warehouses = wRes.data?.content ?? (wRes.data as any);
+      const suppliers = sRes.data?.content ?? (sRes.data as any);
       const products = pRes.data?.content ?? (pRes.data as any);
 
       // Populate DataSheet with available choices
@@ -81,7 +81,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           showErrorMessage: true,
           errorTitle: "Invalid Date",
           error: "Please enter a valid date (e.g. 2026-07-15)",
-          formulae: [new Date("2000-01-01")]
+          formulae: ['DATE(2000,1,1)']
         };
 
         templateSheet.getCell(`F${i}`).dataValidation = {
@@ -91,7 +91,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           showErrorMessage: true,
           errorTitle: "Invalid Quantity",
           error: "Quantity must be a whole number greater than 0.",
-          formulae: [0]
+          formulae: ['0']
         };
 
         templateSheet.getCell(`G${i}`).dataValidation = {
@@ -101,7 +101,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           showErrorMessage: true,
           errorTitle: "Invalid Unit Cost",
           error: "Unit cost must be a number greater than or equal to 0.",
-          formulae: [0]
+          formulae: ['0']
         };
 
         if (numWH > 0) {

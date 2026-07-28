@@ -11,7 +11,6 @@ public class FeedbackDTO {
     private Long id;
     private String category;
     private String message;
-    private Integer rating;
     private LocalDateTime createdAt;
     private String submittedBy;
     private String submittedByRole;
@@ -24,7 +23,6 @@ public class FeedbackDTO {
                 .id(feedback.getId())
                 .category(feedback.getCategory())
                 .message(feedback.getMessage())
-                .rating(feedback.getRating())
                 .createdAt(feedback.getCreatedAt())
                 .submittedBy(feedback.getUser().getFullName())
                 .submittedByRole(feedback.getUser().getRole().getRoleName().name())

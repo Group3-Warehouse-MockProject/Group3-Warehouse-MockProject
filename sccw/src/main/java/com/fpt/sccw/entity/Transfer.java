@@ -51,8 +51,7 @@ public class Transfer extends BaseEntity{
     @Builder.Default
     private Set<TransferDetail> details = new LinkedHashSet<>();
 
-    @OneToMany(mappedBy = "transfer", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @org.hibernate.annotations.BatchSize(size = 100)
+    @Transient
     @Builder.Default
     private Set<ApprovalHistory> approvalHistories = new LinkedHashSet<>();
 }

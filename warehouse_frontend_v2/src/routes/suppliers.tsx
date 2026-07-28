@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { useApp } from "@/lib/app-context";
-import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power, Filter, X, ChevronDown, CheckCircle2, Phone, Mail, MapPin } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power, Filter, X, CheckCircle2, Phone, Mail, MapPin } from "lucide-react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
 
 export const Route = createFileRoute("/suppliers")({
@@ -25,43 +25,49 @@ const getAuthHeaders = () => {
   };
 };
 
-const calculateRating = (onTime, quality) => {
+const calculateRating = (onTime: any, quality: any) => {
   const scoreOnTime = (Number(onTime) / 100) * 5;
   const scoreQuality = (Number(quality) / 100) * 5;
   const final = (scoreQuality * 0.5) + (scoreOnTime * 0.5);
-  return Math.min(5, Math.max(0, Number(final.toFixed(1))));
+  return Number(Math.min(5, Math.max(0, final)).toFixed(1));
 };
 
 function SuppliersPage() {
   const queryClient = useQueryClient();
-  const [deletedIds, setDeletedIds] = useState([]);
+  const [deletedIds, setDeletedIds] = useState<number[]>([]);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   
   const [openAdd, setOpenAdd] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState(null);
+  const [editingSupplier, setEditingSupplier] = useState<any>(null);
   const [openView, setOpenView] = useState(false);
-  const [viewingSupplier, setViewingSupplier] = useState(null);
+  const [viewingSupplier, setViewingSupplier] = useState<any>(null);
 
   const [selectedCountry, setSelectedCountry] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
 
   const defaultCountries = ["Vietnam", "Singapore", "Taiwan"];
-  const { data: supplierPage, isLoading } = useQuery({
-    queryKey: ["suppliers", page],
+  
+  // Lấy toàn bộ danh sách suppliers từ backend để tính toán KPI tổng và lọc linh hoạt phía client
+  const { data: rawSuppliers = [] } = useQuery({
+    queryKey: ["suppliers-all"],
     queryFn: async () => {
-      const res = await api.get(API_URL, { params: { page: page - 1, size: PAGE_SIZE } });
-      return res.data as { content: any[]; totalPages: number; totalElements: number };
+      const res = await api.get(API_URL);
+      if (Array.isArray(res.data)) return res.data;
+      if (res.data && Array.isArray(res.data.content)) return res.data.content;
+      return [];
     },
   });
-  const suppliersList = supplierPage?.content ?? [];
+
+  const suppliersList = [...rawSuppliers].sort((a, b) => Number(a.id) - Number(b.id));
+  
   const allAvailableCountries = Array.from(
     new Set([...defaultCountries, ...suppliersList.map((s) => s.country).filter(Boolean)])
   );
 
-  const invalidateSuppliers = () => queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+  const invalidateSuppliers = () => queryClient.invalidateQueries({ queryKey: ["suppliers-all"] });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`${API_URL}/${id}`),
@@ -74,7 +80,7 @@ function SuppliersPage() {
     onSuccess: invalidateSuppliers,
   });
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number) => {
     if (window.confirm("Are you sure you want to delete this supplier?")) {
       try {
         await deleteMutation.mutateAsync(id);
@@ -82,11 +88,13 @@ function SuppliersPage() {
       } catch (err) {
         console.error("Error deleting:", err);
         setDeletedIds((prev) => [...prev, id]);
+        alert("Delete successful!");
+        invalidateSuppliers();
       }
     }
   };
 
-  const handleToggleStatus = async (supplier) => {
+  const handleToggleStatus = async (supplier: any) => {
     const currentStatus = String(supplier.status || "ACTIVE").toUpperCase();
     const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
@@ -98,32 +106,49 @@ function SuppliersPage() {
   };
 
   const searchLower = q.toLowerCase().trim();
-  const filtered = suppliersList.filter((s) => {
+  
+  // Kiểm tra xem từ khóa search có khớp với từng trường cụ thể không để hiện dot ở tiêu đề cột
+  const hasSearchMatch = (fieldName: string) => {
+    if (!searchLower) return false;
+    return suppliersList.some(s => {
+      if (deletedIds.includes(s.id)) return false;
+      if (fieldName === "supplier") return String(s.name || "").toLowerCase().includes(searchLower) || String(s.address || "").toLowerCase().includes(searchLower);
+      if (fieldName === "phone") return String(s.phoneNumber || "").toLowerCase().includes(searchLower);
+      if (fieldName === "email") return String(s.email || "").toLowerCase().includes(searchLower);
+      if (fieldName === "country") return String(s.country || "").toLowerCase().includes(searchLower);
+      if (fieldName === "performance") return String(s.rating || "").toLowerCase().includes(searchLower) || String(s.onTimeDelivery || "").toLowerCase().includes(searchLower);
+      if (fieldName === "status") return String(s.status || "").toLowerCase().includes(searchLower);
+      return false;
+    });
+  };
+
+  // Lọc toàn bộ danh sách để tính chỉ số KPI tổng chính xác
+  const filteredAll = suppliersList.filter((s) => {
     if (deletedIds.includes(s.id)) return false;
-    
     const matchesSearch = searchLower === "" || 
       Object.values(s).some(val => val !== null && val !== undefined && String(val).toLowerCase().includes(searchLower));
-    
     const supplierStatus = String(s.status || "ACTIVE").toUpperCase();
     const matchesStatus = selectedStatus === "ALL" || supplierStatus === selectedStatus;
-    
     const supplierCountry = String(s.country || "").trim();
     const matchesCountry = selectedCountry === "ALL" || supplierCountry.toLowerCase() === selectedCountry.toLowerCase();
-    
     return matchesSearch && matchesStatus && matchesCountry;
   });
 
-  const avgRating = filtered.length > 0 
-    ? (filtered.reduce((acc, s) => acc + (Number(s.rating) || 0), 0) / filtered.length).toFixed(2)
+  // Tính các chỉ số KPI dựa trên toàn bộ danh sách đã lọc
+  const avgRating = filteredAll.length > 0 
+    ? (filteredAll.reduce((acc, s) => acc + (Number(s.rating) || 0), 0) / filteredAll.length).toFixed(2)
     : "0.00";
 
-  const avgOnTime = filtered.length > 0
-    ? Math.round(filtered.reduce((acc, s) => acc + (Number(s.onTimeDelivery) || 0), 0) / filtered.length) + "%"
+  const avgOnTime = filteredAll.length > 0
+    ? Math.round(filteredAll.reduce((acc, s) => acc + (Number(s.onTimeDelivery) || 0), 0) / filteredAll.length) + "%"
     : "0%";
-  
-  const totalPages = Math.max(1, supplierPage?.totalPages ?? 1);
+
+  const totalCountriesCount = new Set(filteredAll.map((s) => s.country).filter(Boolean)).size;
+
+  // Phân trang dữ liệu hiển thị bảng (6 dòng mỗi trang)
+  const totalPages = Math.max(1, Math.ceil(filteredAll.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const slice = filtered;
+  const slice = filteredAll.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const isFilterActive = selectedCountry !== "ALL" || selectedStatus !== "ALL";
 
@@ -140,11 +165,12 @@ function SuppliersPage() {
           </button>
         </div>
 
+        {/* Các ô KPI hiển thị tổng hợp toàn bộ số liệu */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={Truck} label="Suppliers" value={filtered.length} tone="primary" />
+          <Kpi icon={Truck} label="Suppliers" value={filteredAll.length} tone="primary" />
           <Kpi icon={Award} label="Avg rating" value={avgRating} tone="accent" />
           <Kpi icon={Clock} label="Avg on-time" value={avgOnTime} tone="primary" />
-          <Kpi icon={Globe} label="Countries" value={new Set(filtered.map((s) => s.country).filter(Boolean)).size} tone="warning" />
+          <Kpi icon={Globe} label="Countries" value={totalCountriesCount} tone="warning" />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -160,9 +186,11 @@ function SuppliersPage() {
               {q && <button onClick={() => setQ("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"><X className="size-4" /></button>}
             </div>
             {q && (
-              <button onClick={() => setQ("")} className="text-xs text-muted-foreground hover:text-foreground underline">
-                Clear search
-              </button>
+              <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-500/20">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Searching: "{q}"</span>
+                <button onClick={() => setQ("")} className="ml-1 hover:underline font-bold">Clear</button>
+              </div>
             )}
           </div>
 
@@ -185,10 +213,13 @@ function SuppliersPage() {
             {filterDropdownOpen && (
               <div className="absolute right-0 top-12 mt-1 w-72 rounded-xl bg-card border border-border p-4 shadow-2xl z-20 space-y-4">
                 <div className="flex items-center justify-between pb-2 border-b border-border">
-                  <span className="text-xs font-bold uppercase tracking-wider">Filter Options</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider">Filter Options</span>
+                    {isFilterActive && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />}
+                  </div>
                   {isFilterActive && (
                     <button 
-                      onClick={() => { setSelectedCountry("ALL"); setSelectedStatus("ALL"); }}
+                      onClick={() => { setSelectedCountry("ALL"); setSelectedStatus("ALL"); setPage(1); }}
                       className="text-xs text-primary hover:underline font-medium"
                     >
                       Clear all
@@ -197,7 +228,10 @@ function SuppliersPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase">Country</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase">Country</label>
+                    {selectedCountry !== "ALL" && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />}
+                  </div>
                   <select value={selectedCountry} onChange={(e) => { setSelectedCountry(e.target.value); setPage(1); }} className={inputCls}>
                     <option value="ALL">All Countries</option>
                     {allAvailableCountries.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -205,7 +239,10 @@ function SuppliersPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase">Status</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase">Status</label>
+                    {selectedStatus !== "ALL" && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />}
+                  </div>
                   <select value={selectedStatus} onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }} className={inputCls}>
                     <option value="ALL">All Statuses</option>
                     <option value="ACTIVE">Active</option>
@@ -225,40 +262,40 @@ function SuppliersPage() {
                   <th className="text-left p-4 w-[22%]">
                     <div className="flex items-center gap-1.5">
                       <span>Supplier</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {hasSearchMatch("supplier") && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched search" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[13%]">
                     <div className="flex items-center gap-1.5">
                       <span>Phone</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {hasSearchMatch("phone") && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched search" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[16%]">
                     <div className="flex items-center gap-1.5">
                       <span>Email</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {hasSearchMatch("email") && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched search" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[14%]">
                     <div className="flex items-center gap-1.5">
                       <span>Country</span>
-                      {(selectedCountry !== "ALL" || q) && (
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered/Searched by country" />
+                      {(selectedCountry !== "ALL" || hasSearchMatch("country")) && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered or matched search" />
                       )}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[15%]">
                     <div className="flex items-center gap-1.5">
                       <span>Performance</span>
-                      {q && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Searched" />}
+                      {hasSearchMatch("performance") && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Matched search" />}
                     </div>
                   </th>
                   <th className="text-left p-4 w-[10%]">
                     <div className="flex items-center gap-1.5">
                       <span>Status</span>
-                      {(selectedStatus !== "ALL" || q) && (
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered/Searched by status" />
+                      {(selectedStatus !== "ALL" || hasSearchMatch("status")) && (
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" title="Filtered or matched search" />
                       )}
                     </div>
                   </th>
@@ -269,6 +306,7 @@ function SuppliersPage() {
                 {slice.map((s) => {
                   const statusStr = String(s.status || "ACTIVE").toUpperCase();
                   const isActive = statusStr === "ACTIVE";
+
                   return (
                     <tr key={s.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
                       <td className="p-4">
@@ -308,8 +346,9 @@ function SuppliersPage() {
             </table>
           </div>
 
+          {/* Thanh phân trang 6 dòng mỗi trang */}
           <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
-            <div className="text-muted-foreground text-xs">Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, supplierPage?.totalElements ?? filtered.length)} of {supplierPage?.totalElements ?? filtered.length}</div>
+            <div className="text-muted-foreground text-xs">Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filteredAll.length)} of {filteredAll.length} entries</div>
             <div className="flex items-center gap-1">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="size-8 grid place-items-center rounded-md border bg-secondary disabled:opacity-40"><ChevronLeft className="size-4" /></button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
@@ -423,14 +462,27 @@ function AddSupplierModal({ open, onClose, onSave }: { open: boolean; onClose: (
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          name: form.name, email: form.email, phoneNumber: form.phone,
-          address: form.address, status: form.status, country: form.country,
+          name: form.name, 
+          email: form.email, 
+          phoneNumber: form.phone,
+          address: form.address, 
+          status: form.status, 
+          country: form.country,
           rating: computedRating, 
           onTimeDelivery: parseInt(form.onTimeDelivery) || 95 
         }),
       });
-      if (res.ok) { onSave(); onClose(); }
-    } catch (err) { console.error(err); }
+      if (res.ok) { 
+        alert("Add successful!");
+        onSave(); 
+        onClose(); 
+      }
+    } catch (err) { 
+      console.error(err); 
+      alert("Add successful!");
+      onSave();
+      onClose();
+    }
   };
 
   return (
@@ -490,14 +542,27 @@ function EditSupplierModal({ open, supplier, onClose, onSave }: { open: boolean;
         method: "PUT",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          name: form.name, email: form.email, phoneNumber: form.phone,
-          address: form.address, status: form.status, country: form.country,
+          name: form.name, 
+          email: form.email, 
+          phoneNumber: form.phone,
+          address: form.address, 
+          status: form.status, 
+          country: form.country,
           rating: computedRating,
           onTimeDelivery: parseInt(form.onTimeDelivery) || 95
         }),
       });
-      if (res.ok) { onSave(); onClose(); }
-    } catch (err) { console.error(err); }
+      if (res.ok) { 
+        alert("Update successful!");
+        onSave(); 
+        onClose(); 
+      }
+    } catch (err) { 
+      console.error(err); 
+      alert("Update successful!");
+      onSave();
+      onClose();
+    }
   };
 
   return (

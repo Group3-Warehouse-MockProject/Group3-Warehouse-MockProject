@@ -64,7 +64,7 @@ public class InventoryCheckController {
         }
 
         List<InventoryCheckDTO> result = checks.getContent().stream()
-                .map(InventoryCheckDTO::fromEntity)
+                .map(this::toDTO)
                 .toList();
 
         return ResponseEntity.ok(new PageResponse<>(result, checks));
@@ -80,7 +80,7 @@ public class InventoryCheckController {
         if (user == null) return ResponseEntity.status(401).build();
 
         return inventoryCheckRepository.findById(id)
-                .map(check -> ResponseEntity.ok(InventoryCheckDTO.fromEntity(check)))
+                .map(check -> ResponseEntity.ok(toDTO(check)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -158,11 +158,12 @@ public class InventoryCheckController {
             InventoryCheck saved = inventoryCheckRepository.save(check);
 
             ApprovalHistory history = ApprovalHistory.builder()
-                    .inventoryCheck(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)
                     .newStatus(saved.getStatus().name())
                     .note("Stocktake sheet created")
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
 
@@ -178,7 +179,7 @@ public class InventoryCheckController {
                 eventPublisher.publishEvent(event);
             }
 
-            return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+            return ResponseEntity.ok(toDTO(saved));
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Error creating stocktake sheet"));
@@ -240,12 +241,13 @@ public class InventoryCheckController {
 
         if (statusChanged) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .inventoryCheck(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)
                     .oldStatus(oldStatus)
                     .newStatus(saved.getStatus().name())
                     .note("Started counting")
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
 
@@ -262,7 +264,7 @@ public class InventoryCheckController {
             }
         }
 
-        return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+        return ResponseEntity.ok(toDTO(saved));
     }
 
     // ------------------------------------------------------------------
@@ -302,12 +304,13 @@ public class InventoryCheckController {
 
         if (!oldStatusStr.equals(newStatus)) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .inventoryCheck(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)
                     .oldStatus(oldStatusStr)
                     .newStatus(newStatus)
                     .note(body.getOrDefault("remark", "Status updated to " + newStatus))
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
 
@@ -324,12 +327,20 @@ public class InventoryCheckController {
             }
         }
 
-        return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+        return ResponseEntity.ok(toDTO(saved));
     }
 
     // ------------------------------------------------------------------
     // Helper
     // ------------------------------------------------------------------
+    private InventoryCheckDTO toDTO(InventoryCheck check) {
+        if (check == null) return null;
+        List<ApprovalHistory> histories = approvalHistoryRepository
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(check.getId(), Status.DocumentType.INVENTORY_CHECK);
+        check.setApprovalHistories(histories);
+        return InventoryCheckDTO.fromEntity(check);
+    }
+
     private User getAuthenticatedUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return null;
