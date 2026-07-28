@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  X, Calendar, User, Warehouse, FileText, Package, History,
-  CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save,
+  X, Calendar, User, Warehouse, FileText, Package,
+  CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save, Plus, History
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
@@ -17,11 +17,19 @@ interface Props {
   onUpdated: (updated: ReceiptMovement[]) => void;
 }
 
+interface ProductOption { sku: string; name: string; }
+interface WarehouseOption { id: string; code: string; }
+interface SupplierOption { id: string; name: string; }
+interface EditLineItem { key: string; sku: string; qty: number; }
+
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
   PENDING:  { label: "Pending",  icon: Clock,         className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
   APPROVED: { label: "Approved", icon: CheckCircle2,  className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
   REJECTED: { label: "Rejected", icon: XCircle,       className: "bg-red-500/15 text-red-400 border-red-500/30" },
 };
+
+let lineKeyCounter = 0;
+function nextLineKey() { return `line-${++lineKeyCounter}`; }
 
 export function InboundDetailModal({
   allMovements,
@@ -32,12 +40,25 @@ export function InboundDetailModal({
 }: Props) {
   const { currentUser } = useApp();
   const canEdit   = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
+  const isPending = movement.status === "PENDING";
 
   // All lines belonging to this receipt
   const lines = allMovements.filter((m) => m.receiptId === movement.receiptId);
 
+  // Editing state
   const [editing, setEditing]         = useState(false);
   const [editRemark, setEditRemark]   = useState(movement.remark ?? "");
+  const [editPartner, setEditPartner] = useState(movement.partner ?? "");
+  const [editWarehouseId, setEditWarehouseId] = useState(movement.warehouseId);
+  const [editItems, setEditItems]     = useState<EditLineItem[]>([]);
+
+  // Reference data for dropdowns
+  const [products, setProducts]       = useState<ProductOption[]>([]);
+  const [warehouses, setWarehouses]   = useState<WarehouseOption[]>([]);
+  const [suppliers, setSuppliers]     = useState<SupplierOption[]>([]);
+  const [refLoading, setRefLoading]   = useState(false);
+
+  // Action state
   const [saving, setSaving]           = useState(false);
   const [confirmAction, setConfirmAction] = useState<"APPROVED" | "REJECTED" | null>(null);
   const [error, setError]             = useState<string | null>(null);
@@ -45,6 +66,52 @@ export function InboundDetailModal({
 
   const statusCfg = STATUS_CONFIG[movement.status] ?? STATUS_CONFIG["PENDING"];
   const StatusIcon = statusCfg.icon;
+
+  // Fetch reference data when entering edit mode
+  useEffect(() => {
+    if (!editing) return;
+    setRefLoading(true);
+    Promise.all([
+      api.get<ProductOption[]>("/products"),
+      api.get<WarehouseOption[]>("/warehouses"),
+      api.get<SupplierOption[]>("/suppliers"),
+    ]).then(([pRes, wRes, sRes]) => {
+      setProducts(pRes.data.map((p: any) => ({ sku: p.code || p.sku, name: p.name })));
+      setWarehouses(wRes.data.map((w: any) => ({ id: String(w.id), code: w.code })));
+      setSuppliers(sRes.data.map((s: any) => ({ id: String(s.id), name: s.name })));
+    }).catch(() => {}).finally(() => setRefLoading(false));
+  }, [editing]);
+
+  function enterEditMode() {
+    setEditing(true);
+    setEditRemark(movement.remark ?? "");
+    setEditPartner(movement.partner ?? "");
+    setEditWarehouseId(movement.warehouseId);
+    setEditItems(lines.map((l) => ({ key: nextLineKey(), sku: l.sku, qty: l.qty })));
+    setError(null);
+    setSaveWarning(null);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setError(null);
+    setSaveWarning(null);
+  }
+
+  function addLine() {
+    setEditItems((prev) => [...prev, { key: nextLineKey(), sku: "", qty: 1 }]);
+    setSaveWarning(null);
+  }
+
+  function removeLine(key: string) {
+    setEditItems((prev) => prev.filter((l) => l.key !== key));
+    setSaveWarning(null);
+  }
+
+  function updateLine(key: string, field: "sku" | "qty", value: string | number) {
+    setEditItems((prev) => prev.map((l) => l.key === key ? { ...l, [field]: value } : l));
+    setSaveWarning(null);
+  }
 
   async function handleQuickAction(status: "APPROVED" | "REJECTED") {
     setSaving(true);
@@ -66,20 +133,48 @@ export function InboundDetailModal({
   }
 
   async function handleSave() {
-    // Check no changes
-    const remarkUnchanged = editRemark.trim() === (movement.remark ?? "").trim();
-    if (remarkUnchanged) {
-      setSaveWarning("No changes detected. Please modify the remark before saving.");
+    // Validate items
+    if (editItems.length === 0) {
+      setSaveWarning("At least one item is required.");
       return;
     }
+    for (const item of editItems) {
+      if (!item.sku) { setSaveWarning("Please select a product for all items."); return; }
+      if (!item.qty || item.qty <= 0) { setSaveWarning(`Invalid quantity for product ${item.sku}.`); return; }
+    }
+
+    // Check if anything changed
+    const remarkChanged = editRemark.trim() !== (movement.remark ?? "").trim();
+    const partnerChanged = editPartner.trim() !== (movement.partner ?? "").trim();
+    const warehouseChanged = editWarehouseId !== movement.warehouseId;
+    const itemsChanged = (() => {
+      if (editItems.length !== lines.length) return true;
+      return editItems.some((item, i) => item.sku !== lines[i].sku || item.qty !== lines[i].qty);
+    })();
+
+    if (!remarkChanged && !partnerChanged && !warehouseChanged && !itemsChanged) {
+      setSaveWarning("No changes detected. Please modify at least one field before saving.");
+      return;
+    }
+
     setSaveWarning(null);
     setSaving(true);
     setError(null);
     try {
-      const res = await api.patch<ReceiptMovement[]>(`/receipts/${movement.receiptId}`, {
+      const payload: Record<string, any> = {
         status: movement.status,
         remark: editRemark || null,
-      });
+      };
+      if (partnerChanged) payload.partner = editPartner || null;
+      if (warehouseChanged) payload.warehouseId = Number(editWarehouseId);
+      if (itemsChanged) {
+        payload.items = editItems.map((item) => ({
+          productCode: item.sku,
+          quantity: item.qty,
+        }));
+      }
+
+      const res = await api.patch<ReceiptMovement[]>(`/receipts/${movement.receiptId}`, payload);
       onUpdated(res.data);
       setEditing(false);
     } catch (err: any) {
@@ -125,7 +220,30 @@ export function InboundDetailModal({
             <MetaRow icon={Calendar} label="Created at" value={movement.createdAt} />
             <MetaRow icon={Calendar} label="Updated at"  value={movement.updatedAt ?? "—"} />
             <MetaRow icon={User}     label="Created by"  value={movement.staff} />
-            <MetaRow icon={Warehouse} label="Warehouse"  value={warehouseCode(movement.warehouseId)} />
+
+            {/* Warehouse — editable when PENDING */}
+            <div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1">
+                <Warehouse className="size-3.5" /> Warehouse
+              </div>
+              {editing ? (
+                <select
+                  value={editWarehouseId}
+                  onChange={(e) => { setEditWarehouseId(e.target.value); setSaveWarning(null); }}
+                  className="h-9 px-3 rounded-lg bg-input border border-border text-sm w-full text-foreground"
+                  disabled={refLoading}
+                >
+                  {warehouses.length === 0 && (
+                    <option value={movement.warehouseId}>{warehouseCode(movement.warehouseId)}</option>
+                  )}
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.code}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-sm font-medium">{warehouseCode(movement.warehouseId)}</div>
+              )}
+            </div>
 
             {/* Status */}
             <div className="col-span-2">
@@ -136,7 +254,29 @@ export function InboundDetailModal({
               </span>
             </div>
 
-            {/* Notes */}
+            {/* Partner — editable */}
+            <div className="col-span-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
+                <User className="size-3.5" /> Supplier
+              </div>
+              {editing ? (
+                <select
+                  value={editPartner}
+                  onChange={(e) => { setEditPartner(e.target.value); setSaveWarning(null); }}
+                  className="h-9 px-3 rounded-lg bg-input border border-border text-sm w-full text-foreground"
+                  disabled={refLoading}
+                >
+                  <option value="">— Select supplier —</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-sm font-medium">{movement.partner || <span className="text-muted-foreground italic">Not set</span>}</div>
+              )}
+            </div>
+
+            {/* Notes — editable */}
             <div className="col-span-2">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
                 <FileText className="size-3.5" /> Notes
@@ -166,20 +306,74 @@ export function InboundDetailModal({
                 <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                   <tr>
                     <th className="text-left px-3 py-2">Product</th>
-                    <th className="text-left px-3 py-2">SKU</th>
-                    <th className="text-left px-3 py-2">Supplier</th>
-                    <th className="text-right px-3 py-2">Qty</th>
+                    <th className="text-left px-3 py-2">{editing ? "" : "SKU"}</th>
+                    {!editing && <th className="text-left px-3 py-2">Supplier</th>}
+                    <th className="text-right px-3 py-2 w-20">Qty</th>
+                    {editing && <th className="w-10" />}
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((line) => (
-                    <tr key={line.id} className="border-t border-border/60">
-                      <td className="px-3 py-2 font-medium">{line.product}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{line.sku}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{line.partner}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-primary">+{line.qty}</td>
-                    </tr>
-                  ))}
+                  {editing ? (
+                    <>
+                      {editItems.map((item) => {
+                        const productMatch = products.find((p) => p.sku === item.sku);
+                        return (
+                          <tr key={item.key} className="border-t border-border/60">
+                            <td className="px-3 py-2" colSpan={2}>
+                              <select
+                                value={item.sku}
+                                onChange={(e) => updateLine(item.key, "sku", e.target.value)}
+                                className="h-8 px-2 rounded-md bg-input border border-border text-sm w-full text-foreground"
+                              >
+                                <option value="">— Select product —</option>
+                                {products.map((p) => (
+                                  <option key={p.sku} value={p.sku}>{p.name} ({p.sku})</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.qty}
+                                onChange={(e) => updateLine(item.key, "qty", Math.max(1, Number(e.target.value)))}
+                                className="h-8 w-20 px-2 rounded-md bg-input border border-border text-sm text-right text-foreground"
+                              />
+                            </td>
+                            <td className="px-1 py-2 text-center">
+                              <button
+                                onClick={() => removeLine(item.key)}
+                                className="size-7 rounded-md grid place-items-center text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                disabled={editItems.length <= 1}
+                                title="Remove item"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t border-border/60">
+                        <td colSpan={4} className="px-3 py-2">
+                          <button
+                            onClick={addLine}
+                            className="h-8 px-3 rounded-md text-xs font-medium border border-dashed border-border hover:bg-secondary flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                          >
+                            <Plus className="size-3.5" /> Add item
+                          </button>
+                        </td>
+                      </tr>
+                    </>
+                  ) : (
+                    lines.map((line) => (
+                      <tr key={line.id} className="border-t border-border/60">
+                        <td className="px-3 py-2 font-medium">{line.product}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{line.sku}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{line.partner}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-primary">+{line.qty}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -259,7 +453,7 @@ export function InboundDetailModal({
             {editing ? (
               <>
                 <button
-                  onClick={() => { setEditing(false); setEditRemark(movement.remark ?? ""); setError(null); setSaveWarning(null); }}
+                  onClick={cancelEdit}
                   className="h-9 px-4 rounded-lg text-sm border border-border hover:bg-secondary"
                   disabled={saving}
                 >
@@ -267,7 +461,7 @@ export function InboundDetailModal({
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || refLoading}
                   className="h-9 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring"
                   style={{ background: "var(--gradient-primary)" }}
                 >
@@ -302,7 +496,7 @@ export function InboundDetailModal({
                 <button onClick={onClose} className="h-9 px-4 rounded-lg text-sm border border-border hover:bg-secondary">
                   Close
                 </button>
-                {canEdit && movement.status === "PENDING" && (
+                {canEdit && isPending && (
                   <>
                     <button
                       onClick={() => setConfirmAction("REJECTED")}
@@ -318,9 +512,9 @@ export function InboundDetailModal({
                     </button>
                   </>
                 )}
-                {canEdit && (
+                {canEdit && isPending && (
                   <button
-                    onClick={() => setEditing(true)}
+                    onClick={enterEditMode}
                     className="h-9 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring"
                     style={{ background: "var(--gradient-primary)" }}
                   >

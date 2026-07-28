@@ -326,6 +326,60 @@ public class WarehouseReceiptController {
             receipt.setRemark(request.getRemark().isBlank() ? null : request.getRemark());
         }
 
+        // Update warehouse (only when PENDING)
+        if (request.getWarehouseId() != null) {
+            if (receipt.getStatus() != Status.ReceiptStatus.PENDING) {
+                return ResponseEntity.badRequest().body("Cannot change warehouse of a finalized receipt");
+            }
+            Warehouse newWarehouse = warehouseRepository.findById(request.getWarehouseId()).orElse(null);
+            if (newWarehouse == null) {
+                return ResponseEntity.badRequest().body("Warehouse not found: " + request.getWarehouseId());
+            }
+            receipt.setWarehouse(newWarehouse);
+        }
+
+        // Update partner
+        if (request.getPartner() != null) {
+            receipt.setPartner(request.getPartner().isBlank() ? null : request.getPartner());
+        }
+
+        // Update items (only when PENDING)
+        if (request.getItems() != null) {
+            if (receipt.getStatus() != Status.ReceiptStatus.PENDING) {
+                return ResponseEntity.badRequest().body("Cannot modify items of a finalized receipt");
+            }
+            if (request.getItems().isEmpty()) {
+                return ResponseEntity.badRequest().body("At least one item is required");
+            }
+
+            boolean isInboundReceipt = receipt.getType() == Status.TransactionType.INBOUND;
+            List<ReceiptDetail> newDetails = new ArrayList<>();
+
+            for (CreateReceiptRequest.LineItemRequest item : request.getItems()) {
+                if (item.getProductCode() == null || item.getProductCode().isBlank()) continue;
+                if (item.getQuantity() == null || item.getQuantity() <= 0) {
+                    return ResponseEntity.badRequest().body("Invalid quantity for product: " + item.getProductCode());
+                }
+
+                Product product = productRepository.findByCode(item.getProductCode()).orElse(null);
+                if (product == null) {
+                    return ResponseEntity.badRequest().body("Product not found: " + item.getProductCode());
+                }
+
+                BigDecimal resolvedPrice = item.getPrice() != null ? item.getPrice()
+                        : (isInboundReceipt ? product.getCost() : product.getPrice());
+
+                newDetails.add(ReceiptDetail.builder()
+                        .receipt(receipt)
+                        .product(product)
+                        .quantity(item.getQuantity())
+                        .price(resolvedPrice)
+                        .build());
+            }
+
+            receipt.getDetails().clear();
+            receipt.getDetails().addAll(newDetails);
+        }
 
         WarehouseReceipt saved = receiptRepository.save(receipt);
 
