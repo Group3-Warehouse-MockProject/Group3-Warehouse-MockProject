@@ -9,6 +9,7 @@ import com.fpt.sccw.entity.User;
 import com.fpt.sccw.repository.FeedbackRepository;
 import com.fpt.sccw.service.UserService;
 import com.fpt.sccw.service.FeedbackEmailService;
+import com.fpt.sccw.service.NotificationService;
 import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,6 +34,7 @@ public class FeedbackController {
     private final FeedbackRepository feedbackRepository;
     private final UserService userService;
     private final FeedbackEmailService feedbackEmailService;
+    private final NotificationService notificationService;
 
     @GetMapping
     public ResponseEntity<List<FeedbackDTO>> getFeedback() {
@@ -65,6 +67,7 @@ public class FeedbackController {
         // legacy rating column is still NOT NULL.
         feedback.setRating(0);
         Feedback savedFeedback = feedbackRepository.save(feedback);
+        notificationService.notifyReviewersOfFeedback(savedFeedback);
         feedbackEmailService.notifyReviewers(savedFeedback);
 
         return ResponseEntity.ok(Map.of("message", "Thank you for your feedback."));
@@ -87,7 +90,10 @@ public class FeedbackController {
         feedback.setResponse(request.getResponse().trim());
         feedback.setRespondedBy(reviewer);
         feedback.setRespondedAt(LocalDateTime.now());
-        return ResponseEntity.ok(FeedbackDTO.fromEntity(feedbackRepository.save(feedback)));
+        Feedback savedFeedback = feedbackRepository.save(feedback);
+        notificationService.notifySubmitterOfResponse(savedFeedback);
+        feedbackEmailService.notifySubmitterOfResponse(savedFeedback);
+        return ResponseEntity.ok(FeedbackDTO.fromEntity(savedFeedback));
     }
 
     private User getCurrentUser() {
