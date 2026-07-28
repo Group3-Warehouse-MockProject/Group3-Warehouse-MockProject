@@ -71,4 +71,33 @@ public interface ReceiptDetailRepository extends JpaRepository<ReceiptDetail, Lo
            "AND r.status = com.fpt.sccw.entity.Status.ReceiptStatus.COMPLETED " +
            "AND r.createdAt >= :since")
     Long sumOutboundQuantitySince(@Param("warehouseId") Long warehouseId, @Param("productId") Long productId, @Param("since") java.time.Instant since);
+
+    @Query(value = "SELECT d FROM ReceiptDetail d " +
+            "JOIN FETCH d.receipt r " +
+            "JOIN FETCH d.product p " +
+            "LEFT JOIN FETCH p.supplier " +
+            "LEFT JOIN FETCH r.user " +
+            "LEFT JOIN FETCH r.assignedUser " +
+            "LEFT JOIN FETCH r.warehouse " +
+            "WHERE (:warehouseId IS NULL OR r.warehouse.id = :warehouseId) " +
+            "AND (:type IS NULL OR r.type = :type) " +
+            "AND (:search IS NULL OR (LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(p.code) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(COALESCE(r.partner, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(CONCAT('r-', r.id)) LIKE LOWER(CONCAT('%', :search, '%')) OR CONCAT('', r.id) LIKE CONCAT('%', :search, '%') OR LOWER(COALESCE(r.user.fullName, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(COALESCE(r.assignedUser.fullName, '')) LIKE LOWER(CONCAT('%', :search, '%')))) " +
+            "AND (:status IS NULL OR r.status = :status) " +
+            "AND (:staffName IS NULL OR r.user.fullName = :staffName) " +
+            "AND (:assignedUserName IS NULL OR r.assignedUser.fullName = :assignedUserName) " +
+            "AND (:qtyMin IS NULL OR d.quantity >= :qtyMin) " +
+            "AND (:qtyMax IS NULL OR d.quantity <= :qtyMax) " +
+            "AND (:dateFrom IS NULL OR r.createdAt >= :dateFrom) " +
+            "AND (:dateTo IS NULL OR r.createdAt <= :dateTo)")
+    java.util.List<ReceiptDetail> findAllMovementsFiltered(@Param("warehouseId") Long warehouseId,
+                                                           @Param("type") com.fpt.sccw.entity.Status.TransactionType type,
+                                                           @Param("search") String search,
+                                                           @Param("status") com.fpt.sccw.entity.Status.ReceiptStatus status,
+                                                           @Param("staffName") String staffName,
+                                                           @Param("assignedUserName") String assignedUserName,
+                                                           @Param("qtyMin") Long qtyMin,
+                                                           @Param("qtyMax") Long qtyMax,
+                                                           @Param("dateFrom") java.time.LocalDateTime dateFrom,
+                                                           @Param("dateTo") java.time.LocalDateTime dateTo);
 }
+

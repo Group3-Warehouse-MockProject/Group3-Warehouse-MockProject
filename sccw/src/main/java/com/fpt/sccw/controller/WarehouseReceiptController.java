@@ -4,6 +4,7 @@ import com.fpt.sccw.dto.request.CreateReceiptRequest;
 import com.fpt.sccw.dto.request.UpdateReceiptRequest;
 import com.fpt.sccw.dto.response.MovementDTO;
 import com.fpt.sccw.dto.response.PageResponse;
+import com.fpt.sccw.dto.response.ReceiptStatsDTO;
 import com.fpt.sccw.entity.*;
 import com.fpt.sccw.repository.*;
 import com.fpt.sccw.service.ActivityLogService;
@@ -134,10 +135,118 @@ public class WarehouseReceiptController {
         return ResponseEntity.ok(new PageResponse<>(pageContent, detailPage));
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // GET /api/receipts/stats
+    // ─────────────────────────────────────────────────────────────────────────
+    @GetMapping("/stats")
+    @Transactional(readOnly = true)
+    public ResponseEntity<ReceiptStatsDTO> getReceiptStats(
+            @RequestParam(required = false) Long warehouseIdParam,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String staffName,
+            @RequestParam(required = false) String assignedUserName,
+            @RequestParam(required = false) Long qtyMin,
+            @RequestParam(required = false) Long qtyMax,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo
+    ) {
+        User user = resolveUser();
+        if (user == null) return ResponseEntity.status(401).build();
+
+        String roleName = user.getRole().getRoleName().name();
+        Long effectiveWarehouseId = resolveWarehouseScope(user, roleName, warehouseIdParam);
+
+        Status.TransactionType receiptType = null;
+        if (type != null && !type.isBlank()) {
+            try {
+                receiptType = Status.TransactionType.valueOf(type.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+
+        Status.ReceiptStatus receiptStatus = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                receiptStatus = Status.ReceiptStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+
+        java.time.LocalDateTime ldtFrom = null;
+        if (dateFrom != null && !dateFrom.isBlank()) {
+            try {
+                ldtFrom = java.time.LocalDate.parse(dateFrom).atStartOfDay();
+            } catch (Exception ex) {}
+        }
+        java.time.LocalDateTime ldtTo = null;
+        if (dateTo != null && !dateTo.isBlank()) {
+            try {
+                ldtTo = java.time.LocalDate.parse(dateTo).atTime(23, 59, 59);
+            } catch (Exception ex) {}
+        }
+
+        List<ReceiptDetail> details = receiptDetailRepository
+                .findAllMovementsFiltered(effectiveWarehouseId, receiptType, search, receiptStatus, staffName, assignedUserName, qtyMin, qtyMax, ldtFrom, ldtTo);
+
+        java.util.Set<Long> uniqueReceiptIds = new java.util.HashSet<>();
+        java.util.Set<String> uniquePartners = new java.util.HashSet<>();
+        long totalUnits = 0;
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        long pendingRequests = 0;
+        long approvedRequests = 0;
+        java.util.Set<Long> pendingReceiptIds = new java.util.HashSet<>();
+        java.util.Set<Long> approvedReceiptIds = new java.util.HashSet<>();
+
+        for (ReceiptDetail d : details) {
+            WarehouseReceipt r = d.getReceipt();
+            boolean isInbound = r.getType() == Status.TransactionType.INBOUND;
+            uniqueReceiptIds.add(r.getId());
+
+            if (isInbound) {
+                if (d.getQuantity() != null) {
+                    totalUnits += d.getQuantity();
+                }
+                String partner = resolvePartner(r, d, true);
+                if (partner != null && !partner.isBlank() && !"—".equals(partner)) {
+                    uniquePartners.add(partner.trim());
+                }
+            } else {
+                if (r.getStatus() == Status.ReceiptStatus.PENDING) {
+                    pendingReceiptIds.add(r.getId());
+                } else if (r.getStatus() == Status.ReceiptStatus.APPROVED) {
+                    approvedReceiptIds.add(r.getId());
+                } else if (r.getStatus() == Status.ReceiptStatus.COMPLETED) {
+                    if (d.getPrice() != null && d.getQuantity() != null) {
+                        totalRevenue = totalRevenue.add(d.getPrice().multiply(BigDecimal.valueOf(d.getQuantity())));
+                    }
+                }
+            }
+        }
+
+        pendingRequests = pendingReceiptIds.size();
+        approvedRequests = approvedReceiptIds.size();
+
+        ReceiptStatsDTO dto = ReceiptStatsDTO.builder()
+                .totalReceipts(uniqueReceiptIds.size())
+                .totalUnits(totalUnits)
+                .totalPartners(uniquePartners.size())
+                .totalRevenue(totalRevenue)
+                .pendingRequests(pendingRequests)
+                .approvedRequests(approvedRequests)
+                .build();
+
+        return ResponseEntity.ok(dto);
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // POST /api/receipts
     // ─────────────────────────────────────────────────────────────────────────
+
     @PostMapping
     @Transactional
     public ResponseEntity<?> createReceipt(@RequestBody CreateReceiptRequest request) {

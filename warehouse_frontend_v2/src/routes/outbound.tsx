@@ -96,6 +96,7 @@ function OutboundPage() {
   const [products, setProducts]     = useState<ProductInfo[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
+  const [stats, setStats]           = useState<{ totalReceipts: number; totalRevenue: number; pendingRequests: number; approvedRequests: number } | null>(null);
 
   // Server-side pagination state
   const [page, setPage]             = useState(0); // 0-indexed for backend
@@ -154,6 +155,11 @@ function OutboundPage() {
       })
       .catch(() => setError("Failed to load outbound requests. Please try again."))
       .finally(() => setLoading(false));
+
+    const { page: _p, size: _s, ...statParams } = params;
+    api.get<{ totalReceipts: number; totalRevenue: number; pendingRequests: number; approvedRequests: number }>("/receipts/stats", { params: statParams })
+      .then((res) => setStats(res.data))
+      .catch(() => {});
   }
 
   function handleUpdated(updated: ReceiptMovement[]) {
@@ -177,6 +183,15 @@ function OutboundPage() {
 
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
 
+  const groupedMovements = useMemo(() => {
+    const groups = new Map<number, ReceiptMovement[]>();
+    for (const m of movements) {
+      if (!groups.has(m.receiptId)) groups.set(m.receiptId, []);
+      groups.get(m.receiptId)!.push(m);
+    }
+    return Array.from(groups.values());
+  }, [movements]);
+
   // Unique staff options
   const staffOptions = useMemo(() => [...new Set(movements.map((m) => m.staff))].sort(), [movements]);
 
@@ -190,32 +205,6 @@ function OutboundPage() {
 
   // Reset page whenever filters change
   useEffect(() => { setPage(0); }, [searchQuery, filters, activeWarehouseId]);
-
-  // KPIs (server already filtered)
-  const uniqueReceiptIds = useMemo(() => new Set(movements.map((m) => m.receiptId)), [movements]);
-  
-  const totalRevenue = useMemo(() => {
-    return movements
-      .filter((m) => m.status === "COMPLETED")
-      .reduce((sum, m) => {
-        const prod = products.find((p) => p.sku === m.sku && p.warehouseId === m.warehouseId);
-        return sum + (prod ? prod.price * m.qty : 0);
-      }, 0);
-  }, [movements, products]);
-
-  const pendingCount = useMemo(() => {
-    const pendingReceipts = new Set(
-      movements.filter((m) => m.status === "PENDING").map((m) => m.receiptId)
-    );
-    return pendingReceipts.size;
-  }, [movements]);
-
-  const approvedCount = useMemo(() => {
-    const approvedReceipts = new Set(
-      movements.filter((m) => m.status === "APPROVED").map((m) => m.receiptId)
-    );
-    return approvedReceipts.size;
-  }, [movements]);
 
   const totalPagesCount = Math.max(1, totalPages);
 
@@ -244,10 +233,10 @@ function OutboundPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={ClipboardList} label="Total orders" value={loading ? "—" : uniqueReceiptIds.size} tone="primary" />
-          <Kpi icon={TrendingUp} label="Revenue" value={loading ? "—" : formatVND(totalRevenue)} tone="accent" />
-          <Kpi icon={Clock} label="Pending Requests" value={loading ? "—" : pendingCount} tone="warning" />
-          <Kpi icon={Truck} label="Approved Requests" value={loading ? "—" : approvedCount} tone="primary" />
+          <Kpi icon={ClipboardList} label="Total orders" value={loading || !stats ? "—" : stats.totalReceipts} tone="primary" />
+          <Kpi icon={TrendingUp} label="Revenue" value={loading || !stats ? "—" : formatVND(stats.totalRevenue)} tone="accent" />
+          <Kpi icon={Clock} label="Pending Requests" value={loading || !stats ? "—" : stats.pendingRequests} tone="warning" />
+          <Kpi icon={Truck} label="Approved Requests" value={loading || !stats ? "—" : stats.approvedRequests} tone="primary" />
         </div>
 
         {/* Search + Filter bar */}
@@ -407,23 +396,38 @@ function OutboundPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {movements.map((m) => {
+                    {groupedMovements.map((group) => {
+                      const m = group[0];
+                      const itemCount = group.length;
+                      const totalQty = group.reduce((sum, x) => sum + (x.qty ?? 0), 0);
+                      const totalVal = group.reduce((sum, x) => {
+                        const p = products.find((pr) => pr.sku === x.sku && pr.warehouseId === x.warehouseId);
+                        return sum + (p ? p.price * (x.qty ?? 0) : 0);
+                      }, 0);
                       const prod = products.find((p) => p.sku === m.sku && p.warehouseId === m.warehouseId);
-                      const itemTotal = prod ? prod.price * m.qty : 0;
                       const { reference, assignee } = parseRemark(m.remark);
                       const displayId = reference || `R-${m.receiptId}`;
                       return (
-                        <tr key={m.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
+                        <tr key={m.receiptId} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
                           <td className="p-4 font-mono text-xs">{displayId}</td>
                           <td className="p-4">
-                            <div className="font-medium">{m.product}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{m.sku}</div>
+                            <div className="font-medium flex items-center gap-1.5">
+                              <span className="truncate">{m.product}</span>
+                              {itemCount > 1 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/15 text-primary whitespace-nowrap">
+                                  +{itemCount - 1} more
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono">
+                              {itemCount > 1 ? `${itemCount} items total` : m.sku}
+                            </div>
                           </td>
                           <td className="p-4">{m.partner}</td>
                           <td className="p-4 font-mono text-xs">{warehouseCode(m.warehouseId)}</td>
-                          <td className="p-4 text-right font-semibold text-muted-foreground">{prod ? prod.stock : 0}</td>
-                          <td className="p-4 text-right font-semibold text-accent">-{m.qty}</td>
-                          <td className="p-4 text-right font-semibold">{prod ? formatVND(itemTotal) : "—"}</td>
+                          <td className="p-4 text-right font-semibold text-muted-foreground">{itemCount > 1 ? "—" : (prod ? prod.stock : 0)}</td>
+                          <td className="p-4 text-right font-semibold text-accent">-{totalQty}</td>
+                          <td className="p-4 text-right font-semibold">{formatVND(totalVal)}</td>
                           <td className="p-4 text-muted-foreground">{m.date}</td>
                           <td className="p-4"><StatusBadge status={m.status} /></td>
                           <td className="p-4"><PaymentStatusBadge status={m.paymentStatus} /></td>

@@ -60,6 +60,7 @@ function InboundPage() {
   const [allUsers, setAllUsers]     = useState<{ id: number; fullName: string; role: string }[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
+  const [stats, setStats]           = useState<{ totalReceipts: number; totalUnits: number; totalPartners: number } | null>(null);
   
   // Server-side pagination state
   const [page, setPage]             = useState(0); // 0-indexed for backend
@@ -117,6 +118,11 @@ function InboundPage() {
       })
       .catch(() => setError("Failed to load inbound receipts. Please try again."))
       .finally(() => setLoading(false));
+
+    const { page: _p, size: _s, ...statParams } = params;
+    api.get<{ totalReceipts: number; totalUnits: number; totalPartners: number }>("/receipts/stats", { params: statParams })
+      .then((res) => setStats(res.data))
+      .catch(() => {});
   }
 
   function handleUpdated(updated: ReceiptMovement[]) {
@@ -179,10 +185,6 @@ function InboundPage() {
     }
     return Array.from(groups.values());
   }, [movements]);
-
-  const totalReceiptsCount = new Set(movements.map((m) => m.receiptId)).size;
-  const totalIn          = movements.reduce((s, m) => s + (m.qty ?? 0), 0);
-  const suppliersSet     = new Set(movements.map((m) => m.partner));
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -268,17 +270,17 @@ function InboundPage() {
                 style={{ background: "color-mix(in oklab, var(--primary) 15%, transparent)" }}>
                 <ArrowDownToLine className="size-5" />
               </div>
-              <div className="text-3xl font-bold">{loading ? "—" : totalIn}</div>
+              <div className="text-3xl font-bold">{loading || !stats ? "—" : stats.totalUnits}</div>
             </div>
           </div>
           <div className="surface-card p-5">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Receipts</div>
-            <div className="mt-2 text-3xl font-bold">{loading ? "—" : groupedMovements.length}</div>
+            <div className="mt-2 text-3xl font-bold">{loading || !stats ? "—" : stats.totalReceipts}</div>
             <div className="text-xs text-muted-foreground mt-1">All time</div>
           </div>
           <div className="surface-card p-5">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Suppliers</div>
-            <div className="mt-2 text-3xl font-bold">{loading ? "—" : suppliersSet.size}</div>
+            <div className="mt-2 text-3xl font-bold">{loading || !stats ? "—" : stats.totalPartners}</div>
             <div className="text-xs text-muted-foreground mt-1">Active</div>
           </div>
         </div>
@@ -474,34 +476,48 @@ function InboundPage() {
 
                   {/* Grid Table Body */}
                   <div className="divide-y divide-border/60">
-                    {movements.map((m) => (
-                      <div
-                        key={m.id}
-                        className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
-                      >
-                        <div className="font-mono text-xs">R-{m.receiptId}</div>
-                        <div>
-                          <div className="font-medium">{m.product}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{m.sku}</div>
+                    {groupedMovements.map((group) => {
+                      const m = group[0];
+                      const totalQty = group.reduce((sum, item) => sum + (item.qty ?? 0), 0);
+                      const itemCount = group.length;
+                      return (
+                        <div
+                          key={m.receiptId}
+                          className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
+                        >
+                          <div className="font-mono text-xs">R-{m.receiptId}</div>
+                          <div>
+                            <div className="font-medium flex items-center gap-1.5">
+                              <span className="truncate">{m.product}</span>
+                              {itemCount > 1 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/15 text-primary whitespace-nowrap">
+                                  +{itemCount - 1} more
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono">
+                              {itemCount > 1 ? `${itemCount} items total` : m.sku}
+                            </div>
+                          </div>
+                          <div className="truncate">{m.partner}</div>
+                          <div className="font-mono text-xs">{warehouseCode(m.warehouseId)}</div>
+                          <div className="text-right font-semibold text-primary">+{totalQty}</div>
+                          <div className="text-muted-foreground">{m.date}</div>
+                          <div><StatusBadge status={m.status} /></div>
+                          <div className="text-muted-foreground truncate">{m.staff}</div>
+                          <div className="text-muted-foreground truncate">{m.assignedUserName ?? "—"}</div>
+                          <div className="text-center">
+                            <button
+                              onClick={() => setSelectedMovement(m)}
+                              title="View detail"
+                              className="size-8 rounded-md grid place-items-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors"
+                            >
+                              <Eye className="size-4" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="truncate">{m.partner}</div>
-                        <div className="font-mono text-xs">{warehouseCode(m.warehouseId)}</div>
-                        <div className="text-right font-semibold text-primary">+{m.qty}</div>
-                        <div className="text-muted-foreground">{m.date}</div>
-                        <div><StatusBadge status={m.status} /></div>
-                        <div className="text-muted-foreground truncate">{m.staff}</div>
-                        <div className="text-muted-foreground truncate">{m.assignedUserName ?? "—"}</div>
-                        <div className="text-center">
-                          <button
-                            onClick={() => setSelectedMovement(m)}
-                            title="View detail"
-                            className="size-8 rounded-md grid place-items-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors"
-                          >
-                            <Eye className="size-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
