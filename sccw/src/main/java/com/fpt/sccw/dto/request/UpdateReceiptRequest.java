@@ -18,4 +18,6 @@ public class UpdateReceiptRequest {
     private String partner;
     /** Updated line items — null = không đổi. Only allowed when PENDING. */
     private java.util.List<CreateReceiptRequest.LineItemRequest> items;
+    /** Assigned user id — null = không đổi, -1 = unassign */
+    private Long assignedUserId;
 }

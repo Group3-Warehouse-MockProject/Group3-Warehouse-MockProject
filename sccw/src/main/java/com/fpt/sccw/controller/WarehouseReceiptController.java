@@ -69,6 +69,7 @@ public class WarehouseReceiptController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String staffName,
+            @RequestParam(required = false) String assignedUserName,
             @RequestParam(required = false) Long qtyMin,
             @RequestParam(required = false) Long qtyMax,
             @RequestParam(required = false) String dateFrom,
@@ -100,18 +101,26 @@ public class WarehouseReceiptController {
             }
         }
         
-        java.time.Instant instantFrom = null;
+        java.time.LocalDateTime ldtFrom = null;
         if (dateFrom != null && !dateFrom.isBlank()) {
-            instantFrom = java.time.LocalDate.parse(dateFrom).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
+            try {
+                ldtFrom = java.time.LocalDate.parse(dateFrom).atStartOfDay();
+            } catch (Exception ex) {
+                // ignore invalid format
+            }
         }
-        java.time.Instant instantTo = null;
+        java.time.LocalDateTime ldtTo = null;
         if (dateTo != null && !dateTo.isBlank()) {
-            instantTo = java.time.LocalDate.parse(dateTo).atTime(23, 59, 59).atZone(java.time.ZoneId.systemDefault()).toInstant();
+            try {
+                ldtTo = java.time.LocalDate.parse(dateTo).atTime(23, 59, 59);
+            } catch (Exception ex) {
+                // ignore invalid format
+            }
         }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "receipt.createdAt"));
         Page<ReceiptDetail> detailPage = receiptDetailRepository
-                .findMovementPageFiltered(effectiveWarehouseId, receiptType, search, receiptStatus, staffName, qtyMin, qtyMax, instantFrom, instantTo, pageable);
+                .findMovementPageFiltered(effectiveWarehouseId, receiptType, search, receiptStatus, staffName, assignedUserName, qtyMin, qtyMax, ldtFrom, ldtTo, pageable);
 
         List<MovementDTO> pageContent = detailPage.getContent().stream()
                 .map(detail -> {
@@ -341,6 +350,19 @@ public class WarehouseReceiptController {
         // Update partner
         if (request.getPartner() != null) {
             receipt.setPartner(request.getPartner().isBlank() ? null : request.getPartner());
+        }
+
+        // Update assigned user
+        if (request.getAssignedUserId() != null) {
+            if (request.getAssignedUserId() <= 0) {
+                receipt.setAssignedUser(null);
+            } else {
+                User assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
+                if (assignedUser == null) {
+                    return ResponseEntity.badRequest().body("Assigned user not found: " + request.getAssignedUserId());
+                }
+                receipt.setAssignedUser(assignedUser);
+            }
         }
 
         // Update items (only when PENDING)

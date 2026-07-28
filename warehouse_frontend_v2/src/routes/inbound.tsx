@@ -40,6 +40,7 @@ interface Filters {
   warehouse: string;
   status: string;
   staff: string;
+  assignee: string;
   qtyMin: string;
   qtyMax: string;
   dateFrom: string;
@@ -47,7 +48,7 @@ interface Filters {
 }
 
 const DEFAULT_FILTERS: Filters = {
-  warehouse: "", status: "", staff: "",
+  warehouse: "", status: "", staff: "", assignee: "",
   qtyMin: "", qtyMax: "", dateFrom: "", dateTo: "",
 };
 
@@ -56,6 +57,7 @@ function InboundPage() {
 
   const [movements, setMovements] = useState<ReceiptMovement[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
+  const [allUsers, setAllUsers]     = useState<{ id: number; fullName: string; role: string }[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   
@@ -89,6 +91,7 @@ function InboundPage() {
 
   useEffect(() => {
     api.get<WarehouseInfo[]>("/warehouses").then((res) => setWarehouses(res.data)).catch(() => {});
+    api.get<any>("/users").then((res) => setAllUsers(Array.isArray(res.data) ? res.data : (res.data?.content ?? []))).catch(() => {});
   }, []);
 
   useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick, searchQuery, filters]);
@@ -100,6 +103,7 @@ function InboundPage() {
     if (searchQuery.trim()) params.search = searchQuery.trim();
     if (filters.status) params.status = filters.status;
     if (filters.staff) params.staffName = filters.staff;
+    if (filters.assignee) params.assignedUserName = filters.assignee;
     if (filters.warehouse) params.warehouseIdParam = filters.warehouse;
     if (filters.qtyMin) params.qtyMin = Number(filters.qtyMin);
     if (filters.qtyMax) params.qtyMax = Number(filters.qtyMax);
@@ -133,7 +137,15 @@ function InboundPage() {
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
 
   // Unique dropdown options derived from data
-  const staffOptions  = useMemo(() => [...new Set(movements.map((m) => m.staff))].sort(),  [movements]);
+  const staffOptions = useMemo(() => {
+    if (allUsers.length > 0) return allUsers.map(u => u.fullName).sort();
+    return [...new Set(movements.map((m) => m.staff))].sort();
+  }, [allUsers, movements]);
+
+  const assigneeOptions = useMemo(() => {
+    if (allUsers.length > 0) return allUsers.filter(u => u.role?.toUpperCase() === "STAFF" || u.role === "Staff").map(u => u.fullName).sort();
+    return [...new Set(movements.map((m) => m.assignedUserName).filter((name): name is string => !!name && name !== "—"))].sort();
+  }, [allUsers, movements]);
 
   // Active filter count (for badge on Filter button)
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
@@ -179,7 +191,7 @@ function InboundPage() {
 
   const handleExport = () => {
     if (movements.length === 0) return;
-    const headers = ["Receipt #", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Received by"];
+    const headers = ["Receipt #", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Created by"];
     const csvContent = [
       headers.join(","),
       ...movements.map((m) =>
@@ -208,9 +220,11 @@ function InboundPage() {
   };
 
   const sq = searchQuery.toLowerCase().trim();
-  const isSearchMatchingReceipt = sq && movements.some(m => `r-${m.receiptId}`.includes(sq));
+  const isSearchMatchingReceipt = sq && movements.some(m => `r-${m.receiptId}`.includes(sq) || String(m.receiptId).includes(sq));
   const isSearchMatchingProduct = sq && movements.some(m => m.product.toLowerCase().includes(sq) || m.sku.toLowerCase().includes(sq));
   const isSearchMatchingSupplier = sq && movements.some(m => m.partner.toLowerCase().includes(sq));
+  const isSearchMatchingCreatedBy = sq && movements.some(m => (m.staff || "").toLowerCase().includes(sq));
+  const isSearchMatchingAssignee = sq && movements.some(m => (m.assignedUserName || "").toLowerCase().includes(sq));
 
   return (
     <AppShell>
@@ -340,11 +354,21 @@ function InboundPage() {
                   </select>
                 </FilterField>
 
-                {/* Received by */}
-                <FilterField label="Received by" isActive={!!filters.staff}>
+                {/* Created by */}
+                <FilterField label="Created by" isActive={!!filters.staff}>
                   <select value={filters.staff} onChange={(e) => setFilter("staff", e.target.value)} className="filter-select">
                     <option value="">All Staff</option>
                     {staffOptions.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </FilterField>
+
+                {/* Assignee */}
+                <FilterField label="Assignee" isActive={!!filters.assignee}>
+                  <select value={filters.assignee} onChange={(e) => setFilter("assignee", e.target.value)} className="filter-select">
+                    <option value="">All Assignees</option>
+                    {assigneeOptions.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -436,15 +460,15 @@ function InboundPage() {
                 <div className="min-w-[850px] text-sm">
                   {/* Grid Table Header */}
                   <div className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
-                    <div>Receipt #{sq && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
-                    <div>Product{sq && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
-                    <div>Supplier{sq && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Receipt #{isSearchMatchingReceipt && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Product{isSearchMatchingProduct && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Supplier{isSearchMatchingSupplier && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Warehouse{filters.warehouse && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div className="text-right">Qty{(filters.qtyMin || filters.qtyMax) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Date{(filters.dateFrom || filters.dateTo) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Status{filters.status && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
-                    <div>Received by{filters.staff && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
-                    <div>Assignee</div>
+                    <div>Created by{(filters.staff || isSearchMatchingCreatedBy) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Assignee{(filters.assignee || isSearchMatchingAssignee) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div />
                   </div>
 

@@ -40,6 +40,7 @@ export function InboundDetailModal({
 }: Props) {
   const { currentUser } = useApp();
   const canEdit   = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
+  const canSwitchWarehouse = currentUser?.role === "Admin" || currentUser?.role === "Manager";
   const isPending = movement.status === "PENDING";
 
   // All lines belonging to this receipt
@@ -50,12 +51,14 @@ export function InboundDetailModal({
   const [editRemark, setEditRemark]   = useState(movement.remark ?? "");
   const [editPartner, setEditPartner] = useState(movement.partner ?? "");
   const [editWarehouseId, setEditWarehouseId] = useState(movement.warehouseId);
+  const [editAssignedUserId, setEditAssignedUserId] = useState<number | "">(movement.assignedUserId ?? "");
   const [editItems, setEditItems]     = useState<EditLineItem[]>([]);
 
   // Reference data for dropdowns
   const [products, setProducts]       = useState<ProductOption[]>([]);
   const [warehouses, setWarehouses]   = useState<WarehouseOption[]>([]);
   const [suppliers, setSuppliers]     = useState<SupplierOption[]>([]);
+  const [users, setUsers]             = useState<{ id: number; fullName: string; role: string; warehouseId: string | null }[]>([]);
   const [refLoading, setRefLoading]   = useState(false);
 
   // Action state
@@ -72,14 +75,22 @@ export function InboundDetailModal({
     if (!editing) return;
     setRefLoading(true);
     Promise.all([
-      api.get<ProductOption[]>("/products"),
-      api.get<WarehouseOption[]>("/warehouses"),
-      api.get<SupplierOption[]>("/suppliers"),
-    ]).then(([pRes, wRes, sRes]) => {
-      setProducts(pRes.data.map((p: any) => ({ sku: p.code || p.sku, name: p.name })));
-      setWarehouses(wRes.data.map((w: any) => ({ id: String(w.id), code: w.code })));
-      setSuppliers(sRes.data.map((s: any) => ({ id: String(s.id), name: s.name })));
-    }).catch(() => {}).finally(() => setRefLoading(false));
+      api.get<any>("/products", { params: { page: 0, size: 100 } }),
+      api.get<any>("/warehouses"),
+      api.get<any>("/suppliers", { params: { page: 0, size: 100 } }),
+      api.get<any>("/users"),
+    ]).then(([pRes, wRes, sRes, uRes]) => {
+      const pList = Array.isArray(pRes.data) ? pRes.data : (pRes.data?.content ?? []);
+      const wList = Array.isArray(wRes.data) ? wRes.data : (wRes.data?.content ?? []);
+      const sList = Array.isArray(sRes.data) ? sRes.data : (sRes.data?.content ?? []);
+      const uList = Array.isArray(uRes.data) ? uRes.data : (uRes.data?.content ?? []);
+      setProducts(pList.map((p: any) => ({ sku: p.code || p.sku, name: p.name })));
+      setWarehouses(wList.map((w: any) => ({ id: String(w.id), code: w.code })));
+      setSuppliers(sList.map((s: any) => ({ id: String(s.id), name: s.name })));
+      setUsers(uList.map((u: any) => ({ id: Number(u.id), fullName: u.fullName, role: u.role, warehouseId: u.warehouseId ? String(u.warehouseId) : null })));
+    }).catch((err) => {
+      console.error("Failed to load reference data:", err);
+    }).finally(() => setRefLoading(false));
   }, [editing]);
 
   function enterEditMode() {
@@ -87,6 +98,7 @@ export function InboundDetailModal({
     setEditRemark(movement.remark ?? "");
     setEditPartner(movement.partner ?? "");
     setEditWarehouseId(movement.warehouseId);
+    setEditAssignedUserId(movement.assignedUserId ?? "");
     setEditItems(lines.map((l) => ({ key: nextLineKey(), sku: l.sku, qty: l.qty })));
     setError(null);
     setSaveWarning(null);
@@ -147,12 +159,15 @@ export function InboundDetailModal({
     const remarkChanged = editRemark.trim() !== (movement.remark ?? "").trim();
     const partnerChanged = editPartner.trim() !== (movement.partner ?? "").trim();
     const warehouseChanged = editWarehouseId !== movement.warehouseId;
+    const oldAssigned = movement.assignedUserId ? Number(movement.assignedUserId) : "";
+    const newAssigned = editAssignedUserId !== "" ? Number(editAssignedUserId) : "";
+    const assignedChanged = oldAssigned !== newAssigned;
     const itemsChanged = (() => {
       if (editItems.length !== lines.length) return true;
       return editItems.some((item, i) => item.sku !== lines[i].sku || item.qty !== lines[i].qty);
     })();
 
-    if (!remarkChanged && !partnerChanged && !warehouseChanged && !itemsChanged) {
+    if (!remarkChanged && !partnerChanged && !warehouseChanged && !assignedChanged && !itemsChanged) {
       setSaveWarning("No changes detected. Please modify at least one field before saving.");
       return;
     }
@@ -167,6 +182,7 @@ export function InboundDetailModal({
       };
       if (partnerChanged) payload.partner = editPartner || null;
       if (warehouseChanged) payload.warehouseId = Number(editWarehouseId);
+      if (assignedChanged) payload.assignedUserId = newAssigned === "" ? -1 : newAssigned;
       if (itemsChanged) {
         payload.items = editItems.map((item) => ({
           productCode: item.sku,
@@ -221,6 +237,35 @@ export function InboundDetailModal({
             <MetaRow icon={Calendar} label="Updated at"  value={movement.updatedAt ?? "—"} />
             <MetaRow icon={User}     label="Created by"  value={movement.staff} />
 
+            {/* Assignee — editable when PENDING */}
+            <div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1">
+                <User className="size-3.5" /> Assignee
+              </div>
+              {editing ? (
+                <select
+                  value={editAssignedUserId}
+                  onChange={(e) => { setEditAssignedUserId(e.target.value ? Number(e.target.value) : ""); setSaveWarning(null); }}
+                  className="h-9 px-3 rounded-lg bg-input border border-border text-sm w-full text-foreground"
+                  disabled={refLoading}
+                >
+                  <option value="">— Unassigned —</option>
+                  {users
+                    .filter((u) => {
+                      const isStaff = u.role?.toUpperCase() === "STAFF" || u.role === "Staff";
+                      if (!isStaff) return false;
+                      if (editWarehouseId && u.warehouseId && String(u.warehouseId) !== String(editWarehouseId)) return false;
+                      return true;
+                    })
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>{u.fullName} (Staff)</option>
+                    ))}
+                </select>
+              ) : (
+                <div className="text-sm font-medium">{movement.assignedUserName || <span className="text-muted-foreground italic">Unassigned</span>}</div>
+              )}
+            </div>
+
             {/* Warehouse — editable when PENDING */}
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1">
@@ -230,11 +275,14 @@ export function InboundDetailModal({
                 <select
                   value={editWarehouseId}
                   onChange={(e) => { setEditWarehouseId(e.target.value); setSaveWarning(null); }}
-                  className="h-9 px-3 rounded-lg bg-input border border-border text-sm w-full text-foreground"
-                  disabled={refLoading}
+                  className={`h-9 px-3 rounded-lg bg-input border border-border text-sm w-full text-foreground ${!canSwitchWarehouse ? "opacity-60 bg-muted cursor-not-allowed" : ""}`}
+                  disabled={refLoading || !canSwitchWarehouse}
                 >
                   {warehouses.length === 0 && (
                     <option value={movement.warehouseId}>{warehouseCode(movement.warehouseId)}</option>
+                  )}
+                  {warehouses.length > 0 && editWarehouseId && !warehouses.some((w) => w.id === String(editWarehouseId)) && (
+                    <option value={editWarehouseId}>{warehouseCode(String(editWarehouseId)) || editWarehouseId}</option>
                   )}
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>{w.code}</option>
@@ -267,6 +315,9 @@ export function InboundDetailModal({
                   disabled={refLoading}
                 >
                   <option value="">— Select supplier —</option>
+                  {editPartner && !suppliers.some((s) => s.name === editPartner) && (
+                    <option value={editPartner}>{editPartner}</option>
+                  )}
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.name}>{s.name}</option>
                   ))}
@@ -326,6 +377,9 @@ export function InboundDetailModal({
                                 className="h-8 px-2 rounded-md bg-input border border-border text-sm w-full text-foreground"
                               >
                                 <option value="">— Select product —</option>
+                                {item.sku && !products.some((p) => p.sku === item.sku) && (
+                                  <option value={item.sku}>{item.sku}</option>
+                                )}
                                 {products.map((p) => (
                                   <option key={p.sku} value={p.sku}>{p.name} ({p.sku})</option>
                                 ))}
