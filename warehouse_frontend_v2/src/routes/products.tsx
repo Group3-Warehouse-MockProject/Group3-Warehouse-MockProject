@@ -303,7 +303,14 @@ function ProductsPage() {
                         <span className="px-2 py-1 rounded-md text-xs bg-secondary border border-border inline-block truncate max-w-full">{p.category}</span>
                       </div>
                       <div className="font-mono text-xs truncate">{getWarehouseCode(p.warehouseId)}</div>
-                      <div className="font-mono text-xs truncate">{p.location}</div>
+                      <div className="font-mono text-xs truncate flex items-center gap-1">
+                        <span>{p.location}</span>
+                        {(String(p.locationStatus).toUpperCase() === "INACTIVE" || String(p.warehouseStatus).toUpperCase() === "INACTIVE") && (
+                          <span className="text-[10px] px-1 py-0.2 rounded bg-destructive/15 text-destructive border border-destructive/30 shrink-0 font-sans">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
                       <div className="text-right font-semibold">{p.stock}</div>
                       <div className="text-right">{formatVND(p.cost)}</div>
                       <div className="text-right">{formatVND(p.price)}</div>
