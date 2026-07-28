@@ -70,9 +70,7 @@ public class ProductController {
 
         final Long warehouseId = effectiveWarehouseId;
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "name"));
-        Page<Product> productPage = warehouseId != null
-                ? productRepository.findPageActiveWithInventory(warehouseId, pageable)
-                : productRepository.findPageActiveWithInventoryAll(pageable);
+        Page<Product> productPage = productRepository.findPageActiveWithInventoryAll(pageable);
 
         List<ProductDTO> pageContent = productPage.getContent().stream()
                 .map(product -> toProductDto(product, warehouseId))
@@ -103,9 +101,17 @@ public class ProductController {
         long reorder = product.getInventories().stream()
                 .mapToLong(inv -> inv.getLowStockThreshold() != null ? inv.getLowStockThreshold() : 0L)
                 .sum();
+                
+        String warehouseIds = product.getInventories().stream()
+                .filter(inv -> inv.getWarehouse() != null)
+                .map(inv -> String.valueOf(inv.getWarehouse().getId()))
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(","));
+                
         ProductDTO dto = ProductDTO.fromEntity(product, null);
         dto.setStock(stock);
         dto.setReorder(reorder);
+        dto.setWarehouseId(warehouseIds);
         return dto;
     }
 

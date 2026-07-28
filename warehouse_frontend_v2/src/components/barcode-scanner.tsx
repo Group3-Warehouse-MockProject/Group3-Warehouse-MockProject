@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { Camera, ScanLine, X } from "lucide-react";
+import { Camera, ScanLine, X, Upload } from "lucide-react";
 
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
@@ -12,6 +12,7 @@ export function BarcodeScanner({ onScan, className = "" }: BarcodeScannerProps) 
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerId = useRef(`qr-reader-${Math.random().toString(36).substring(7)}`).current;
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Hardware Scanner Integration
   // Hardware scanners act like a fast keyboard terminating with Enter
@@ -87,6 +88,23 @@ export function BarcodeScanner({ onScan, className = "" }: BarcodeScannerProps) 
     };
   }, [isCameraActive, containerId, onScan]);
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    try {
+      const scanner = new Html5Qrcode(containerId);
+      const decodedText = await scanner.scanFile(file, true);
+      onScan(decodedText);
+      setError(null);
+    } catch (err) {
+      console.error("Error scanning uploaded image:", err);
+      setError("Could not read a barcode/QR code from the image. Please try a clearer image.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className={`space-y-3 ${className}`}>
       {/* Hardware Scanner Hint & Trigger UI */}
@@ -97,17 +115,34 @@ export function BarcodeScanner({ onScan, className = "" }: BarcodeScannerProps) 
           </div>
           <div>
             <div className="text-sm font-medium text-primary">Ready to scan</div>
-            <div className="text-xs text-muted-foreground">Use a handheld scanner or camera</div>
+            <div className="text-xs text-muted-foreground">Scanner, camera, or image</div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsCameraActive(!isCameraActive)}
-          className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-md bg-background border border-border shadow-sm hover:bg-secondary transition-colors"
-        >
-          {isCameraActive ? <X className="size-3.5" /> : <Camera className="size-3.5" />}
-          {isCameraActive ? "Close Camera" : "Open Camera"}
-        </button>
+        <div className="flex items-center gap-2">
+          <input 
+            type="file" 
+            accept="image/*" 
+            className="hidden" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-md bg-background border border-border shadow-sm hover:bg-secondary transition-colors"
+          >
+            <Upload className="size-3.5" />
+            Upload
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCameraActive(!isCameraActive)}
+            className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-md bg-background border border-border shadow-sm hover:bg-secondary transition-colors"
+          >
+            {isCameraActive ? <X className="size-3.5" /> : <Camera className="size-3.5" />}
+            {isCameraActive ? "Close" : "Camera"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="text-xs text-destructive bg-destructive/10 p-2 rounded-md">{error}</div>}

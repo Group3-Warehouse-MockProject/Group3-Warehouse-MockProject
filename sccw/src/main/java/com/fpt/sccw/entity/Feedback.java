@@ -29,7 +29,7 @@ public class Feedback extends BaseEntity {
     private String message;
 
     @Column(nullable = false)
-    private Integer rating;
+    private Integer rating = 0;
 
     @Column(length = 2000)
     private String response;

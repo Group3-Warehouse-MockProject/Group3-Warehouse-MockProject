@@ -1,11 +1,12 @@
 /* eslint-disable */
 // @ts-nocheck
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
-import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power, Filter, X, CheckCircle2, Phone, Mail, MapPin } from "lucide-react";
+import { useApp } from "@/lib/app-context";
+import { Star, ChevronLeft, ChevronRight, Plus, Search, Truck, Award, Clock, Globe, Pencil, Trash2, Power, Filter, X, ChevronDown, CheckCircle2, Phone, Mail, MapPin } from "lucide-react";
 import { ModalShell, Field, inputCls, textareaCls } from "@/components/modal-shell";
 
 export const Route = createFileRoute("/suppliers")({
@@ -229,7 +230,7 @@ function SuppliersPage() {
 
         <div className="surface-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[950px]">
+            <table className="w-full text-sm min-w-237.5">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                 <tr>
                   <th className="text-left p-4 w-[22%]">Supplier</th>
@@ -248,13 +249,13 @@ function SuppliersPage() {
                   return (
                     <tr key={s.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
                       <td className="p-4">
-                        <button onClick={() => { setViewingSupplier(s); setOpenView(true); }} className="font-medium text-left hover:text-primary hover:underline transition-colors block truncate max-w-[200px]" title={s.name}>
+                        <button onClick={() => { setViewingSupplier(s); setOpenView(true); }} className="font-medium text-left hover:text-primary hover:underline transition-colors block truncate max-w-50" title={s.name}>
                           {s.name}
                         </button>
                         <div className="text-xs text-muted-foreground font-mono">ID: {s.id}</div>
                       </td>
                       <td className="p-4 font-mono text-xs">{s.phoneNumber || "N/A"}</td>
-                      <td className="p-4 text-muted-foreground truncate max-w-[160px]" title={s.email}>{s.email || "N/A"}</td>
+                      <td className="p-4 text-muted-foreground truncate max-w-40" title={s.email}>{s.email || "N/A"}</td>
                       <td className="p-4 font-medium">{s.country || "N/A"}</td>
                       <td className="p-4">
                         <div className="flex items-center gap-2 text-xs">
@@ -359,7 +360,7 @@ function ViewSupplierModal({ open, supplier, onClose }: { open: boolean; supplie
             <div className="size-9 rounded-lg bg-accent/10 text-accent grid place-items-center"><MapPin className="size-4" /></div>
             <div>
               <span className="text-[11px] text-muted-foreground block uppercase font-semibold">Address</span>
-              <span className="font-medium text-xs truncate max-w-[200px]" title={supplier.address}>{supplier.address || "N/A"}</span>
+              <span className="font-medium text-xs truncate max-w-50" title={supplier.address}>{supplier.address || "N/A"}</span>
             </div>
           </div>
         </div>

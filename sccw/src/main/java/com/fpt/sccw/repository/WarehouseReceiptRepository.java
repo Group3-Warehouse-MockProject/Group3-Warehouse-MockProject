@@ -39,4 +39,11 @@ public interface WarehouseReceiptRepository extends JpaRepository<WarehouseRecei
            "LEFT JOIN FETCH dp.supplier " +
            "ORDER BY r.createdAt DESC")
     List<WarehouseReceipt> findAllEager();
+
+    @Query("SELECT COUNT(r) > 0 FROM WarehouseReceipt r JOIN r.details d " +
+           "WHERE r.type = com.fpt.sccw.entity.Status.TransactionType.INBOUND " +
+           "AND r.status = com.fpt.sccw.entity.Status.ReceiptStatus.PENDING " +
+           "AND r.warehouse.id = :warehouseId " +
+           "AND d.product.id = :productId")
+    boolean existsPendingInboundForProduct(@Param("warehouseId") Long warehouseId, @Param("productId") Long productId);
 }

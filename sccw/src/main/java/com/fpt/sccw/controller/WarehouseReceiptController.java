@@ -65,7 +65,14 @@ public class WarehouseReceiptController {
             @RequestParam(required = false) Long warehouseIdParam,
             @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String staffName,
+            @RequestParam(required = false) Long qtyMin,
+            @RequestParam(required = false) Long qtyMax,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo
     ) {
         User user = resolveUser();
         if (user == null) return ResponseEntity.status(401).build();
@@ -83,10 +90,28 @@ public class WarehouseReceiptController {
                 return ResponseEntity.badRequest().build();
             }
         }
+        
+        Status.ReceiptStatus receiptStatus = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                receiptStatus = Status.ReceiptStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+        
+        java.time.Instant instantFrom = null;
+        if (dateFrom != null && !dateFrom.isBlank()) {
+            instantFrom = java.time.LocalDate.parse(dateFrom).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
+        }
+        java.time.Instant instantTo = null;
+        if (dateTo != null && !dateTo.isBlank()) {
+            instantTo = java.time.LocalDate.parse(dateTo).atTime(23, 59, 59).atZone(java.time.ZoneId.systemDefault()).toInstant();
+        }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "receipt.createdAt"));
         Page<ReceiptDetail> detailPage = receiptDetailRepository
-                .findMovementPage(effectiveWarehouseId, receiptType, pageable);
+                .findMovementPageFiltered(effectiveWarehouseId, receiptType, search, receiptStatus, staffName, qtyMin, qtyMax, instantFrom, instantTo, pageable);
 
         List<MovementDTO> pageContent = detailPage.getContent().stream()
                 .map(detail -> {
@@ -226,6 +251,9 @@ public class WarehouseReceiptController {
         WarehouseReceipt receipt = receiptRepository.findById(receiptId).orElse(null);
         if (receipt == null) return ResponseEntity.notFound().build();
 
+        // Capture old status BEFORE any changes
+        String oldStatus = receipt.getStatus().name();
+
         if (request.getStatus() != null && !request.getStatus().isBlank()) {
             Status.ReceiptStatus newStatus;
             try {
@@ -299,7 +327,6 @@ public class WarehouseReceiptController {
         }
 
 
-        String oldStatus = receipt.getStatus().name();
         WarehouseReceipt saved = receiptRepository.save(receipt);
 
         if (!oldStatus.equals(saved.getStatus().name())) {
@@ -458,7 +485,8 @@ public class WarehouseReceiptController {
                     .product(product)
                     .warehouse(warehouse)
                     .quantity(qty)
-                    .lowStockThreshold(0L)
+                    .lowStockThreshold(10L)
+                    .outOfStockWarningDays(3L)
                     .build());
         }
     }

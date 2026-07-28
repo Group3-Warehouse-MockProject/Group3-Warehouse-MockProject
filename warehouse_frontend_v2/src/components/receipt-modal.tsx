@@ -79,14 +79,12 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
 
     Promise.all([
       api.get<WarehouseOption[]>("/warehouses"),
-      api.get<{ content: ProductOption[] }>("/products", { params: { page: 0, size: 15 } }),
       api.get<SupplierOption[]>("/suppliers"),
       api.get<UserOption[]>("/users"),
     ])
-      .then(([wRes, pRes, sRes, uRes]) => {
+      .then(([wRes, sRes, uRes]) => {
         setWarehouses(wRes.data);
-        setProducts(pRes.data?.content ?? (pRes.data as any));
-        setSuppliers(sRes.data);
+        setSuppliers((sRes.data as any).content ?? sRes.data);
         setUsers(uRes.data);
         // Default warehouse
         const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
@@ -111,9 +109,16 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
       .finally(() => setDataLoading(false));
   }, [open, activeWarehouseId]);
 
+  useEffect(() => {
+    if (!open || !warehouseId) return;
+    api.get<{ content: ProductOption[] }>("/products", { params: { warehouseIdParam: warehouseId, page: 0, size: 100 } })
+      .then(res => setProducts(res.data?.content ?? (res.data as any)))
+      .catch(console.error);
+  }, [open, warehouseId]);
+
   // Filter products to selected warehouse
   const skuList = useMemo(
-    () => products.filter((p) => p.warehouseId === warehouseId),
+    () => products.filter((p) => String(p.warehouseId) === String(warehouseId)),
     [products, warehouseId],
   );
 
@@ -132,7 +137,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
       alert(`Barcode ${barcode} not found in catalog.`);
       return;
     }
-    if (product.warehouseId !== warehouseId) {
+    if (String(product.warehouseId) !== String(warehouseId)) {
       alert(`Product ${barcode} does not belong to selected warehouse.`);
       return;
     }
@@ -412,7 +417,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   <table className="w-full text-sm">
                     <thead className="bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground">
                       <tr>
-                        <th className="text-left px-3 py-2 min-w-[260px]">Product</th>
+                        <th className="text-left px-3 py-2 min-w-65">Product</th>
                         {!isInbound && <th className="text-right px-3 py-2 w-24">Stock</th>}
                         <th className="text-right px-3 py-2 w-20">Qty</th>
                         <th className="text-right px-3 py-2 w-28">
@@ -507,7 +512,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
-                  className="input min-h-[64px] py-2"
+                  className="input min-h-16 py-2"
                   placeholder="Optional remarks for warehouse staff…"
                 />
               </Field>
