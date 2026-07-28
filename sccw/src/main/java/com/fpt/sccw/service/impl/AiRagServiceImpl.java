@@ -142,8 +142,7 @@ public class AiRagServiceImpl implements AiRagService {
         );
 
         if (rows.isEmpty()) {
-            return "I couldn't find any information in the system. " +
-                   "Please call /api/ai/ingest-all to load warehouse data into the AI system first.";
+            return "The warehouse data has not been synced to the AI system yet. Please contact your administrator to perform the data sync.";
         }
 
         // 3. Tính cosine similarity — lấy tất cả bản ghi có score >= 0.5,
@@ -173,7 +172,7 @@ public class AiRagServiceImpl implements AiRagService {
                 .collect(Collectors.toList());
 
         if (topContents.isEmpty()) {
-            return "Cannot process vector data. Please try calling /api/ai/ingest-all again.";
+            return "I couldn't find any information matching your question in the current warehouse data. Could you try asking in a different way?";
         }
 
         String context = String.join("\n---\n", topContents);
