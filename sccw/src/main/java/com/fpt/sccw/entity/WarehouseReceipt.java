@@ -51,8 +51,7 @@ public class WarehouseReceipt extends BaseEntity{
     @Builder.Default
     private Set<ReceiptDetail> details = new LinkedHashSet<>();
 
-    @OneToMany(mappedBy = "warehouseReceipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @org.hibernate.annotations.BatchSize(size = 100)
+    @Transient
     @Builder.Default
     private Set<ApprovalHistory> approvalHistories = new LinkedHashSet<>();
 

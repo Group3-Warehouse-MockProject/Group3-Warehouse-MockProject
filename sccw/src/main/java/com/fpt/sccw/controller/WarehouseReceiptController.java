@@ -203,19 +203,14 @@ public class WarehouseReceiptController {
                 + " at " + warehouse.getCode());
 
         ApprovalHistory history = ApprovalHistory.builder()
-                .warehouseReceipt(saved)
+                .documentId(saved.getId())
                 .documentType(Status.DocumentType.WAREHOUSE_RECEIPT)
                 .newStatus(saved.getStatus().name())
                 .note((isInbound ? "Inbound" : "Outbound") + " receipt created")
-                .approver(user)
+                .approverId(user.getId())
+                .approverName(user.getFullName())
                 .build();
         approvalHistoryRepository.save(history);
-        
-        // Add history manually for the DTO response since it's not re-fetched
-        if (saved.getApprovalHistories() == null) {
-            saved.setApprovalHistories(new java.util.LinkedHashSet<>());
-        }
-        saved.getApprovalHistories().add(history);
 
         if (assignedUser != null) {
             NotificationEventDTO event = NotificationEventDTO.builder()
@@ -407,19 +402,15 @@ public class WarehouseReceiptController {
 
         if (!oldStatus.equals(saved.getStatus().name())) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .warehouseReceipt(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.WAREHOUSE_RECEIPT)
                     .oldStatus(oldStatus)
                     .newStatus(saved.getStatus().name())
                     .note(request.getRemark() != null && !request.getRemark().isBlank() ? request.getRemark() : "Status updated to " + saved.getStatus().name())
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
-            
-            if (saved.getApprovalHistories() == null) {
-                saved.setApprovalHistories(new java.util.LinkedHashSet<>());
-            }
-            saved.getApprovalHistories().add(history);
 
             if (saved.getAssignedUser() != null) {
                 NotificationEventDTO event = NotificationEventDTO.builder()
@@ -571,11 +562,11 @@ public class WarehouseReceiptController {
                                               boolean isInbound, String partner) {
         BigDecimal totalAmount = calculateTotalAmount(r);
         BigDecimal paidAmount = calculatePaidAmount(r);
-        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = r.getApprovalHistories() != null 
-                ? r.getApprovalHistories().stream()
-                        .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
-                        .collect(Collectors.toList())
-                : new ArrayList<>();
+        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = approvalHistoryRepository
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(r.getId(), Status.DocumentType.WAREHOUSE_RECEIPT)
+                .stream()
+                .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
+                .collect(Collectors.toList());
 
         return MovementDTO.builder()
                 .id("R-" + r.getId() + "-" + d.getId())
@@ -607,11 +598,11 @@ public class WarehouseReceiptController {
         String warehouseId = isOut
                 ? String.valueOf(t.getWarehouse().getId())
                 : (t.getWarehouseDestination() != null ? String.valueOf(t.getWarehouseDestination().getId()) : "");
-        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = t.getApprovalHistories() != null 
-                ? t.getApprovalHistories().stream()
-                        .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
-                        .collect(Collectors.toList())
-                : new ArrayList<>();
+        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = approvalHistoryRepository
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(t.getId(), Status.DocumentType.TRANSFER)
+                .stream()
+                .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
+                .collect(Collectors.toList());
 
         return MovementDTO.builder()
                 .id("T-" + t.getId() + "-" + d.getId())

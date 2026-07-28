@@ -39,7 +39,7 @@ public class InventoryCheck extends BaseEntity {
     @Builder.Default
     private List<InventoryCheckDetail> details = new ArrayList<>();
 
-    @OneToMany(mappedBy = "inventoryCheck", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @Transient
     @Builder.Default
     private List<ApprovalHistory> approvalHistories = new ArrayList<>();
 

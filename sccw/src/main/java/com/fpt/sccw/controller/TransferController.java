@@ -188,11 +188,12 @@ public class TransferController {
         Transfer saved = transferRepository.save(transfer);
 
         ApprovalHistory history = ApprovalHistory.builder()
-                .transfer(saved)
+                .documentId(saved.getId())
                 .documentType(Status.DocumentType.TRANSFER)
                 .newStatus(saved.getStatus().name())
                 .note("Transfer created")
-                .approver(user)
+                .approverId(user.getId())
+                .approverName(user.getFullName())
                 .build();
 
         approvalHistoryRepository.save(history);
@@ -239,7 +240,7 @@ public class TransferController {
 
         if (!oldStatus.equals(saved.getStatus().name())) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .transfer(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.TRANSFER)
                     .oldStatus(oldStatus)
                     .newStatus(saved.getStatus().name())
@@ -247,7 +248,8 @@ public class TransferController {
                             "Status updated to "
                                     + saved.getStatus().name()
                     )
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
 
             approvalHistoryRepository.save(history);
