@@ -70,9 +70,4 @@ public class User extends BaseEntity{
     @OneToMany(mappedBy = "assignedByUser", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private List<Transfer> assignedTransfers = new ArrayList<>();
-
-    @OneToMany(mappedBy = "approver", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
-    @Builder.Default
-    private List<ApprovalHistory> approvalHistories = new ArrayList<>();
-
 }

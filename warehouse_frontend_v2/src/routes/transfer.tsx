@@ -79,6 +79,24 @@ function TransferPage() {
   const totalPages = pageData?.totalPages ?? 1;
   const totalElements = pageData?.totalElements ?? 0;
 
+  const { data: stats } = useQuery({
+    queryKey: ["transfers-stats", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/transfers/stats", {
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+        },
+      });
+      return res.data as {
+        total: number;
+        pending: number;
+        inTransit: number;
+        crossWarehouse: number;
+        internal: number;
+      };
+    },
+  });
+
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: Transfer["status"] }) => {
       const res = await api.put(`/transfers/${id}/status`, { status });
@@ -116,21 +134,7 @@ function TransferPage() {
     );
   }, [q, transfers]);
 
-  const pending = transfers.filter(
-    (transfer) => transfer.status === "Pending"
-  ).length;
 
-  const inTransit = transfers.filter(
-    (transfer) => transfer.status === "InTransit"
-  ).length;
-
-  const crossWarehouse = transfers.filter(
-    (transfer) => transfer.type === "Cross-Warehouse"
-  ).length;
-
-  const internal = transfers.filter(
-    (transfer) => transfer.type === "Internal Movement"
-  ).length;
 
   const isGlobalManager =
     currentUser?.role === "Admin" ||
@@ -163,10 +167,10 @@ function TransferPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={ArrowRightLeft} label="Total transfers" value={list.length} tone="primary" />
-          <Kpi icon={Search} label="Pending" value={pending} tone="warning" />
-          <Kpi icon={Truck} label="In transit" value={inTransit} tone="primary" />
-          <Kpi icon={MapPin} label="Cross / Internal" value={`${crossWarehouse} / ${internal}`} tone="accent" />
+          <Kpi icon={ArrowRightLeft} label="Total transfers" value={stats?.total ?? "—"} tone="primary" />
+          <Kpi icon={Search} label="Pending" value={stats?.pending ?? "—"} tone="warning" />
+          <Kpi icon={Truck} label="In transit" value={stats?.inTransit ?? "—"} tone="primary" />
+          <Kpi icon={MapPin} label="Cross / Internal" value={stats ? `${stats.crossWarehouse} / ${stats.internal}` : "—"} tone="accent" />
         </div>
 
         <div className="relative max-w-md w-full sm:w-96">

@@ -94,6 +94,51 @@ public class TransferController {
         return ResponseEntity.ok(new PageResponse<>(dtoPage));
     }
 
+    @GetMapping("/stats")
+    @Transactional(readOnly = true)
+    public ResponseEntity<java.util.Map<String, Long>> getTransferStats(@RequestParam(required = false) Long warehouseIdParam) {
+        User user = currentUser();
+        String roleName = user.getRole().getRoleName().name();
+
+        List<Transfer> all;
+        if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) {
+            if (warehouseIdParam == null) {
+                all = transferRepository.findAll();
+            } else {
+                all = transferRepository.findByWarehouseIdOrWarehouseDestinationId(warehouseIdParam, warehouseIdParam);
+            }
+        } else {
+            Long warehouseId = user.getWarehouse() != null ? user.getWarehouse().getId() : null;
+            if (warehouseId == null) {
+                all = java.util.Collections.emptyList();
+            } else {
+                all = transferRepository.findByWarehouseIdOrWarehouseDestinationId(warehouseId, warehouseId);
+            }
+        }
+
+        long total = all.size();
+        long pending = 0;
+        long inTransit = 0;
+        long crossWarehouse = 0;
+        long internal = 0;
+
+        for (Transfer t : all) {
+            if (t.getStatus() == Status.TransactionStatus.PENDING) pending++;
+            else if (t.getStatus() == Status.TransactionStatus.DELIVERING || t.getStatus() == Status.TransactionStatus.DELIVERED) inTransit++;
+            
+            if (t.getTransferType() == Status.TransferType.Cross_Warehouse || t.getTransferType() == Status.TransferType.OUTBOUND) crossWarehouse++;
+            else internal++;
+        }
+
+        java.util.Map<String, Long> res = new java.util.HashMap<>();
+        res.put("total", total);
+        res.put("pending", pending);
+        res.put("inTransit", inTransit);
+        res.put("crossWarehouse", crossWarehouse);
+        res.put("internal", internal);
+        return ResponseEntity.ok(res);
+    }
+
     @PostMapping
     @Transactional
     public ResponseEntity<?> createTransfer(@RequestBody TransferRequest request) {
@@ -188,11 +233,12 @@ public class TransferController {
         Transfer saved = transferRepository.save(transfer);
 
         ApprovalHistory history = ApprovalHistory.builder()
-                .transfer(saved)
+                .documentId(saved.getId())
                 .documentType(Status.DocumentType.TRANSFER)
                 .newStatus(saved.getStatus().name())
                 .note("Transfer created")
-                .approver(user)
+                .approverId(user.getId())
+                .approverName(user.getFullName())
                 .build();
 
         approvalHistoryRepository.save(history);
@@ -239,7 +285,7 @@ public class TransferController {
 
         if (!oldStatus.equals(saved.getStatus().name())) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .transfer(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.TRANSFER)
                     .oldStatus(oldStatus)
                     .newStatus(saved.getStatus().name())
@@ -247,7 +293,8 @@ public class TransferController {
                             "Status updated to "
                                     + saved.getStatus().name()
                     )
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
 
             approvalHistoryRepository.save(history);

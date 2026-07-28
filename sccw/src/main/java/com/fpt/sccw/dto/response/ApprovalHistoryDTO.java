@@ -29,8 +29,8 @@ public class ApprovalHistoryDTO {
                 .oldStatus(history.getOldStatus())
                 .newStatus(history.getNewStatus())
                 .note(history.getNote())
-                .approverId(history.getApprover() != null ? history.getApprover().getId() : null)
-                .approverName(history.getApprover() != null ? history.getApprover().getFullName() : null)
+                .approverId(history.getApproverId())
+                .approverName(history.getApproverName())
                 .createdAt(history.getCreatedAt() != null ? history.getCreatedAt().toString() : null)
                 .build();
     }

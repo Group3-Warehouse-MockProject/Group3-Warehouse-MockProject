@@ -8,7 +8,5 @@ import java.util.List;
 
 @Repository
 public interface ApprovalHistoryRepository extends JpaRepository<ApprovalHistory, Long> {
-    List<ApprovalHistory> findByInventoryCheckIdOrderByCreatedAtAsc(Long inventoryCheckId);
-    List<ApprovalHistory> findByTransferIdOrderByCreatedAtAsc(Long transferId);
-    List<ApprovalHistory> findByWarehouseReceiptIdOrderByCreatedAtAsc(Long warehouseReceiptId);
+    List<ApprovalHistory> findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(Long documentId, com.fpt.sccw.entity.Status.DocumentType documentType);
 }
