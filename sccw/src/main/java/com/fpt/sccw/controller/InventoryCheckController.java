@@ -207,12 +207,11 @@ public class InventoryCheckController {
 
         String role = user.getRole() != null && user.getRole().getRoleName() != null ? user.getRole().getRoleName().name() : "";
 
-        // Nếu phiếu được giao cho nhân viên cụ thể (assignedUser != null)
-        // và người đang đếm là STAFF nhưng KHÔNG PHẢI nhân viên được gán -> Chặn 403
-        if ("STAFF".equalsIgnoreCase(role) 
-                && check.getAssignedUser() != null 
-                && !check.getAssignedUser().getId().equals(user.getId())) {
-            return ResponseEntity.status(403).build();
+        // STAFF chỉ được đếm khi phiếu được gán ĐÍCH DANH cho chính STAFF đó -> Chặn 403 nếu sai/chưa gán
+        if ("STAFF".equalsIgnoreCase(role)) {
+            if (check.getAssignedUser() == null || !check.getAssignedUser().getId().equals(user.getId())) {
+                return ResponseEntity.status(403).build();
+            }
         }
 
         // Cập nhật số đếm thực tế cho từng dòng sản phẩm

@@ -163,16 +163,20 @@ INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, 
 INSERT IGNORE INTO transfer_details (id, quantity, product_id, transfer_id, created_at, updated_at) VALUES (11, 5, 3, 11, '2026-06-25 08:00:00', '2026-06-25 08:00:00');
 INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, assigned_by_id, warehouse_id, warehouse_destination_id, created_at, updated_at) VALUES (12, 'Cross_Warehouse', 'COMPLETED', 'Internal restock: HN → DN (SSD replenishment)', 4, 2, 2, 3, '2026-06-18 08:00:00', '2026-06-18 08:00:00');
 INSERT IGNORE INTO transfer_details (id, quantity, product_id, transfer_id, created_at, updated_at) VALUES (12, 10, 8, 12, '2026-06-18 08:00:00', '2026-06-18 08:00:00');
-INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (1, 'IN_PROGRESS', 'Stocktake ST-0042', 3, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
+INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (1, 'IN_PROGRESS', 'Stocktake ST-0042', 3, 5, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
 INSERT IGNORE INTO inventory_check_details (id, actual_quantity, system_quantity, difference, remark, product_id, inventory_check_id, created_at, updated_at) VALUES (1, 39, 42, 3, 'Variance 3', 2, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
-INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (2, 'COMPLETED', 'Stocktake ST-0041', 3, 1, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
+INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (2, 'COMPLETED', 'Stocktake ST-0041', 3, 5, 1, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
 INSERT IGNORE INTO inventory_check_details (id, actual_quantity, system_quantity, difference, remark, product_id, inventory_check_id, created_at, updated_at) VALUES (2, 37, 38, 1, 'Variance 1', 3, 2, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
-INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (3, 'COMPLETED', 'Stocktake ST-0040', 4, 2, '2026-06-18 10:00:00', '2026-06-18 10:00:00');
+INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (3, 'COMPLETED', 'Stocktake ST-0040', 4, 6, 2, '2026-06-18 10:00:00', '2026-06-18 10:00:00');
 INSERT IGNORE INTO inventory_check_details (id, actual_quantity, system_quantity, difference, remark, product_id, inventory_check_id, created_at, updated_at) VALUES (3, 52, 56, 4, 'Variance 4', 4, 3, '2026-06-18 10:00:00', '2026-06-18 10:00:00');
-INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (4, 'PENDING', 'Stocktake ST-0039', 4, 3, '2026-06-15 10:00:00', '2026-06-15 10:00:00');
+INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (4, 'PENDING', 'Stocktake ST-0039', 4, 6, 3, '2026-06-15 10:00:00', '2026-06-15 10:00:00');
 INSERT IGNORE INTO inventory_check_details (id, actual_quantity, system_quantity, difference, remark, product_id, inventory_check_id, created_at, updated_at) VALUES (4, 20, 20, 0, 'Variance 0', 5, 4, '2026-06-15 10:00:00', '2026-06-15 10:00:00');
-INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (5, 'COMPLETED', 'Stocktake ST-0038', 3, 1, '2026-06-10 10:00:00', '2026-06-10 10:00:00');
+INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (5, 'COMPLETED', 'Stocktake ST-0038', 3, 5, 1, '2026-06-10 10:00:00', '2026-06-10 10:00:00');
 INSERT IGNORE INTO inventory_check_details (id, actual_quantity, system_quantity, difference, remark, product_id, inventory_check_id, created_at, updated_at) VALUES (5, 62, 64, 2, 'Variance 2', 6, 5, '2026-06-10 10:00:00', '2026-06-10 10:00:00');
+
+-- Auto-update existing unassigned stocktakes for existing databases
+UPDATE inventory_checks SET assigned_user_id = 5 WHERE assigned_user_id IS NULL AND warehouse_id = 1;
+UPDATE inventory_checks SET assigned_user_id = 6 WHERE assigned_user_id IS NULL AND warehouse_id != 1;
 
 -- Approval Histories for Inventory Checks
 INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, approver_name, document_id, created_at, updated_at) VALUES (1, 'INVENTORY_CHECK', NULL, 'PENDING', 'Created stocktake request', 4, 'Hoang Yen', 1, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
