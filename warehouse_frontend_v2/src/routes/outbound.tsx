@@ -241,40 +241,23 @@ function OutboundPage() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    fetchReceipts(page);
-  }, [page, activeWarehouseId, refreshTick]);
+  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick, searchQuery, filters]);
 
   function fetchReceipts(currentPage: number = page) {
-    setLoading(true);
-    setError(null);
-
-    const params: Record<string, string | number> = {
-      type: "OUTBOUND",
-      page: currentPage,
-      size: limit,
-    };
-
-    if (activeWarehouseId) {
-      params.warehouseIdParam = activeWarehouseId;
-    }
-
-    api
-      .get<{
-        content: ReceiptMovement[];
-        totalPages: number;
-        totalElements: number;
-      }>("/receipts", { params })
-      .then((response) => {
-        setMovements(
-          response.data?.content ??
-            (response.data as unknown as ReceiptMovement[])
-        );
-        setTotalPages(response.data?.totalPages ?? 1);
-        setTotalElements(response.data?.totalElements ?? 0);
-      })
-      .catch(() => {
-        setError("Failed to load outbound requests. Please try again.");
+    setLoading(true); setError(null);
+    const params: Record<string, string | number> = { type: "OUTBOUND", page: currentPage, size: limit };
+    if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
+    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (filters.status) params.status = filters.status;
+    if (filters.staff) params.staffName = filters.staff;
+    if (filters.warehouse) params.warehouseIdParam = filters.warehouse;
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params })
+      .then((res) => {
+        setMovements(res.data?.content ?? (res.data as any));
+        setTotalPages(res.data?.totalPages ?? 1);
+        setTotalElements(res.data?.totalElements ?? 0);
       })
       .finally(() => {
         setLoading(false);
@@ -330,104 +313,36 @@ function OutboundPage() {
       ? '"From" date must be on or before "To" date'
       : null;
 
-  const filteredMovements = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
+  // Reset page whenever filters change
+  useEffect(() => { setPage(0); }, [searchQuery, filters, activeWarehouseId]);
 
-    return movements.filter((movement) => {
-      if (query) {
-        const { reference, assignee } = parseRemark(movement.remark);
-        const receiptNumber = `r-${movement.receiptId}`;
-        const finalAssignee =
-          movement.assignedUserName || assignee || "";
-
-        if (
-          !receiptNumber.includes(query) &&
-          !movement.product.toLowerCase().includes(query) &&
-          !movement.sku.toLowerCase().includes(query) &&
-          !movement.partner.toLowerCase().includes(query) &&
-          !reference.toLowerCase().includes(query) &&
-          !finalAssignee.toLowerCase().includes(query)
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        filters.warehouse &&
-        movement.warehouseId !== filters.warehouse
-      ) {
-        return false;
-      }
-
-      if (filters.status && movement.status !== filters.status) {
-        return false;
-      }
-
-      if (
-        filters.paymentStatus &&
-        movement.paymentStatus !== filters.paymentStatus
-      ) {
-        return false;
-      }
-
-      if (filters.staff && movement.staff !== filters.staff) {
-        return false;
-      }
-
-      if (filters.dateFrom && movement.date < filters.dateFrom) {
-        return false;
-      }
-
-      if (filters.dateTo && movement.date > filters.dateTo) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [movements, searchQuery, filters]);
-
-  useEffect(() => {
-    setPage(0);
-  }, [searchQuery, filters]);
-
-  const uniqueReceiptIds = useMemo(
-    () => new Set(filteredMovements.map((movement) => movement.receiptId)),
-    [filteredMovements]
-  );
-
+  // KPIs (server already filtered)
+  const uniqueReceiptIds = useMemo(() => new Set(movements.map((m) => m.receiptId)), [movements]);
+  
   const totalRevenue = useMemo(() => {
-    return filteredMovements
-      .filter((movement) => movement.status === "COMPLETED")
-      .reduce((sum, movement) => {
-        const product = products.find(
-          (item) =>
-            item.sku === movement.sku &&
-            item.warehouseId === movement.warehouseId
-        );
-
-        return sum + (product ? product.price * movement.qty : 0);
+    return movements
+      .filter((m) => m.status === "COMPLETED")
+      .reduce((sum, m) => {
+        const prod = products.find((p) => p.sku === m.sku && p.warehouseId === m.warehouseId);
+        return sum + (prod ? prod.price * m.qty : 0);
       }, 0);
-  }, [filteredMovements, products]);
+  }, [movements, products]);
 
   const pendingCount = useMemo(() => {
     const pendingReceipts = new Set(
-      filteredMovements
-        .filter((movement) => movement.status === "PENDING")
-        .map((movement) => movement.receiptId)
+      movements.filter((m) => m.status === "PENDING").map((m) => m.receiptId)
     );
 
     return pendingReceipts.size;
-  }, [filteredMovements]);
+  }, [movements]);
 
   const approvedCount = useMemo(() => {
     const approvedReceipts = new Set(
-      filteredMovements
-        .filter((movement) => movement.status === "APPROVED")
-        .map((movement) => movement.receiptId)
+      movements.filter((m) => m.status === "APPROVED").map((m) => m.receiptId)
     );
 
     return approvedReceipts.size;
-  }, [filteredMovements]);
+  }, [movements]);
 
   function setFilter<K extends keyof Filters>(
     key: K,
@@ -662,7 +577,7 @@ function OutboundPage() {
               <AlertCircle className="size-5" />
               <span className="text-sm">{error}</span>
             </div>
-          ) : filteredMovements.length === 0 ? (
+          ) : movements.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
               <Search className="size-8 opacity-30" />
 
@@ -705,24 +620,11 @@ function OutboundPage() {
                   </thead>
 
                   <tbody>
-                    {filteredMovements.map((movement) => {
-                      const product = products.find(
-                        (item) =>
-                          item.sku === movement.sku &&
-                          item.warehouseId === movement.warehouseId
-                      );
-
-                      const itemTotal = product
-                        ? product.price * movement.qty
-                        : 0;
-
-                      const { reference, assignee } = parseRemark(
-                        movement.remark
-                      );
-
-                      const displayId =
-                        reference || `R-${movement.receiptId}`;
-
+                    {movements.map((m) => {
+                      const prod = products.find((p) => p.sku === m.sku && p.warehouseId === m.warehouseId);
+                      const itemTotal = prod ? prod.price * m.qty : 0;
+                      const { reference, assignee } = parseRemark(m.remark);
+                      const displayId = reference || `R-${m.receiptId}`;
                       return (
                         <tr
                           key={movement.id}

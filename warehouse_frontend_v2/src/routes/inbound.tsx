@@ -91,12 +91,20 @@ function InboundPage() {
     api.get<WarehouseInfo[]>("/warehouses").then((res) => setWarehouses(res.data)).catch(() => {});
   }, []);
 
-  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick]);
+  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick, searchQuery, filters]);
 
   function fetchReceipts(currentPage: number = page) {
     setLoading(true); setError(null);
     const params: Record<string, string | number> = { type: "INBOUND", page: currentPage, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
+    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (filters.status) params.status = filters.status;
+    if (filters.staff) params.staffName = filters.staff;
+    if (filters.warehouse) params.warehouseIdParam = filters.warehouse;
+    if (filters.qtyMin) params.qtyMin = Number(filters.qtyMin);
+    if (filters.qtyMax) params.qtyMax = Number(filters.qtyMax);
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
     api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params })
       .then((res) => {
         setMovements(res.data?.content ?? (res.data as any));
@@ -147,53 +155,22 @@ function InboundPage() {
 
   const hasFilterError = !!qtyRangeError || !!dateRangeError;
 
-  // Apply search + filters
-  const filteredMovements = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return movements.filter((m) => {
-      // Search: Receipt #, Product Name, SKU, Supplier
-      if (q) {
-        const receiptNum = `r-${m.receiptId}`;
-        if (
-          !receiptNum.includes(q) &&
-          !m.product.toLowerCase().includes(q) &&
-          !m.sku.toLowerCase().includes(q) &&
-          !m.partner.toLowerCase().includes(q)
-        ) return false;
-      }
-
-      // Warehouse dropdown
-      if (filters.warehouse && m.warehouseId !== filters.warehouse) return false;
-      // Status dropdown
-      if (filters.status && m.status !== filters.status) return false;
-      // Staff dropdown
-      if (filters.staff && m.staff !== filters.staff) return false;
-      // Qty range
-      if (filters.qtyMin && m.qty < Number(filters.qtyMin)) return false;
-      if (filters.qtyMax && m.qty > Number(filters.qtyMax)) return false;
-      // Date range
-      if (filters.dateFrom && m.date < filters.dateFrom) return false;
-      if (filters.dateTo   && m.date > filters.dateTo)   return false;
-      return true;
-    });
-  }, [movements, searchQuery, filters]);
-
   // Reset page whenever filters change
   useEffect(() => { setPage(0); }, [searchQuery, filters, activeWarehouseId]);
 
-  // Group movements by receiptId after filtering
+  // Group movements by receiptId (server already filtered)
   const groupedMovements = useMemo(() => {
     const groups = new Map<number, ReceiptMovement[]>();
-    for (const m of filteredMovements) {
+    for (const m of movements) {
       if (!groups.has(m.receiptId)) groups.set(m.receiptId, []);
       groups.get(m.receiptId)!.push(m);
     }
     return Array.from(groups.values());
-  }, [filteredMovements]);
+  }, [movements]);
 
   const totalReceiptsCount = new Set(movements.map((m) => m.receiptId)).size;
-  const totalIn          = filteredMovements.reduce((s, m) => s + (m.qty ?? 0), 0);
-  const suppliersSet     = new Set(filteredMovements.map((m) => m.partner));
+  const totalIn          = movements.reduce((s, m) => s + (m.qty ?? 0), 0);
+  const suppliersSet     = new Set(movements.map((m) => m.partner));
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -201,11 +178,11 @@ function InboundPage() {
   function clearFilters() { setFilters(DEFAULT_FILTERS); setSearchQuery(""); }
 
   const handleExport = () => {
-    if (filteredMovements.length === 0) return;
+    if (movements.length === 0) return;
     const headers = ["Receipt #", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Received by"];
     const csvContent = [
       headers.join(","),
-      ...filteredMovements.map((m) =>
+      ...movements.map((m) =>
         [
           `"R-${m.receiptId}"`,
           `"${m.product.replace(/"/g, '""')}"`,
@@ -231,9 +208,9 @@ function InboundPage() {
   };
 
   const sq = searchQuery.toLowerCase().trim();
-  const isSearchMatchingReceipt = sq && filteredMovements.some(m => `r-${m.receiptId}`.includes(sq));
-  const isSearchMatchingProduct = sq && filteredMovements.some(m => m.product.toLowerCase().includes(sq) || m.sku.toLowerCase().includes(sq));
-  const isSearchMatchingSupplier = sq && filteredMovements.some(m => m.partner.toLowerCase().includes(sq));
+  const isSearchMatchingReceipt = sq && movements.some(m => `r-${m.receiptId}`.includes(sq));
+  const isSearchMatchingProduct = sq && movements.some(m => m.product.toLowerCase().includes(sq) || m.sku.toLowerCase().includes(sq));
+  const isSearchMatchingSupplier = sq && movements.some(m => m.partner.toLowerCase().includes(sq));
 
   return (
     <AppShell>
@@ -439,7 +416,7 @@ function InboundPage() {
               <AlertCircle className="size-5" />
               <span className="text-sm">{error}</span>
             </div>
-          ) : filteredMovements.length === 0 ? (
+          ) : movements.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
               <Search className="size-8 opacity-30" />
               <span className="text-sm">
@@ -459,11 +436,11 @@ function InboundPage() {
                 <div className="min-w-[850px] text-sm">
                   {/* Grid Table Header */}
                   <div className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
-                    <div>Receipt #</div>
-                    <div>Product</div>
-                    <div>Supplier</div>
-                    <div>Warehouse</div>
-                    <div className="text-right">Qty</div>
+                    <div>Receipt #{sq && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Product{sq && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Supplier{sq && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Warehouse{filters.warehouse && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div className="text-right">Qty{(filters.qtyMin || filters.qtyMax) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Date{(filters.dateFrom || filters.dateTo) && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Status{filters.status && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Received by{filters.staff && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
@@ -473,7 +450,7 @@ function InboundPage() {
 
                   {/* Grid Table Body */}
                   <div className="divide-y divide-border/60">
-                    {filteredMovements.map((m) => (
+                    {movements.map((m) => (
                       <div
                         key={m.id}
                         className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
