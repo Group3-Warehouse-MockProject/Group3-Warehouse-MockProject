@@ -8,6 +8,7 @@ import com.fpt.sccw.entity.Role;
 import com.fpt.sccw.entity.User;
 import com.fpt.sccw.repository.FeedbackRepository;
 import com.fpt.sccw.service.UserService;
+import com.fpt.sccw.service.FeedbackEmailService;
 import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,6 +32,7 @@ public class FeedbackController {
 
     private final FeedbackRepository feedbackRepository;
     private final UserService userService;
+    private final FeedbackEmailService feedbackEmailService;
 
     @GetMapping
     public ResponseEntity<List<FeedbackDTO>> getFeedback() {
@@ -59,8 +61,11 @@ public class FeedbackController {
         feedback.setUser(user);
         feedback.setCategory(request.getCategory().trim());
         feedback.setMessage(request.getMessage().trim());
-        feedback.setRating(request.getRating());
-        feedbackRepository.save(feedback);
+        // Keep a neutral value for compatibility with databases where the
+        // legacy rating column is still NOT NULL.
+        feedback.setRating(0);
+        Feedback savedFeedback = feedbackRepository.save(feedback);
+        feedbackEmailService.notifyReviewers(savedFeedback);
 
         return ResponseEntity.ok(Map.of("message", "Thank you for your feedback."));
     }
