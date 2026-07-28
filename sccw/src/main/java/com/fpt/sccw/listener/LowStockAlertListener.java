@@ -4,6 +4,7 @@ import com.fpt.sccw.dto.response.NotificationEventDTO;
 import com.fpt.sccw.entity.*;
 import com.fpt.sccw.event.InventoryChangedEvent;
 import com.fpt.sccw.repository.*;
+import com.fpt.sccw.service.LowStockEmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -28,6 +29,7 @@ public class LowStockAlertListener {
     private final NotificationRepository notificationRepository;
     private final WarehouseReceiptRepository warehouseReceiptRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final LowStockEmailService lowStockEmailService;
 
     private static final long DEFAULT_THRESHOLD = 10L;
 
@@ -54,13 +56,19 @@ public class LowStockAlertListener {
                 // Find managers/warehouse managers for this warehouse
                 List<User> users = userRepository.findByWarehouseId(warehouseId);
                 User firstManager = null;
+                boolean createdNewAlert = false;
 
                 for (User user : users) {
-                    if (user.getRole() != null &&
+                    if (!Boolean.TRUE.equals(user.getIsDeleted()) && user.getRole() != null &&
                         (user.getRole().getRoleName() == Role.RoleName.MANAGER ||
-                         user.getRole().getRoleName() == Role.RoleName.WAREHOUSE_MANAGER)) {
+                         user.getRole().getRoleName() == Role.RoleName.WAREHOUSE_MANAGER ||
+                         user.getRole().getRoleName() == Role.RoleName.STAFF)) {
 
-                        if (firstManager == null) firstManager = user;
+                        if (firstManager == null
+                                && (user.getRole().getRoleName() == Role.RoleName.MANAGER
+                                || user.getRole().getRoleName() == Role.RoleName.WAREHOUSE_MANAGER)) {
+                            firstManager = user;
+                        }
 
                         // Anti-spam: skip if user already has an unread low stock alert for this product
                         boolean alreadyNotified = notificationRepository
@@ -77,7 +85,12 @@ public class LowStockAlertListener {
                                 .createdAt(Instant.now().toString())
                                 .build();
                         eventPublisher.publishEvent(notification);
+                        createdNewAlert = true;
                     }
+                }
+
+                if (createdNewAlert) {
+                    lowStockEmailService.notifyWarehouseTeam(inventory, threshold);
                 }
 
                 // Auto-reorder: create a PENDING inbound receipt if none exists
