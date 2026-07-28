@@ -125,3 +125,24 @@ export interface Stocktake {
   items: number;
   variance: number;
 }
+
+export interface Rack {
+  id: number;
+  name: string;
+  warehouseId: string;
+  warehouseName?: string;
+  status: "ACTIVE" | "INACTIVE";
+  binCount?: number;
+}
+
+export interface Bin {
+  id: number;
+  name: string;
+  rackId: number;
+  rackName?: string;
+  productSku?: string | null;
+  productName?: string | null;
+  quantity?: number;       // current stock in this bin
+  maxCapacity?: number;    // max units this bin can hold
+  status: "ACTIVE" | "INACTIVE";
+}

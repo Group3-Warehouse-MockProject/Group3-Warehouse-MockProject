@@ -20,6 +20,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as OutboundRouteImport } from './routes/outbound'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LocationRouteImport } from './routes/location'
 import { Route as InboundRouteImport } from './routes/inbound'
 import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as IndexRouteImport } from './routes/index'
@@ -79,6 +80,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LocationRoute = LocationRouteImport.update({
+  id: '/location',
+  path: '/location',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InboundRoute = InboundRouteImport.update({
   id: '/inbound',
   path: '/inbound',
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/feedback': typeof FeedbackRoute
   '/inbound': typeof InboundRoute
+  '/location': typeof LocationRoute
   '/login': typeof LoginRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/feedback': typeof FeedbackRoute
   '/inbound': typeof InboundRoute
+  '/location': typeof LocationRoute
   '/login': typeof LoginRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/feedback': typeof FeedbackRoute
   '/inbound': typeof InboundRoute
+  '/location': typeof LocationRoute
   '/login': typeof LoginRoute
   '/outbound': typeof OutboundRoute
   '/products': typeof ProductsRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/'
     | '/feedback'
     | '/inbound'
+    | '/location'
     | '/login'
     | '/outbound'
     | '/products'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/'
     | '/feedback'
     | '/inbound'
+    | '/location'
     | '/login'
     | '/outbound'
     | '/products'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/'
     | '/feedback'
     | '/inbound'
+    | '/location'
     | '/login'
     | '/outbound'
     | '/products'
@@ -199,6 +211,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   FeedbackRoute: typeof FeedbackRoute
   InboundRoute: typeof InboundRoute
+  LocationRoute: typeof LocationRoute
   LoginRoute: typeof LoginRoute
   OutboundRoute: typeof OutboundRoute
   ProductsRoute: typeof ProductsRoute
@@ -291,6 +304,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/location': {
+      id: '/location'
+      path: '/location'
+      fullPath: '/location'
+      preLoaderRoute: typeof LocationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inbound': {
       id: '/inbound'
       path: '/inbound'
@@ -319,6 +339,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   FeedbackRoute: FeedbackRoute,
   InboundRoute: InboundRoute,
+  LocationRoute: LocationRoute,
   LoginRoute: LoginRoute,
   OutboundRoute: OutboundRoute,
   ProductsRoute: ProductsRoute,

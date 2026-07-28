@@ -27,6 +27,10 @@ public class Location extends BaseEntity {
     @Column(name = "max_capacity")
     private Long maxCapacity;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
     @OneToMany(mappedBy = "location", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default
     private java.util.List<Inventory> inventories = new java.util.ArrayList<>();

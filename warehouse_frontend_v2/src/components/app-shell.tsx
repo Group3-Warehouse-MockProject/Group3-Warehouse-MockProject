@@ -20,7 +20,8 @@ import {
   Sun,
   Moon,
   ArrowRightLeft,
-  Activity
+  Activity,
+  MapPin
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
@@ -43,6 +44,7 @@ const nav: NavItem[] = [
   { to: "/stocktake", label: "Stocktake", icon: ClipboardCheck },
   { to: "/transfer", label: "Transfer", icon: ArrowRightLeft },
   { to: "/suppliers", label: "Suppliers", icon: Truck },
+  { to: "/location", label: "Locations", icon: MapPin },
   { to: "/staff", label: "Staff", icon: Users },
   { to: "/tracking", label: "Tracking", icon: Activity, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
