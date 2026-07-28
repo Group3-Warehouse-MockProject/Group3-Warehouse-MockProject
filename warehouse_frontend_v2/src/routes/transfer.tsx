@@ -188,7 +188,7 @@ function TransferPage() {
             <table className="w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                 <tr>
-                  <th className="text-left p-4">Transfer #</th>
+                  <th className="text-left p-4">Transfer</th>
                   <th className="text-left p-4">Type</th>
                   <th className="text-left p-4">From</th>
                   <th className="text-left p-4">To</th>

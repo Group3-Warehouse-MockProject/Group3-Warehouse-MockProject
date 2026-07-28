@@ -247,7 +247,7 @@ function OutboundPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search order #, product, customer…"
+              placeholder="Search order, product, customer…"
               className="w-full h-10 pl-9 pr-3 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
             {searchQuery && (
@@ -380,7 +380,7 @@ function OutboundPage() {
                 <table className="w-full text-sm">
                   <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                     <tr>
-                      <th className="text-left p-4">Order #</th>
+                      <th className="text-left p-4">Order</th>
                       <th className="text-left p-4">Product</th>
                       <th className="text-left p-4">Customer</th>
                       <th className="text-left p-4">Warehouse</th>

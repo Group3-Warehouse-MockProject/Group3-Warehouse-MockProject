@@ -193,7 +193,7 @@ function InboundPage() {
 
   const handleExport = () => {
     if (movements.length === 0) return;
-    const headers = ["Receipt #", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Created by"];
+    const headers = ["Receipt", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Created by"];
     const csvContent = [
       headers.join(","),
       ...movements.map((m) =>
@@ -294,7 +294,7 @@ function InboundPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search receipt #, product, supplier…"
+              placeholder="Search receipt, product, supplier…"
               className="w-full h-10 pl-9 pr-3 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
             {searchQuery && (
@@ -462,7 +462,7 @@ function InboundPage() {
                 <div className="min-w-[850px] text-sm">
                   {/* Grid Table Header */}
                   <div className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
-                    <div>Receipt #{isSearchMatchingReceipt && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
+                    <div>Receipt{isSearchMatchingReceipt && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Product{isSearchMatchingProduct && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Supplier{isSearchMatchingSupplier && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
                     <div>Warehouse{filters.warehouse && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 ml-1.5 align-middle" />}</div>
