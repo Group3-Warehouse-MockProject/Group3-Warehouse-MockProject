@@ -71,6 +71,32 @@ public class FeedbackEmailService {
         }
     }
 
+    @Async
+    public void notifySubmitterOfResponse(Feedback feedback) {
+        User submitter = feedback.getUser();
+        if (senderAddress == null || senderAddress.isBlank()) {
+            log.warn("Feedback #{} was answered, but email was skipped because MAIL_USERNAME is not configured", feedback.getId());
+            return;
+        }
+        if (submitter.getEmail() == null || submitter.getEmail().isBlank()) {
+            log.warn("Feedback #{} was answered, but the submitter has no email address", feedback.getId());
+            return;
+        }
+
+        SimpleMailMessage email = new SimpleMailMessage();
+        email.setFrom(senderAddress);
+        email.setTo(submitter.getEmail());
+        email.setSubject("[TechStock] Your feedback #" + feedback.getId() + " has been answered");
+        email.setText(buildResponseBody(feedback));
+
+        try {
+            mailSender.send(email);
+            log.info("Feedback #{} response notification sent to {}", feedback.getId(), submitter.getEmail());
+        } catch (Exception exception) {
+            log.error("Feedback #{} was answered, but its submitter email notification failed", feedback.getId(), exception);
+        }
+    }
+
     private String buildBody(Feedback feedback) {
         User sender = feedback.getUser();
         String warehouse = sender.getWarehouse() == null
@@ -83,5 +109,17 @@ public class FeedbackEmailService {
                 + "Category: " + feedback.getCategory() + "\n\n"
                 + "Message:\n" + feedback.getMessage() + "\n\n"
                 + "Sign in to TechStock and open Feedback to respond.";
+    }
+
+    private String buildResponseBody(Feedback feedback) {
+        String responder = feedback.getRespondedBy() == null
+                ? "A TechStock reviewer" : feedback.getRespondedBy().getFullName();
+        return "Your feedback has received a response.\n\n"
+                + "Feedback ID: " + feedback.getId() + "\n"
+                + "Category: " + feedback.getCategory() + "\n"
+                + "Responded by: " + responder + "\n\n"
+                + "Your feedback:\n" + feedback.getMessage() + "\n\n"
+                + "Response:\n" + feedback.getResponse() + "\n\n"
+                + "Sign in to TechStock and open Feedback to view the response.";
     }
 }

@@ -10,7 +10,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.fpt.sccw.service.*;
 import com.fpt.sccw.dto.response.NotificationEventDTO;
+import com.fpt.sccw.entity.Feedback;
 import com.fpt.sccw.entity.Notification;
+import com.fpt.sccw.entity.Role;
 import com.fpt.sccw.entity.User;
 import com.fpt.sccw.repository.NotificationRepository;
 import com.fpt.sccw.repository.UserRepository;
@@ -111,6 +113,54 @@ public class NotificationServiceImpl implements NotificationService {
                 }
             }
         });
+    }
+
+    @Override
+    public void notifyReviewersOfFeedback(Feedback feedback) {
+        Long warehouseId = feedback.getUser().getWarehouse() == null
+                ? null : feedback.getUser().getWarehouse().getId();
+
+        userRepository.findByIsDeletedFalse().stream()
+                .filter(user -> isReviewerForFeedback(user, warehouseId))
+                .forEach(user -> sendNotification(user.getId().toString(), NotificationEventDTO.builder()
+                        .userId(user.getId().toString())
+                        .title("New feedback needs a response")
+                        .message(feedback.getUser().getFullName() + " submitted "
+                                + feedback.getCategory().toLowerCase() + " feedback.")
+                        .type("INFO")
+                        .createdAt(java.time.Instant.now().toString())
+                        .isRead(false)
+                        .build()));
+    }
+
+    @Override
+    public void notifySubmitterOfResponse(Feedback feedback) {
+        User submitter = feedback.getUser();
+        String responder = feedback.getRespondedBy() == null
+                ? "A reviewer" : feedback.getRespondedBy().getFullName();
+
+        sendNotification(submitter.getId().toString(), NotificationEventDTO.builder()
+                .userId(submitter.getId().toString())
+                .title("Your feedback has been answered")
+                .message(responder + " responded to your " + feedback.getCategory().toLowerCase() + " feedback.")
+                .type("SUCCESS")
+                .createdAt(java.time.Instant.now().toString())
+                .isRead(false)
+                .build());
+    }
+
+    private boolean isReviewerForFeedback(User user, Long submitterWarehouseId) {
+        if (user.getRole() == null) {
+            return false;
+        }
+        Role.RoleName role = user.getRole().getRoleName();
+        if (role == Role.RoleName.ADMIN || role == Role.RoleName.MANAGER) {
+            return true;
+        }
+        return role == Role.RoleName.WAREHOUSE_MANAGER
+                && submitterWarehouseId != null
+                && user.getWarehouse() != null
+                && submitterWarehouseId.equals(user.getWarehouse().getId());
     }
 
 }
