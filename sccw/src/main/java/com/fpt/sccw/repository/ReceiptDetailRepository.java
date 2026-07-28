@@ -25,6 +25,43 @@ public interface ReceiptDetailRepository extends JpaRepository<ReceiptDetail, Lo
                                          @Param("type") com.fpt.sccw.entity.Status.TransactionType type,
                                          Pageable pageable);
 
+    @Query(value = "SELECT d FROM ReceiptDetail d " +
+            "JOIN FETCH d.receipt r " +
+            "JOIN FETCH d.product p " +
+            "LEFT JOIN FETCH p.supplier " +
+            "LEFT JOIN FETCH r.user " +
+            "LEFT JOIN FETCH r.assignedUser " +
+            "LEFT JOIN FETCH r.warehouse " +
+            "WHERE (:warehouseId IS NULL OR r.warehouse.id = :warehouseId) " +
+            "AND (:type IS NULL OR r.type = :type) " +
+            "AND (:search IS NULL OR (LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(p.code) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(COALESCE(r.partner, '')) LIKE LOWER(CONCAT('%', :search, '%')))) " +
+            "AND (:status IS NULL OR r.status = :status) " +
+            "AND (:staffName IS NULL OR r.user.fullName = :staffName) " +
+            "AND (:qtyMin IS NULL OR d.quantity >= :qtyMin) " +
+            "AND (:qtyMax IS NULL OR d.quantity <= :qtyMax) " +
+            "AND (:dateFrom IS NULL OR r.createdAt >= :dateFrom) " +
+            "AND (:dateTo IS NULL OR r.createdAt <= :dateTo)",
+            countQuery = "SELECT COUNT(d) FROM ReceiptDetail d JOIN d.receipt r JOIN d.product p " +
+                    "WHERE (:warehouseId IS NULL OR r.warehouse.id = :warehouseId) " +
+                    "AND (:type IS NULL OR r.type = :type) " +
+                    "AND (:search IS NULL OR (LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(p.code) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(COALESCE(r.partner, '')) LIKE LOWER(CONCAT('%', :search, '%')))) " +
+                    "AND (:status IS NULL OR r.status = :status) " +
+                    "AND (:staffName IS NULL OR r.user.fullName = :staffName) " +
+                    "AND (:qtyMin IS NULL OR d.quantity >= :qtyMin) " +
+                    "AND (:qtyMax IS NULL OR d.quantity <= :qtyMax) " +
+                    "AND (:dateFrom IS NULL OR r.createdAt >= :dateFrom) " +
+                    "AND (:dateTo IS NULL OR r.createdAt <= :dateTo)")
+    Page<ReceiptDetail> findMovementPageFiltered(@Param("warehouseId") Long warehouseId,
+                                                 @Param("type") com.fpt.sccw.entity.Status.TransactionType type,
+                                                 @Param("search") String search,
+                                                 @Param("status") com.fpt.sccw.entity.Status.ReceiptStatus status,
+                                                 @Param("staffName") String staffName,
+                                                 @Param("qtyMin") Long qtyMin,
+                                                 @Param("qtyMax") Long qtyMax,
+                                                 @Param("dateFrom") java.time.Instant dateFrom,
+                                                 @Param("dateTo") java.time.Instant dateTo,
+                                                 Pageable pageable);
+
     @Query("SELECT COALESCE(SUM(d.quantity), 0) FROM ReceiptDetail d JOIN d.receipt r " +
            "WHERE r.warehouse.id = :warehouseId AND d.product.id = :productId " +
            "AND r.type = com.fpt.sccw.entity.Status.TransactionType.OUTBOUND " +
