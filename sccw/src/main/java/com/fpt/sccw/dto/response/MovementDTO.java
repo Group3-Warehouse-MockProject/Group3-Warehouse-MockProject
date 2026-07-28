@@ -17,6 +17,8 @@ public class MovementDTO {
     private String product;
     private String partner;          // Supplier name or destination
     private String staff;            // fullName of creator
+    private Long assignedUserId;     // ID of assigned staff
+    private String assignedUserName; // Name of assigned staff
     private String warehouseId;
     private Long qty;
     private String date;             // yyyy-MM-dd
@@ -24,5 +26,12 @@ public class MovementDTO {
     private String remark;           // ghi chú receipt
     private String createdAt;        // yyyy-MM-dd HH:mm
     private String updatedAt;        // yyyy-MM-dd HH:mm
+
+    // Payment info
+    private String paymentTerm;      // PREPAID | COD | DEBT
+    private String paymentStatus;    // UNPAID | PARTIAL | PAID
+    private java.math.BigDecimal totalAmount;
+    private java.math.BigDecimal paidAmount;
+    private java.util.List<ApprovalHistoryDTO> history;
 }
 

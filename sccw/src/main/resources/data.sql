@@ -117,23 +117,23 @@ INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, w
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (40, 9, 10, 12, 3, 12, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (41, 19, 10, 13, 3, 13, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (42, 0, 10, 14, 3, 14, NOW(), NOW());
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (1, 'INBOUND', 'APPROVED', 'Movement MV-2410', 3, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (1, 'INBOUND', 'APPROVED', 'Movement MV-2410', 3, 5, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (1, 10, 29990000, 3, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (2, 'OUTBOUND', 'APPROVED', 'Movement MV-2409', 5, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (2, 'OUTBOUND', 'APPROVED', 'Movement MV-2409', 5, 6, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (2, 4, 10990000, 1, 2, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (3, 'OUTBOUND', 'APPROVED', 'Movement MV-2408', 4, 2, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (3, 'OUTBOUND', 'APPROVED', 'Movement MV-2408', 4, 8, 2, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (3, 12, 2890000, 5, 3, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (4, 'INBOUND', 'APPROVED', 'Movement MV-2407', 6, 1, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (4, 'INBOUND', 'APPROVED', 'Movement MV-2407', 6, 5, 1, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (4, 30, 4590000, 7, 4, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (5, 'OUTBOUND', 'APPROVED', 'Movement MV-2406', 5, 1, '2026-06-22 10:00:00', '2026-06-22 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (5, 'OUTBOUND', 'APPROVED', 'Movement MV-2406', 5, 6, 1, '2026-06-22 10:00:00', '2026-06-22 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (5, 2, 27990000, 14, 5, '2026-06-22 10:00:00', '2026-06-22 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (6, 'INBOUND', 'APPROVED', 'Movement MV-2405', 6, 1, '2026-06-22 10:00:00', '2026-06-22 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (6, 'INBOUND', 'APPROVED', 'Movement MV-2405', 6, 5, 1, '2026-06-22 10:00:00', '2026-06-22 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (6, 8, 9590000, 9, 6, '2026-06-22 10:00:00', '2026-06-22 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (7, 'OUTBOUND', 'APPROVED', 'Movement MV-2404', 3, 1, '2026-06-21 10:00:00', '2026-06-21 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (7, 'OUTBOUND', 'APPROVED', 'Movement MV-2404', 3, 5, 1, '2026-06-21 10:00:00', '2026-06-21 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (7, 6, 3990000, 11, 7, '2026-06-21 10:00:00', '2026-06-21 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (8, 'INBOUND', 'APPROVED', 'Movement MV-2403', 9, 3, '2026-06-21 10:00:00', '2026-06-21 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (8, 'INBOUND', 'APPROVED', 'Movement MV-2403', 9, 10, 3, '2026-06-21 10:00:00', '2026-06-21 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (8, 15, 4590000, 12, 8, '2026-06-21 10:00:00', '2026-06-21 10:00:00');
-INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (9, 'OUTBOUND', 'APPROVED', 'Movement MV-2402', 4, 2, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
+INSERT IGNORE INTO warehouse_receipts (id, receipt_type, receipt_status, remark, user_id, assigned_user_id, warehouse_id, created_at, updated_at) VALUES (9, 'OUTBOUND', 'APPROVED', 'Movement MV-2402', 4, 7, 2, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
 INSERT IGNORE INTO receipt_details (id, quantity, price, product_id, receipt_id, created_at, updated_at) VALUES (9, 3, 16990000, 4, 9, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
 -- OUTBOUND: internal warehouse-to-warehouse transfers (assigned_by_id = manager, warehouse_destination_id = target)
 -- Warehouse 1 (HCM) manager = 3, Warehouse 2 (HN) manager = 4, Warehouse 3 (DN) uses user 2 (Ops Manager) as assigned manager
@@ -173,3 +173,26 @@ INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, warehouse_id, 
 INSERT IGNORE INTO inventory_check_details (id, actual_quantity, system_quantity, difference, remark, product_id, inventory_check_id, created_at, updated_at) VALUES (4, 20, 20, 0, 'Variance 0', 5, 4, '2026-06-15 10:00:00', '2026-06-15 10:00:00');
 INSERT IGNORE INTO inventory_checks (id, status, remark, user_id, warehouse_id, created_at, updated_at) VALUES (5, 'COMPLETED', 'Stocktake ST-0038', 3, 1, '2026-06-10 10:00:00', '2026-06-10 10:00:00');
 INSERT IGNORE INTO inventory_check_details (id, actual_quantity, system_quantity, difference, remark, product_id, inventory_check_id, created_at, updated_at) VALUES (5, 62, 64, 2, 'Variance 2', 6, 5, '2026-06-10 10:00:00', '2026-06-10 10:00:00');
+
+-- Approval Histories for Inventory Checks
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, inventory_check_id, created_at, updated_at) VALUES (1, 'INVENTORY_CHECK', NULL, 'PENDING', 'Created stocktake request', 4, 1, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, inventory_check_id, created_at, updated_at) VALUES (2, 'INVENTORY_CHECK', 'PENDING', 'IN_PROGRESS', 'Started counting process', 5, 1, '2026-06-24 08:00:00', '2026-06-24 08:00:00');
+
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, inventory_check_id, created_at, updated_at) VALUES (3, 'INVENTORY_CHECK', NULL, 'PENDING', 'Created stocktake request', 3, 2, '2026-06-18 10:00:00', '2026-06-18 10:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, inventory_check_id, created_at, updated_at) VALUES (4, 'INVENTORY_CHECK', 'PENDING', 'IN_PROGRESS', 'Started counting process', 6, 2, '2026-06-19 09:00:00', '2026-06-19 09:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, inventory_check_id, created_at, updated_at) VALUES (5, 'INVENTORY_CHECK', 'IN_PROGRESS', 'COMPLETED', 'Manager verified and approved variance', 3, 2, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
+
+-- Approval Histories for Warehouse Receipts
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, warehouse_receipt_id, created_at, updated_at) VALUES (6, 'WAREHOUSE_RECEIPT', NULL, 'PENDING', 'Created inbound receipt MV-2410', 6, 1, '2026-06-24 08:00:00', '2026-06-24 08:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, warehouse_receipt_id, created_at, updated_at) VALUES (7, 'WAREHOUSE_RECEIPT', 'PENDING', 'APPROVED', 'Goods verified and approved', 3, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
+
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, warehouse_receipt_id, created_at, updated_at) VALUES (8, 'WAREHOUSE_RECEIPT', NULL, 'PENDING', 'Created outbound receipt MV-2409', 5, 2, '2026-06-24 09:00:00', '2026-06-24 09:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, warehouse_receipt_id, created_at, updated_at) VALUES (9, 'WAREHOUSE_RECEIPT', 'PENDING', 'APPROVED', 'Outbound request approved', 3, 2, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
+
+-- Approval Histories for Transfers
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, transfer_id, created_at, updated_at) VALUES (10, 'TRANSFER', NULL, 'PENDING', 'Requested cross-warehouse transfer', 3, 1, '2026-06-23 10:00:00', '2026-06-23 10:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, transfer_id, created_at, updated_at) VALUES (11, 'TRANSFER', 'PENDING', 'DELIVERING', 'Goods dispatched to destination', 5, 1, '2026-06-24 10:00:00', '2026-06-24 10:00:00');
+
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, transfer_id, created_at, updated_at) VALUES (12, 'TRANSFER', NULL, 'PENDING', 'Requested cross-warehouse transfer', 4, 2, '2026-06-22 10:00:00', '2026-06-22 10:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, transfer_id, created_at, updated_at) VALUES (13, 'TRANSFER', 'PENDING', 'DELIVERING', 'Goods dispatched to destination', 7, 2, '2026-06-22 15:00:00', '2026-06-22 15:00:00');
+INSERT IGNORE INTO approval_histories (id, document_type, old_status, new_status, note, approver_id, transfer_id, created_at, updated_at) VALUES (14, 'TRANSFER', 'DELIVERING', 'COMPLETED', 'Goods received and verified at destination', 3, 2, '2026-06-23 10:00:00', '2026-06-23 10:00:00');

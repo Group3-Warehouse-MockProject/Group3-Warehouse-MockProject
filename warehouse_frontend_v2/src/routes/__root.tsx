@@ -131,6 +131,8 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { Toaster } from "@/components/ui/sonner";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -139,6 +141,7 @@ function RootComponent() {
       <AppProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
+        <Toaster position="top-right" />
         {/* Chatbot nổi góc dưới phải, hiện trên toàn bộ trang */}
         <ChatBotButton />
       </AppProvider>

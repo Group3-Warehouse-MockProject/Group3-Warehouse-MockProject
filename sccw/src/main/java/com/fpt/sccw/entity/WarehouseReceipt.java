@@ -42,11 +42,32 @@ public class WarehouseReceipt extends BaseEntity{
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "assigned_user_id")
+    private User assignedUser;
+
     @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @org.hibernate.annotations.BatchSize(size = 100)
     @Builder.Default
-    private List<ReceiptDetail> details = new ArrayList<>();
+    private Set<ReceiptDetail> details = new LinkedHashSet<>();
 
     @OneToMany(mappedBy = "warehouseReceipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @org.hibernate.annotations.BatchSize(size = 100)
     @Builder.Default
-    private List<ApprovalHistory> approvalHistories = new ArrayList<>();
+    private Set<ApprovalHistory> approvalHistories = new LinkedHashSet<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_term")
+    @Builder.Default
+    private Status.PaymentTerm paymentTerm = Status.PaymentTerm.COD;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status")
+    @Builder.Default
+    private Status.PaymentStatus paymentStatus = Status.PaymentStatus.UNPAID;
+
+    @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @org.hibernate.annotations.BatchSize(size = 100)
+    @Builder.Default
+    private Set<Payment> payments = new LinkedHashSet<>();
 }

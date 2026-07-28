@@ -10,10 +10,15 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
+import com.fpt.sccw.dto.response.NotificationEventDTO;
+import java.util.*;
+import com.fpt.sccw.dto.response.PageResponse;
 
 @RestController
 @RequestMapping("/api/stocktake")
@@ -26,38 +31,43 @@ public class InventoryCheckController {
     private final WarehouseRepository warehouseRepository;
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
+    private final ApprovalHistoryRepository approvalHistoryRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ------------------------------------------------------------------
     // GET /api/stocktake  — Danh sách phiếu kiểm kê (filter theo role)
     // ------------------------------------------------------------------
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<List<InventoryCheckDTO>> getAllChecks(
-            @RequestParam(required = false) Long warehouseIdParam) {
+    public ResponseEntity<PageResponse<InventoryCheckDTO>> getAllChecks(
+            @RequestParam(required = false) Long warehouseIdParam,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
 
         User user = getAuthenticatedUser();
         if (user == null) return ResponseEntity.status(401).build();
+        if (page < 0 || size < 1 || size > 100) return ResponseEntity.badRequest().build();
 
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         String role = user.getRole().getRoleName().name();
-        List<InventoryCheck> checks;
+        Page<InventoryCheck> checks;
 
         if (role.equals("ADMIN") || role.equals("MANAGER")) {
-            // Admin/Manager xem tất cả hoặc filter theo kho
             checks = warehouseIdParam != null
-                    ? inventoryCheckRepository.findByWarehouseId(warehouseIdParam)
-                    : inventoryCheckRepository.findAll();
+                    ? inventoryCheckRepository.findByWarehouseId(warehouseIdParam, pageable)
+                    : inventoryCheckRepository.findAll(pageable);
         } else {
-            // Warehouse_Manager và Staff chỉ xem kho của mình
             Long warehouseId = user.getWarehouse() != null ? user.getWarehouse().getId() : null;
-            if (warehouseId == null) return ResponseEntity.ok(List.of());
-            checks = inventoryCheckRepository.findByWarehouseId(warehouseId);
+            checks = warehouseId == null
+                    ? Page.empty(pageable)
+                    : inventoryCheckRepository.findByWarehouseId(warehouseId, pageable);
         }
 
-        List<InventoryCheckDTO> result = checks.stream()
+        List<InventoryCheckDTO> result = checks.getContent().stream()
                 .map(InventoryCheckDTO::fromEntity)
-                .collect(Collectors.toList());
+                .toList();
 
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(new PageResponse<>(result, checks));
     }
 
     // ------------------------------------------------------------------
@@ -78,60 +88,101 @@ public class InventoryCheckController {
     // POST /api/stocktake  — Tạo phiếu mới (Admin / Manager / WH_Manager)
     // ------------------------------------------------------------------
     @PostMapping
-    @Transactional
-    public ResponseEntity<InventoryCheckDTO> createCheck(@RequestBody InventoryCheckRequest request) {
-        User user = getAuthenticatedUser();
-        if (user == null) return ResponseEntity.status(401).build();
-
-        String role = user.getRole().getRoleName().name();
-        if (role.equals("STAFF")) return ResponseEntity.status(403).build();
-
-        Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new RuntimeException("Warehouse not found"));
-
-        // Tìm nhân viên được gán (nếu có)
-        User assignedUser = null;
-        if (request.getAssignedUserId() != null) {
-            assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
-        }
-
-        // Tạo phiếu kiểm kê
-        InventoryCheck check = InventoryCheck.builder()
-                .user(user)
-                .warehouse(warehouse)
-                .assignedUser(assignedUser)
-                .remark(request.getRemark())
-                .status(Status.InventoryCheckStatus.PENDING)
-                .build();
-
-        // Tạo dòng chi tiết cho từng sản phẩm được chọn
-        if (request.getProductIds() != null && !request.getProductIds().isEmpty()) {
-            for (Long productId : request.getProductIds()) {
-                Product product = productRepository.findById(productId)
-                        .orElseThrow(() -> new RuntimeException("Product not found: " + productId));
-
-                // Lấy số lượng hệ thống hiện tại từ inventory
-                Long systemQty = inventoryRepository
-                        .findByWarehouseId(warehouse.getId())
-                        .stream()
-                        .filter(inv -> inv.getProduct().getId().equals(productId))
-                        .mapToLong(Inventory::getQuantity)
-                        .findFirst()
-                        .orElse(0L);
-
-                InventoryCheckDetail detail = InventoryCheckDetail.builder()
-                        .inventoryCheck(check)
-                        .product(product)
-                        .systemQuantity(systemQty)
-                        .actualQuantity(systemQty) // Mặc định bằng system qty → variance = 0 khi chưa đếm
-                        .build();
-
-                check.getDetails().add(detail);
+    public ResponseEntity<?> createCheck(@RequestBody InventoryCheckRequest request) {
+        try {
+            User user = getAuthenticatedUser();
+            if (user == null) {
+                return ResponseEntity.status(401).body(Map.of("message", "User not authenticated"));
             }
-        }
 
-        InventoryCheck saved = inventoryCheckRepository.save(check);
-        return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+            String role = user.getRole() != null && user.getRole().getRoleName() != null 
+                    ? user.getRole().getRoleName().name() 
+                    : "STAFF";
+
+            if ("STAFF".equalsIgnoreCase(role)) {
+                return ResponseEntity.status(403).body(Map.of("message", "Staff cannot create stocktake sheets"));
+            }
+
+            if (request.getWarehouseId() == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Warehouse ID is required"));
+            }
+
+            Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
+                    .orElseThrow(() -> new RuntimeException("Warehouse not found: " + request.getWarehouseId()));
+
+            User assignedUser = null;
+            if (request.getAssignedUserId() != null) {
+                assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
+            }
+
+            List<InventoryCheckDetail> detailsList = new ArrayList<>();
+
+            InventoryCheck check = InventoryCheck.builder()
+                    .user(user)
+                    .warehouse(warehouse)
+                    .assignedUser(assignedUser)
+                    .remark(request.getRemark())
+                    .status(Status.InventoryCheckStatus.PENDING)
+                    .details(detailsList)
+                    .build();
+
+            if (request.getProductIds() != null && !request.getProductIds().isEmpty()) {
+                List<Inventory> invList = inventoryRepository.findByWarehouseId(warehouse.getId());
+
+                for (Long productId : request.getProductIds()) {
+                    if (productId == null) continue;
+                    Product product = productRepository.findById(productId).orElse(null);
+                    if (product == null) continue;
+
+                    Long systemQty = 0L;
+                    if (invList != null) {
+                        systemQty = invList.stream()
+                                .filter(inv -> inv != null && inv.getProduct() != null && inv.getProduct().getId().equals(productId))
+                                .mapToLong(Inventory::getQuantity)
+                                .findFirst()
+                                .orElse(0L);
+                    }
+
+                    InventoryCheckDetail detail = InventoryCheckDetail.builder()
+                            .inventoryCheck(check)
+                            .product(product)
+                            .systemQuantity(systemQty)
+                            .actualQuantity(0L)
+                            .difference(0L)
+                            .build();
+
+                    detailsList.add(detail);
+                }
+            }
+
+            InventoryCheck saved = inventoryCheckRepository.save(check);
+
+            ApprovalHistory history = ApprovalHistory.builder()
+                    .inventoryCheck(saved)
+                    .documentType(Status.DocumentType.INVENTORY_CHECK)
+                    .newStatus(saved.getStatus().name())
+                    .note("Stocktake sheet created")
+                    .approver(user)
+                    .build();
+            approvalHistoryRepository.save(history);
+
+            if (assignedUser != null) {
+                NotificationEventDTO event = NotificationEventDTO.builder()
+                        .id(java.util.UUID.randomUUID().toString())
+                        .userId(assignedUser.getId().toString())
+                        .title("New Inventory Check")
+                        .message("You have been assigned to inventory check #" + saved.getId())
+                        .type("INFO")
+                        .createdAt(java.time.Instant.now().toString())
+                        .build();
+                eventPublisher.publishEvent(event);
+            }
+
+            return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Error creating stocktake sheet"));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -153,6 +204,16 @@ public class InventoryCheckController {
             return ResponseEntity.badRequest().build();
         }
 
+        String role = user.getRole() != null && user.getRole().getRoleName() != null ? user.getRole().getRoleName().name() : "";
+
+        // Nếu phiếu được giao cho nhân viên cụ thể (assignedUser != null)
+        // và người đang đếm là STAFF nhưng KHÔNG PHẢI nhân viên được gán -> Chặn 403
+        if ("STAFF".equalsIgnoreCase(role) 
+                && check.getAssignedUser() != null 
+                && !check.getAssignedUser().getId().equals(user.getId())) {
+            return ResponseEntity.status(403).build();
+        }
+
         // Cập nhật số đếm thực tế cho từng dòng sản phẩm
         // Frontend gửi d.id = InventoryCheckDetail.id (không phải Product.id)
         for (InventoryCheckRequest.DetailRequest req : detailRequests) {
@@ -168,11 +229,39 @@ public class InventoryCheckController {
         }
 
         // Tự động chuyển sang IN_PROGRESS khi bắt đầu đếm
+        boolean statusChanged = false;
+        String oldStatus = check.getStatus().name();
         if (check.getStatus() == Status.InventoryCheckStatus.PENDING) {
             check.setStatus(Status.InventoryCheckStatus.IN_PROGRESS);
+            statusChanged = true;
         }
 
         InventoryCheck saved = inventoryCheckRepository.save(check);
+
+        if (statusChanged) {
+            ApprovalHistory history = ApprovalHistory.builder()
+                    .inventoryCheck(saved)
+                    .documentType(Status.DocumentType.INVENTORY_CHECK)
+                    .oldStatus(oldStatus)
+                    .newStatus(saved.getStatus().name())
+                    .note("Started counting")
+                    .approver(user)
+                    .build();
+            approvalHistoryRepository.save(history);
+
+            if (check.getUser() != null) {
+                NotificationEventDTO event = NotificationEventDTO.builder()
+                        .id(java.util.UUID.randomUUID().toString())
+                        .userId(check.getUser().getId().toString())
+                        .title("Inventory Check Started")
+                        .message("Staff " + user.getUsername() + " started counting for check #" + saved.getId())
+                        .type("INFO")
+                        .createdAt(java.time.Instant.now().toString())
+                        .build();
+                eventPublisher.publishEvent(event);
+            }
+        }
+
         return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
     }
 
@@ -188,10 +277,10 @@ public class InventoryCheckController {
         User user = getAuthenticatedUser();
         if (user == null) return ResponseEntity.status(401).build();
 
-        String role = user.getRole().getRoleName().name();
+        String role = user.getRole() != null && user.getRole().getRoleName() != null ? user.getRole().getRoleName().name() : "";
 
         // STAFF không được đổi trạng thái
-        if (role.equals("STAFF")) return ResponseEntity.status(403).build();
+        if ("STAFF".equalsIgnoreCase(role)) return ResponseEntity.status(403).build();
 
         // Chỉ WAREHOUSE_MANAGER mới được đóng phiếu (COMPLETED)
         String newStatus = body.get("status");
@@ -202,6 +291,7 @@ public class InventoryCheckController {
         InventoryCheck check = inventoryCheckRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Stocktake not found: " + id));
 
+        String oldStatusStr = check.getStatus().name();
         try {
             check.setStatus(Status.InventoryCheckStatus.valueOf(newStatus));
         } catch (IllegalArgumentException e) {
@@ -209,6 +299,31 @@ public class InventoryCheckController {
         }
 
         InventoryCheck saved = inventoryCheckRepository.save(check);
+
+        if (!oldStatusStr.equals(newStatus)) {
+            ApprovalHistory history = ApprovalHistory.builder()
+                    .inventoryCheck(saved)
+                    .documentType(Status.DocumentType.INVENTORY_CHECK)
+                    .oldStatus(oldStatusStr)
+                    .newStatus(newStatus)
+                    .note(body.getOrDefault("remark", "Status updated to " + newStatus))
+                    .approver(user)
+                    .build();
+            approvalHistoryRepository.save(history);
+
+            if ("COMPLETED".equals(newStatus) && saved.getAssignedUser() != null) {
+                NotificationEventDTO event = NotificationEventDTO.builder()
+                        .id(java.util.UUID.randomUUID().toString())
+                        .userId(saved.getAssignedUser().getId().toString())
+                        .title("Inventory Check Completed")
+                        .message("Inventory check #" + saved.getId() + " was completed and closed by Manager " + user.getUsername())
+                        .type("SUCCESS")
+                        .createdAt(java.time.Instant.now().toString())
+                        .build();
+                eventPublisher.publishEvent(event);
+            }
+        }
+
         return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
     }
 

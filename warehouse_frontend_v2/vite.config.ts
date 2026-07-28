@@ -24,3 +24,4 @@ export default defineConfig({
     allowedHosts: ["techstock-fe.onrender.com"],
   },
 });
+

@@ -36,9 +36,14 @@ function Dashboard() {
     queryKey: ["inventory", activeWarehouseId],
     queryFn: async () => {
       const res = await api.get("/inventory", {
-        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          page: 0,
+          size: 100, // Dashboard summary only needs a reasonable top-N
+        }
       });
-      return res.data;
+      // Backend now returns PageResponse; extract content array
+      return (res.data?.content ?? res.data) as any[];
     }
   });
 
@@ -68,7 +73,17 @@ function Dashboard() {
   const scopedProducts = inventoryData || [];
     
   const scopedMovements = dashboardData?.movements || [];
-  const lowStock = scopedProducts.filter((p: any) => p.stock < p.reorder).slice(0, 5);
+
+  const { data: lowStockData } = useQuery({
+    queryKey: ["inventory", "low-stock", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/inventory/low-stock", {
+        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+      });
+      return res.data as any[];
+    }
+  });
+  const lowStock = lowStockData ?? [];
 
   const isStaff = currentUser?.role === "Staff";
   const pendingOrders = dashboardData?.pendingOrders || 0;
@@ -86,7 +101,7 @@ function Dashboard() {
     isStaff 
       ? { label: "Pending Orders", value: pendingOrders.toString(), delta: "Action required", icon: ClipboardList, tone: "warning" as const }
       : { label: "Inventory value", value: formatVND(scopedProducts.reduce((s: number, p: any) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" as const },
-    { label: "Low stock", value: scopedProducts.filter((p: any) => p.stock < p.reorder).length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" as const },
+    { label: "Low stock", value: lowStock.length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" as const },
   ];
 
   return (
@@ -225,25 +240,34 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold">Low stock alerts</h3>
-                <p className="text-xs text-muted-foreground">Below reorder threshold</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-xs text-muted-foreground">Below reorder threshold</p>
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1"><span>🔄</span> Auto-reorder active</span>
+                </div>
               </div>
               <span className="text-xs px-2 py-1 rounded-md bg-warning/15 text-warning font-medium">{lowStock.length}</span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
               {lowStock.map((p: any) => (
                 <div key={p.sku} className="p-3 rounded-lg border border-border/60">
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{p.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{p.sku}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <div className="text-xs text-muted-foreground font-mono">{p.sku}</div>
+                        {p.stock === 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-destructive/15 text-destructive font-bold tracking-wider">OUT OF STOCK</span>}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-warning">{p.stock}</div>
+                    <div className="text-right whitespace-nowrap">
+                      <div className={`text-sm font-semibold ${p.stock === 0 ? "text-destructive" : "text-warning"}`}>{p.stock}</div>
                       <div className="text-[10px] text-muted-foreground">/ {p.reorder}</div>
+                      {p.estimatedDaysLeft !== undefined && p.estimatedDaysLeft !== null && (
+                        <div className="text-[10px] text-amber-500 font-medium mt-1">Runs out in {p.estimatedDaysLeft} days ({(p.dailyVelocity || 0).toFixed(1)}/day)</div>
+                      )}
                     </div>
                   </div>
                   <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-warning rounded-full" style={{ width: `${Math.min(100, (p.stock / p.reorder) * 100)}%` }} />
+                    <div className={`h-full rounded-full ${p.stock === 0 ? "bg-destructive" : "bg-warning"}`} style={{ width: `${Math.min(100, (p.stock / p.reorder) * 100)}%` }} />
                   </div>
                 </div>
               ))}

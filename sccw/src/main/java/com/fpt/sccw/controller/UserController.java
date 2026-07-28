@@ -4,7 +4,6 @@ import com.fpt.sccw.dto.response.UserDTO;
 import com.fpt.sccw.entity.User;
 import com.fpt.sccw.service.ActivityLogService;
 import com.fpt.sccw.service.UserService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;

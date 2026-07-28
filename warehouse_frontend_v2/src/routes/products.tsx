@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { formatVND } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { toast } from "sonner";
+import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search, LayoutGrid, List } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,8 +20,13 @@ function ProductsPage() {
   const { activeWarehouseId } = useApp();
   const [open, setOpen] = useState(false);
   const [openImport, setOpenImport] = useState(false);
-  const [page, setPage] = useState(1);
-  const limit = 10;
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  
+  // Server-side pagination state
+  const [page, setPage] = useState(0); // 0-indexed for backend
+  const limit = 15;
+  
   const [q, setQ] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
@@ -30,16 +36,30 @@ function ProductsPage() {
   const [filterPriceMin, setFilterPriceMin] = useState("");
   const [filterPriceMax, setFilterPriceMax] = useState("");
 
-  
-  const { data: productData, isLoading, error } = useQuery({
-    queryKey: ["products", activeWarehouseId],
+  // Reset page whenever filters change
+  useEffect(() => { setPage(0); }, [q, filterCategory, filterStatus, filterCostMin, filterCostMax, filterPriceMin, filterPriceMax, activeWarehouseId]);
+
+  const { data: pageData, isLoading, error } = useQuery({
+    queryKey: ["products", activeWarehouseId, page],
     queryFn: async () => {
       const res = await api.get("/products", {
-        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          page,
+          size: limit,
+        }
       });
-      return res.data;
+      return res.data as {
+        content: any[];
+        totalPages: number;
+        totalElements: number;
+      };
     }
   });
+
+  const productData = pageData?.content ?? [];
+  const totalPages = pageData?.totalPages ?? 1;
+  const totalElements = pageData?.totalElements ?? 0;
 
   const { data: warehouses } = useQuery({
     queryKey: ["warehouses"],
@@ -57,12 +77,13 @@ function ProductsPage() {
     }
   });
 
-  const { data: suppliers } = useQuery({
-    queryKey: ["suppliers"],
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers", "reference"],
     queryFn: async () => {
-      const res = await api.get("/suppliers");
-      return res.data;
-    }
+      const res = await api.get("/suppliers", { params: { page: 0, size: 100 } });
+      return res.data?.content ?? [];
+    },
+    staleTime: 5 * 60_000,
   });
 
   const { data: locations } = useQuery({
@@ -73,7 +94,16 @@ function ProductsPage() {
     }
   });
 
-  const getWarehouseCode = (id: string) => warehouses?.find((w: any) => w.id.toString() === id.toString())?.code ?? id;
+  const getWarehouseCode = (id: string | null | undefined) => {
+    if (!id) return "—";
+    if (id.includes(",")) {
+      return id.split(",")
+        .map(i => warehouses?.find((w: any) => w.id.toString() === i.trim())?.code ?? i.trim())
+        .filter(Boolean)
+        .join(", ");
+    }
+    return warehouses?.find((w: any) => w.id.toString() === id.toString())?.code ?? id;
+  };
 
   const list = (productData || []).filter((p: any) => {
     const matchesQ = 
@@ -99,10 +129,6 @@ function ProductsPage() {
 
     return matchesQ && matchesCategory && matchesStatus && matchesCost && matchesPrice;
   });
-  
-  const totalPages = Math.max(1, Math.ceil(list.length / limit));
-  const safePage = Math.min(page, totalPages);
-  const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
   
   const units = list.reduce((s: number, p: any) => s + p.stock, 0);
   const low = list.filter((p: any) => p.stock < p.reorder).length;
@@ -179,7 +205,23 @@ function ProductsPage() {
                 className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
               />
             </div>
-            <div className="relative">
+            <div className="relative flex items-center gap-2">
+              <div className="hidden sm:flex bg-secondary p-1 rounded-lg border border-border">
+                <button 
+                  onClick={() => setViewMode("grid")}
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-background shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  title="Grid View"
+                >
+                  <LayoutGrid className="size-4" />
+                </button>
+                <button 
+                  onClick={() => setViewMode("list")}
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-background shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  title="List View"
+                >
+                  <List className="size-4" />
+                </button>
+              </div>
               <button onClick={() => setShowFilter(!showFilter)} className={`h-10 px-4 rounded-lg border text-sm flex items-center gap-2 transition-colors shrink-0 ${showFilter ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border hover:bg-muted"}`}>
                 <Filter className="size-4" />Filter
               </button>
@@ -243,114 +285,300 @@ function ProductsPage() {
           </div>
         </div>
 
-        <div className="surface-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
-                <tr>
-                  <th className="text-left p-4">SKU</th>
-                  <th className="text-left p-4">Product</th>
-                  <th className="text-left p-4">Category</th>
-                  <th className="text-left p-4">Warehouse</th>
-                  <th className="text-left p-4">Location</th>
-                  <th className="text-right p-4">Stock</th>
-                  <th className="text-right p-4">Cost</th>
-                  <th className="text-right p-4">Price</th>
-                  <th className="text-center p-4">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedList.map((p: any) => {
+        <div className="surface-card overflow-hidden flex flex-col">
+          {viewMode === "grid" ? (
+            <div className="flex-1 overflow-y-auto p-4 bg-secondary/5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {list.map((p: any) => {
                   const low = p.stock < p.reorder;
                   const out = p.stock === 0;
                   return (
-                    <tr key={`${p.sku}-${p.warehouseId}`} className="border-t border-border/60 hover:bg-secondary/30 transition-colors">
-                      <td className="p-4 font-mono text-xs text-muted-foreground">{p.sku}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          {p.imageUrl ? (
-                            <img src={p.imageUrl} alt={p.name} className="size-10 rounded-md object-cover border border-border" />
+                    <div
+                      key={`${p.sku}-${p.warehouseId}`}
+                      onClick={() => setSelectedProduct(p)}
+                      className="flex flex-col border border-border/60 rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-300 bg-background group cursor-pointer"
+                    >
+                      <div className="h-40 bg-secondary/40 relative overflow-hidden shrink-0">
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="size-12 text-muted-foreground/30 group-hover:scale-110 transition-transform duration-500" />
+                          </div>
+                        )}
+                        <div className="absolute top-2 right-2 flex flex-col gap-1.5 items-end">
+                          {out ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-destructive text-destructive-foreground shadow-sm">Out of Stock</span>
+                          ) : low ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-warning text-warning-foreground shadow-sm">Low Stock</span>
                           ) : (
-                            <div className="size-10 rounded-md bg-secondary/80 flex items-center justify-center border border-border">
-                              <Package className="size-5 text-muted-foreground" />
-                            </div>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-success/90 text-success-foreground shadow-sm backdrop-blur-md">In stock</span>
                           )}
-                          <div>
-                            <div className="font-medium">{p.name}</div>
-                            <div className="text-xs text-muted-foreground">{p.brand}</div>
+                        </div>
+                      </div>
+                      <div className="p-3.5 flex-1 flex flex-col">
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="text-xs text-muted-foreground font-mono bg-secondary/50 px-1.5 py-0.5 rounded-sm">{p.sku}</div>
+                        </div>
+                        <div className="font-semibold text-[15px] leading-tight mb-1 line-clamp-2 mt-1" title={p.name}>{p.name}</div>
+                        <div className="text-xs text-muted-foreground mb-3 line-clamp-1">{p.brand} &bull; {p.category}</div>
+                        
+                        <div className="mt-auto space-y-2.5 bg-secondary/20 rounded-lg p-3 border border-border/40">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Price</span>
+                            <span className="font-semibold text-primary">{formatVND(p.price)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Stock</span>
+                            <span className="font-semibold">{p.stock}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Loc</span>
+                            <span className="font-mono text-[11px] text-right max-w-30 truncate" title={`${getWarehouseCode(p.warehouseId)} / ${p.location}`}>{getWarehouseCode(p.warehouseId)} / {p.location}</span>
                           </div>
                         </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2 py-1 rounded-md text-xs bg-secondary border border-border">{p.category}</span>
-                      </td>
-                      <td className="p-4 font-mono text-xs">{getWarehouseCode(p.warehouseId)}</td>
-                      <td className="p-4 font-mono text-xs">{p.location}</td>
-                      <td className="p-4 text-right font-semibold">{p.stock}</td>
-                      <td className="p-4 text-right">{formatVND(p.cost)}</td>
-                      <td className="p-4 text-right">{formatVND(p.price)}</td>
-                      <td className="p-4 text-center">
-                        {out ? (
-                          <span className="px-2 py-1 rounded-md text-xs bg-destructive/15 text-destructive">Out</span>
-                        ) : low ? (
-                          <span className="px-2 py-1 rounded-md text-xs bg-warning/15 text-warning">Low</span>
-                        ) : (
-                          <span className="px-2 py-1 rounded-md text-xs bg-success/15 text-success">In stock</span>
-                        )}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
-                {paginatedList.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
-                      No products match your filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {totalPages > 1 && <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
-              <div className="text-muted-foreground text-xs">
-                Showing {(safePage - 1) * limit + 1}–{Math.min(safePage * limit, list.length)} of {list.length} entries
               </div>
-            <div className="flex items-center gap-1">
+              {list.length === 0 && (
+                <div className="py-16 text-center">
+                  <Package className="size-12 text-muted-foreground/30 mx-auto mb-3" />
+                  <div className="text-muted-foreground font-medium">No products match your filters.</div>
+                  <div className="text-sm text-muted-foreground/60 mt-1">Try adjusting your search criteria.</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <div className="min-w-250 text-sm">
+                <div className="grid grid-cols-[130px_minmax(180px,2fr)_110px_90px_90px_60px_70px_100px_100px_90px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                  <div>SKU</div>
+                  <div>Product</div>
+                  <div>Category</div>
+                  <div>Warehouse</div>
+                  <div>Location</div>
+                  <div className="text-right">Stock</div>
+                  <div className="text-right">Reorder</div>
+                  <div className="text-right">Cost</div>
+                  <div className="text-right">Price</div>
+                  <div className="text-center">Status</div>
+                </div>
+                <div className="divide-y divide-border/60">
+                  {list.map((p: any) => {
+                    const low = p.stock < p.reorder;
+                    const out = p.stock === 0;
+                    return (
+                      <div
+                        key={`${p.sku}-${p.warehouseId}`}
+                        onClick={() => setSelectedProduct(p)}
+                        className="grid grid-cols-[130px_minmax(180px,2fr)_110px_90px_90px_60px_70px_100px_100px_90px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors cursor-pointer"
+                      >
+                        <div className="font-mono text-xs text-muted-foreground truncate">{p.sku}</div>
+                        <div>
+                          <div className="flex items-center gap-3">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt={p.name} className="size-10 rounded-md object-cover border border-border shrink-0" />
+                            ) : (
+                              <div className="size-10 rounded-md bg-secondary/80 flex items-center justify-center border border-border shrink-0">
+                                <Package className="size-5 text-muted-foreground" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{p.name}</div>
+                              <div className="text-xs text-muted-foreground truncate">{p.brand}</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="px-2 py-1 rounded-md text-xs bg-secondary border border-border inline-block truncate max-w-full">{p.category}</span>
+                        </div>
+                        <div className="font-mono text-xs truncate">{getWarehouseCode(p.warehouseId)}</div>
+                        <div className="font-mono text-xs truncate">{p.location}</div>
+                        <div className="text-right font-semibold">{p.stock}</div>
+                        <div className="text-right flex justify-end">
+                          <InlineReorderEdit product={p} />
+                        </div>
+                        <div className="text-right">{formatVND(p.cost)}</div>
+                        <div className="text-right">{formatVND(p.price)}</div>
+                        <div className="text-center">
+                          {out ? (
+                            <span className="px-2 py-1 rounded-md text-xs bg-destructive/15 text-destructive">Out</span>
+                          ) : low ? (
+                            <span className="px-2 py-1 rounded-md text-xs bg-warning/15 text-warning">Low</span>
+                          ) : (
+                            <span className="px-2 py-1 rounded-md text-xs bg-success/15 text-success">In stock</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {list.length === 0 && (
+                    <div className="p-8 text-center text-muted-foreground text-sm">
+                      No products match your filters.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm bg-secondary/10">
+              <div className="text-muted-foreground text-xs">
+                Showing {page * limit + 1}–{Math.min((page + 1) * limit, totalElements)} of {totalElements} entries
+              </div>
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="size-8 grid place-items-center rounded-md border border-border bg-background hover:bg-secondary disabled:opacity-40 transition-colors"
                 >
-                <ChevronLeft className="size-4" />
-              </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                  <ChevronLeft className="size-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i).map((n) => (
                   <button
                     key={n}
                     onClick={() => setPage(n)}
-                    className={`size-8 rounded-md text-xs font-medium ${
-                      n === safePage
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary border border-border hover:bg-muted"
+                    className={`size-8 rounded-md text-xs font-medium transition-colors ${
+                      n === page
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-background border border-border hover:bg-secondary"
                     }`}
                   >
-                    {n}
+                    {n + 1}
                   </button>
                 ))}
                 <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                  className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="size-8 grid place-items-center rounded-md border border-border bg-background hover:bg-secondary disabled:opacity-40 transition-colors"
                 >
-                <ChevronRight className="size-4" />
-              </button>
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
             </div>
-          </div>
-          }
+          )}
         </div>
       </div>
       <AddSkuModal open={open} onClose={() => setOpen(false)} warehouses={warehouses || []} categories={categories || []} suppliers={suppliers || []} locations={locations || []} />
       <ImportModal open={openImport} onClose={() => setOpenImport(false)} />
+      <ProductDetailModal product={selectedProduct} warehouses={warehouses || []} onClose={() => setSelectedProduct(null)} />
     </AppShell>
+  );
+}
+
+function ProductDetailModal({ product, warehouses, onClose }: { product: any; warehouses: any[]; onClose: () => void }) {
+  if (!product) return null;
+  const out = product.stock === 0;
+  const low = product.stock > 0 && product.stock < product.reorder;
+  
+  const getWarehouseCode = (id: string | null | undefined) => {
+    if (!id) return "—";
+    if (id.includes(",")) {
+      return id.split(",")
+        .map(i => warehouses?.find((w: any) => w.id.toString() === i.trim())?.code ?? i.trim())
+        .filter(Boolean)
+        .join(", ");
+    }
+    return warehouses?.find((w: any) => w.id.toString() === id.toString())?.code ?? id;
+  };
+
+  return (
+    <ModalShell
+      open={!!product}
+      onClose={onClose}
+      title="Product Details"
+      subtitle={product.name}
+      icon={<Package className="size-5" />}
+      footer={
+        <button onClick={onClose} className="h-10 px-6 rounded-lg bg-secondary border border-border text-sm hover:bg-muted font-medium">Close</button>
+      }
+    >
+      <div className="flex flex-col gap-6">
+        <div className="w-full h-48 md:h-64 rounded-xl border border-border/60 bg-secondary/30 flex items-center justify-center overflow-hidden relative shrink-0">
+          {product.imageUrl ? (
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+          ) : (
+            <Package className="size-20 text-muted-foreground/30" />
+          )}
+          <div className="absolute top-3 right-3 flex flex-col gap-2 items-end">
+            {out ? (
+              <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-destructive/90 text-destructive-foreground shadow-sm backdrop-blur-md">Out of Stock</span>
+            ) : low ? (
+              <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-warning/90 text-warning-foreground shadow-sm backdrop-blur-md">Low Stock</span>
+            ) : (
+              <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-success/90 text-success-foreground shadow-sm backdrop-blur-md">In stock</span>
+            )}
+          </div>
+        </div>
+        
+        <div className="space-y-5">
+          <div>
+            <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wider mb-1">SKU Code</div>
+            <div className="font-mono text-base bg-secondary/50 px-2 py-1 rounded border border-border/40 inline-block">{product.sku}</div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="surface-card p-3 rounded-lg border border-border/40">
+              <div className="text-xs text-muted-foreground mb-1">Category</div>
+              <div className="font-medium">{product.category || "—"}</div>
+            </div>
+            <div className="surface-card p-3 rounded-lg border border-border/40">
+              <div className="text-xs text-muted-foreground mb-1">Brand / Supplier</div>
+              <div className="font-medium">{product.brand || "—"}</div>
+            </div>
+            <div className="surface-card p-3 rounded-lg border border-border/40">
+              <div className="text-xs text-muted-foreground mb-1">Cost Price</div>
+              <div className="font-medium text-destructive">{formatVND(product.cost)}</div>
+            </div>
+            <div className="surface-card p-3 rounded-lg border border-border/40">
+              <div className="text-xs text-muted-foreground mb-1">Selling Price</div>
+              <div className="font-medium text-success text-lg">{formatVND(product.price)}</div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 bg-secondary/10 p-4 rounded-lg border border-border/40">
+            <div className="grid grid-cols-2 gap-4 border-b border-border/40 pb-4">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Stock</div>
+                <div className="font-bold text-lg">{product.stock}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Reorder Point</div>
+                <div className="font-medium text-lg">{product.reorder}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-[3fr_2fr] gap-4">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Warehouse</div>
+                <div className="font-mono text-sm space-y-1">
+                  {(!product.warehouseId || !product.warehouseId.includes(",")) ? (
+                    <div>{getWarehouseCode(product.warehouseId)}</div>
+                  ) : (
+                    product.warehouseId.split(",").map((id: string, idx: number) => (
+                      <div key={idx}>{getWarehouseCode(id.trim())}</div>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Location</div>
+                <div className="font-mono text-sm space-y-1">
+                  {(!product.location || !product.location.includes(",")) ? (
+                    <div>{product.location || "—"}</div>
+                  ) : (
+                    product.location.split(",").map((loc: string, idx: number) => (
+                      <div key={idx}>{loc.trim() || "—"}</div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -365,20 +593,18 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
     }
   }, [open]);
 
-  const { data: allProducts } = useQuery({
-    queryKey: ["all-products-for-locations"],
+  const { data: occupiedLocationsData = [] } = useQuery<string[]>({
+    queryKey: ["occupied-locations", selectedWarehouse],
     queryFn: async () => {
-      const res = await api.get("/products");
+      const res = await api.get("/products/occupied-locations", {
+        params: { warehouseId: selectedWarehouse },
+      });
       return res.data;
     },
-    enabled: open
+    enabled: open && Boolean(selectedWarehouse),
   });
 
-  const occupiedLocations = new Set(
-    (allProducts || [])
-      .filter((p: any) => p.warehouseId === selectedWarehouse)
-      .map((p: any) => p.location)
-  );
+  const occupiedLocations = new Set(occupiedLocationsData);
 
   const availableLocations = locations.filter((loc: any) => {
     const locStr = `${loc.zoneCode}-${loc.rackCode}-${loc.binCode}`;
@@ -438,7 +664,7 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
         </Field>
         <Field label="Product name" required className="sm:col-span-2"><input name="name" className={inputCls} placeholder="Intel Core i7-14700K" required /></Field>
         <Field label="Image URL" className="sm:col-span-2"><input name="imageUrl" className={inputCls} placeholder="https://example.com/image.png" /></Field>
-        <Field label="Specification" required className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-[80px] resize-y py-2`} placeholder="e.g., 6 Cores, 12 Threads, 4.3 GHz Max Boost" required /></Field>
+        <Field label="Specification" required className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} placeholder="e.g., 6 Cores, 12 Threads, 4.3 GHz Max Boost" required /></Field>
         <Field label="Category" required>
           <select name="categoryId" className={selectCls} defaultValue="" required>
             <option value="" disabled>Select category</option>
@@ -597,5 +823,44 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
         </div>
       </div>
     </ModalShell>
+  );
+}
+
+function InlineReorderEdit({ product }: { product: any }) {
+  const [val, setVal] = useState(product.reorder?.toString() || "0");
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: async (newVal: number) => {
+      await api.patch(`/inventory/${product.inventoryId}/threshold`, { lowStockThreshold: newVal });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Reorder level updated");
+    },
+    onError: () => {
+      toast.error("Failed to update reorder level");
+      setVal(product.reorder?.toString() || "0");
+    }
+  });
+
+  return (
+    <input
+      type="number"
+      className="w-14 h-7 px-1 text-right text-xs rounded border border-transparent hover:border-border bg-transparent focus:bg-input focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => {
+        if (val !== product.reorder?.toString()) {
+          mutation.mutate(Number(val));
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.currentTarget.blur();
+        }
+      }}
+      disabled={mutation.isPending}
+      onClick={(e) => e.stopPropagation()}
+    />
   );
 }

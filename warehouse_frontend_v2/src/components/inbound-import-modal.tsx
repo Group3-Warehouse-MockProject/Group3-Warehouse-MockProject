@@ -26,28 +26,28 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
       // Fetch dynamic lookup data from backend
       const [wRes, sRes, pRes] = await Promise.all([
-        api.get<any[]>("/warehouses"),
-        api.get<any[]>("/suppliers"),
-        api.get<any[]>("/products"),
+        api.get<any>("/warehouses"),
+        api.get<any>("/suppliers"),
+        api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
       ]);
 
-      const warehouses = wRes.data;
-      const suppliers = sRes.data;
-      const products = pRes.data;
+      const warehouses = wRes.data?.content ?? (wRes.data as any);
+      const suppliers = sRes.data?.content ?? (sRes.data as any);
+      const products = pRes.data?.content ?? (pRes.data as any);
 
       // Populate DataSheet with available choices
       dataSheet.getCell("A1").value = "Warehouses";
-      warehouses.forEach((w, idx) => {
+      warehouses.forEach((w: any, idx: number) => {
         dataSheet.getCell(`A${idx + 2}`).value = w.code;
       });
 
       dataSheet.getCell("B1").value = "Suppliers";
-      suppliers.forEach((s, idx) => {
+      suppliers.forEach((s: any, idx: number) => {
         dataSheet.getCell(`B${idx + 2}`).value = s.name;
       });
 
       dataSheet.getCell("C1").value = "Products";
-      products.forEach((p, idx) => {
+      products.forEach((p: any, idx: number) => {
         dataSheet.getCell(`C${idx + 2}`).value = p.sku;
       });
 
@@ -58,7 +58,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       templateSheet.columns = [
         { header: "GroupKey", key: "groupKey", width: 12 },
         { header: "WAREHOUSE", key: "warehouse", width: 18 },
-        { header: "DATE", key: "date", width: 15 },
+        { header: "DATE (yyyy-mm-dd)", key: "date", width: 20 },
         { header: "SUPPLIER", key: "supplier", width: 25 },
         { header: "PRODUCT", key: "product", width: 22 },
         { header: "QTY", key: "qty", width: 10 },
@@ -66,39 +66,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         { header: "NOTES", key: "notes", width: 30 }
       ];
 
-      // Add 3 sample rows illustrating grouping
-      templateSheet.addRow({
-        groupKey: 1,
-        warehouse: warehouses[0]?.code || "TS-HCM-01",
-        date: "15/07/2026",
-        supplier: suppliers[0]?.name || "FPT Distribution",
-        product: products[0]?.sku || "CPU-INT-14700K",
-        qty: 50,
-        unitCost: products[0]?.cost || 8000000,
-        notes: "Imported batch A"
-      });
-
-      templateSheet.addRow({
-        groupKey: 1,
-        warehouse: warehouses[0]?.code || "TS-HCM-01",
-        date: "15/07/2026",
-        supplier: suppliers[0]?.name || "FPT Distribution",
-        product: products[1]?.sku || "CPU-AMD-7800X3D",
-        qty: 20,
-        unitCost: products[1]?.cost || 8500000,
-        notes: "Imported batch A"
-      });
-
-      templateSheet.addRow({
-        groupKey: 2,
-        warehouse: warehouses[1]?.code || warehouses[0]?.code || "TS-HN-01",
-        date: "15/07/2026",
-        supplier: suppliers[1]?.name || suppliers[0]?.name || "Digiworld",
-        product: products[0]?.sku || "CPU-INT-14700K",
-        qty: 30,
-        unitCost: products[0]?.cost || 8000000,
-        notes: "Imported batch B"
-      });
+      // Removed sample rows as requested by teacher
 
       // Apply Excel data validation (dropdowns) for rows 2 to 100
       const numWH = warehouses.length;
@@ -106,6 +74,36 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const numProd = products.length;
 
       for (let i = 2; i <= 100; i++) {
+        templateSheet.getCell(`C${i}`).dataValidation = {
+          type: "date",
+          operator: "greaterThan",
+          allowBlank: true,
+          showErrorMessage: true,
+          errorTitle: "Invalid Date",
+          error: "Please enter a valid date (e.g. 2026-07-15)",
+          formulae: ['DATE(2000,1,1)']
+        };
+
+        templateSheet.getCell(`F${i}`).dataValidation = {
+          type: "whole",
+          operator: "greaterThan",
+          allowBlank: true,
+          showErrorMessage: true,
+          errorTitle: "Invalid Quantity",
+          error: "Quantity must be a whole number greater than 0.",
+          formulae: ['0']
+        };
+
+        templateSheet.getCell(`G${i}`).dataValidation = {
+          type: "decimal",
+          operator: "greaterThanOrEqual",
+          allowBlank: true,
+          showErrorMessage: true,
+          errorTitle: "Invalid Unit Cost",
+          error: "Unit cost must be a number greater than or equal to 0.",
+          formulae: ['0']
+        };
+
         if (numWH > 0) {
           templateSheet.getCell(`B${i}`).dataValidation = {
             type: "list",
@@ -158,21 +156,16 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as any[];
 
       if (jsonData.length === 0) {
         throw new Error("The Excel file is empty.");
       }
 
-      // Filter out exact sample rows from the template using their distinctive Notes
-      const cleanJsonData = jsonData.filter((row) => {
-        const note = String(row.NOTES || "").trim();
-        return note !== "Imported batch A" && note !== "Imported batch B";
-      });
-
+      const cleanJsonData = jsonData;
 
       if (cleanJsonData.length === 0) {
-        throw new Error("No valid data to import. Please delete the sample rows and fill in your own data.");
+        throw new Error("No valid data to import. Please fill in your own data.");
       }
 
       // Pre-fetch warehouses to resolve IDs by Warehouse Code
@@ -204,10 +197,11 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
         const warehouseId = whMatch.id;
 
-        // Build remark from Supplier and Notes
+        // Build remark from Date, Supplier and Notes
+        const dateStr = firstRow["DATE (yyyy-mm-dd)"] ? `Date: ${String(firstRow["DATE (yyyy-mm-dd)"]).trim()}` : (firstRow.DATE ? `Date: ${String(firstRow.DATE).trim()}` : "");
         const suppStr = firstRow.SUPPLIER ? `Supplier: ${String(firstRow.SUPPLIER).trim()}` : "";
         const noteStr = firstRow.NOTES ? String(firstRow.NOTES).trim() : "";
-        const remark = [suppStr, noteStr].filter(Boolean).join(" | ") || null;
+        const remark = [dateStr, suppStr, noteStr].filter(Boolean).join(" | ") || null;
 
         const items = rows.map((row, idx) => {
           const code = row.PRODUCT ? String(row.PRODUCT).trim() : "";
@@ -277,41 +271,51 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         </>
       }
     >
-      <div className="space-y-6 text-sm">
-        <div className="p-4 surface-card border border-border/60 rounded-lg">
-          <h3 className="font-medium mb-2">Step 1: Download Template</h3>
-          <p className="text-muted-foreground mb-4">
-            Start by downloading the standard Excel template. It has built-in dropdown choices for Warehouses, Suppliers, and Products.
-          </p>
-          <button onClick={downloadTemplate} disabled={loading} className="h-9 px-4 rounded-md border border-border bg-secondary hover:bg-muted font-medium inline-flex items-center gap-2 transition-colors">
-            <Download className="size-4" /> Download Template
-          </button>
-        </div>
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div className="p-5 surface-card border border-border/60 rounded-xl flex flex-col justify-between">
+            <div>
+              <h3 className="font-semibold text-base mb-2">Step 1: Download Template</h3>
+              <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                Start by downloading the standard Excel template. It includes built-in dropdown choices for Warehouses, Suppliers, and Products.
+              </p>
+            </div>
+            <button
+              onClick={downloadTemplate}
+              disabled={loading}
+              className="h-10 px-4 rounded-lg border border-border bg-secondary hover:bg-muted font-medium inline-flex items-center justify-center gap-2 transition-colors w-full"
+            >
+              <Download className="size-4" /> Download Template
+            </button>
+          </div>
 
-        <div className="p-4 surface-card border border-border/60 rounded-lg">
-          <h3 className="font-medium mb-2">Step 2: Upload Data</h3>
-          <p className="text-muted-foreground mb-4">
-            Fill out the template. Select options from the dropdown cells in Excel, and upload it back.
-          </p>
+          <div className="p-5 surface-card border border-border/60 rounded-xl flex flex-col justify-between">
+            <div>
+              <h3 className="font-semibold text-base mb-2">Step 2: Upload Data</h3>
+              <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                Fill out the template. Select options from the dropdown cells in Excel, and upload it back.
+              </p>
+            </div>
 
-          <input
-            type="file"
-            accept=".xlsx, .xls, .csv"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            disabled={loading}
-          />
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              disabled={loading}
+            />
 
-          <div
-            onClick={() => !loading && fileInputRef.current?.click()}
-            className={`border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-secondary/30 transition-colors ${
-              loading ? "opacity-60 pointer-events-none" : ""
-            }`}
-          >
-            <Upload className="size-8 text-muted-foreground mx-auto mb-3" />
-            <div className="font-medium">Click to browse or drag and drop</div>
-            <div className="text-xs text-muted-foreground mt-1">Excel or CSV files up to 5MB</div>
+            <div
+              onClick={() => !loading && fileInputRef.current?.click()}
+              className={`border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:bg-secondary/30 transition-colors ${
+                loading ? "opacity-60 pointer-events-none" : ""
+              }`}
+            >
+              <Upload className="size-6 text-muted-foreground mx-auto mb-2" />
+              <div className="font-medium text-xs">Click to browse or drag & drop</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">Excel or CSV files up to 5MB</div>
+            </div>
           </div>
         </div>
 

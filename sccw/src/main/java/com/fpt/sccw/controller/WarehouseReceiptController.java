@@ -3,21 +3,29 @@ package com.fpt.sccw.controller;
 import com.fpt.sccw.dto.request.CreateReceiptRequest;
 import com.fpt.sccw.dto.request.UpdateReceiptRequest;
 import com.fpt.sccw.dto.response.MovementDTO;
+import com.fpt.sccw.dto.response.PageResponse;
 import com.fpt.sccw.entity.*;
 import com.fpt.sccw.repository.*;
 import com.fpt.sccw.service.ActivityLogService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.context.ApplicationEventPublisher;
+import com.fpt.sccw.dto.response.NotificationEventDTO;
 
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 
 @RestController
@@ -27,12 +35,17 @@ import java.util.List;
 public class WarehouseReceiptController {
 
     private final WarehouseReceiptRepository receiptRepository;
+    private final ReceiptDetailRepository receiptDetailRepository;
     private final TransferRepository transferRepository;
+    private final TransferDetailRepository transferDetailRepository;
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
     private final WarehouseRepository warehouseRepository;
     private final ActivityLogService activityLogService;
+    private final PaymentRepository paymentRepository;
+    private final ApprovalHistoryRepository approvalHistoryRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final DateTimeFormatter DATE_FMT     = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -48,9 +61,11 @@ public class WarehouseReceiptController {
      */
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<List<MovementDTO>> getReceipts(
+    public ResponseEntity<PageResponse<MovementDTO>> getReceipts(
             @RequestParam(required = false) Long warehouseIdParam,
-            @RequestParam(required = false) String type
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         User user = resolveUser();
         if (user == null) return ResponseEntity.status(401).build();
@@ -58,46 +73,31 @@ public class WarehouseReceiptController {
         String roleName = user.getRole().getRoleName().name();
         Long effectiveWarehouseId = resolveWarehouseScope(user, roleName, warehouseIdParam);
 
-        List<WarehouseReceipt> receipts = effectiveWarehouseId != null
-                ? receiptRepository.findByWarehouseId(effectiveWarehouseId)
-                : receiptRepository.findAll();
+        if (page < 0 || size < 1 || size > 100) return ResponseEntity.badRequest().build();
 
-        List<Transfer> transfers = effectiveWarehouseId != null
-                ? transferRepository.findByWarehouseIdOrWarehouseDestinationId(effectiveWarehouseId, effectiveWarehouseId)
-                : transferRepository.findAll();
-
-        List<MovementDTO> movements = new ArrayList<>();
-
-        for (WarehouseReceipt r : receipts) {
-            boolean isInbound = r.getType().name().equals("INBOUND");
-            if (type != null && !type.isBlank() && !r.getType().name().equalsIgnoreCase(type)) continue;
-
-            for (ReceiptDetail d : r.getDetails()) {
-                String partner = resolvePartner(r, d, isInbound);
-                movements.add(buildReceiptMovement(r, d, isInbound, partner));
+        Status.TransactionType receiptType = null;
+        if (type != null && !type.isBlank()) {
+            try {
+                receiptType = Status.TransactionType.valueOf(type.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
             }
         }
 
-        boolean includeTransfers = type == null || type.isBlank();
-        if (includeTransfers) {
-            for (Transfer t : transfers) {
-                boolean isOut = effectiveWarehouseId == null || t.getWarehouse().getId().equals(effectiveWarehouseId);
-                String partner = t.getWarehouseDestination() != null
-                        ? t.getWarehouseDestination().getLocation() : "External";
-                for (TransferDetail d : t.getDetails()) {
-                    movements.add(buildTransferMovement(t, d, isOut, effectiveWarehouseId, partner));
-                }
-            }
-        }
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "receipt.createdAt"));
+        Page<ReceiptDetail> detailPage = receiptDetailRepository
+                .findMovementPage(effectiveWarehouseId, receiptType, pageable);
 
-        movements.sort((a, b) -> {
-            String timeA = a.getCreatedAt() != null ? a.getCreatedAt() : "";
-            String timeB = b.getCreatedAt() != null ? b.getCreatedAt() : "";
-            int cmp = timeB.compareTo(timeA);
-            if (cmp != 0) return cmp;
-            return b.getId().compareTo(a.getId()); // fallback
-        });
-        return ResponseEntity.ok(movements);
+        List<MovementDTO> pageContent = detailPage.getContent().stream()
+                .map(detail -> {
+                    WarehouseReceipt receipt = detail.getReceipt();
+                    boolean isInbound = receipt.getType() == Status.TransactionType.INBOUND;
+                    return buildReceiptMovement(receipt, detail, isInbound,
+                            resolvePartner(receipt, detail, isInbound));
+                })
+                .toList();
+
+        return ResponseEntity.ok(new PageResponse<>(pageContent, detailPage));
     }
 
 
@@ -122,16 +122,24 @@ public class WarehouseReceiptController {
         Status.TransactionType txType = isInbound
                 ? Status.TransactionType.INBOUND : Status.TransactionType.OUTBOUND;
 
+        User assignedUser = null;
+        if (request.getAssignedUserId() != null) {
+            assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
+        }
+
         WarehouseReceipt receipt = WarehouseReceipt.builder()
                 .type(txType)
                 .status(Status.ReceiptStatus.PENDING)
                 .remark(request.getRemark())
                 .partner(request.getPartner())
                 .user(user)
+                .assignedUser(assignedUser)
                 .warehouse(warehouse)
+                .paymentTerm(resolvePaymentTerm(request.getPaymentTerm(), !isInbound))
+                .paymentStatus(Status.PaymentStatus.UNPAID)
                 .build();
 
-        List<ReceiptDetail> details = new ArrayList<>();
+        Set<ReceiptDetail> details = new java.util.LinkedHashSet<>();
         for (CreateReceiptRequest.LineItemRequest item : request.getItems()) {
             if (item.getProductCode() == null || item.getProductCode().isBlank()) continue;
             if (item.getQuantity() == null || item.getQuantity() <= 0) continue;
@@ -150,9 +158,7 @@ public class WarehouseReceiptController {
                     .price(resolvedPrice)
                     .build());
 
-            if (isInbound) {
-                adjustInventory(product, warehouse, item.getQuantity(), true);
-            }
+            // Inventory for inbound will be adjusted when status is updated to APPROVED.
         }
 
         receipt.setDetails(details);
@@ -161,6 +167,33 @@ public class WarehouseReceiptController {
         activityLogService.log(user, isInbound ? "CREATE_INBOUND" : "CREATE_OUTBOUND",
                 "Created " + (isInbound ? "inbound" : "outbound") + " receipt #" + saved.getId()
                 + " at " + warehouse.getCode());
+
+        ApprovalHistory history = ApprovalHistory.builder()
+                .warehouseReceipt(saved)
+                .documentType(Status.DocumentType.WAREHOUSE_RECEIPT)
+                .newStatus(saved.getStatus().name())
+                .note((isInbound ? "Inbound" : "Outbound") + " receipt created")
+                .approver(user)
+                .build();
+        approvalHistoryRepository.save(history);
+        
+        // Add history manually for the DTO response since it's not re-fetched
+        if (saved.getApprovalHistories() == null) {
+            saved.setApprovalHistories(new java.util.LinkedHashSet<>());
+        }
+        saved.getApprovalHistories().add(history);
+
+        if (assignedUser != null) {
+            NotificationEventDTO event = NotificationEventDTO.builder()
+                    .id(java.util.UUID.randomUUID().toString())
+                    .userId(assignedUser.getId().toString())
+                    .title("New Assignment")
+                    .message("You have been assigned to a new " + (isInbound ? "Inbound" : "Outbound") + " receipt #" + saved.getId())
+                    .type("INFO")
+                    .createdAt(java.time.Instant.now().toString())
+                    .build();
+            eventPublisher.publishEvent(event);
+        }
 
         List<MovementDTO> result = new ArrayList<>();
         for (ReceiptDetail d : saved.getDetails()) {
@@ -208,6 +241,14 @@ public class WarehouseReceiptController {
                     return ResponseEntity.badRequest()
                             .body("Cannot change status of a finalized inbound receipt (" + receipt.getStatus() + ")");
                 }
+                
+                if (receipt.getStatus() == Status.ReceiptStatus.PENDING && newStatus == Status.ReceiptStatus.APPROVED) {
+                    Warehouse warehouse = receipt.getWarehouse();
+                    for (ReceiptDetail d : receipt.getDetails()) {
+                        adjustInventory(d.getProduct(), warehouse, d.getQuantity(), true);
+                    }
+                }
+                
                 receipt.setStatus(newStatus);
             } else {
                 Status.ReceiptStatus currentStatus = receipt.getStatus();
@@ -218,6 +259,11 @@ public class WarehouseReceiptController {
                     receipt.setStatus(newStatus);
                 } else if (currentStatus == Status.ReceiptStatus.APPROVED) {
                     if (newStatus == Status.ReceiptStatus.COMPLETED) {
+                        if (receipt.getPaymentTerm() == Status.PaymentTerm.PREPAID
+                                && receipt.getPaymentStatus() != Status.PaymentStatus.PAID) {
+                            return ResponseEntity.badRequest()
+                                    .body("Prepaid outbound order must be fully paid before completion");
+                        }
                         Warehouse warehouse = receipt.getWarehouse();
                         // Verify inventory for all items
                         for (ReceiptDetail d : receipt.getDetails()) {
@@ -253,7 +299,37 @@ public class WarehouseReceiptController {
         }
 
 
+        String oldStatus = receipt.getStatus().name();
         WarehouseReceipt saved = receiptRepository.save(receipt);
+
+        if (!oldStatus.equals(saved.getStatus().name())) {
+            ApprovalHistory history = ApprovalHistory.builder()
+                    .warehouseReceipt(saved)
+                    .documentType(Status.DocumentType.WAREHOUSE_RECEIPT)
+                    .oldStatus(oldStatus)
+                    .newStatus(saved.getStatus().name())
+                    .note(request.getRemark() != null && !request.getRemark().isBlank() ? request.getRemark() : "Status updated to " + saved.getStatus().name())
+                    .approver(user)
+                    .build();
+            approvalHistoryRepository.save(history);
+            
+            if (saved.getApprovalHistories() == null) {
+                saved.setApprovalHistories(new java.util.LinkedHashSet<>());
+            }
+            saved.getApprovalHistories().add(history);
+
+            if (saved.getAssignedUser() != null) {
+                NotificationEventDTO event = NotificationEventDTO.builder()
+                        .id(java.util.UUID.randomUUID().toString())
+                        .userId(saved.getAssignedUser().getId().toString())
+                        .title("Receipt Status Updated")
+                        .message("Receipt #" + saved.getId() + " status was updated to " + saved.getStatus().name())
+                        .type("INFO")
+                        .createdAt(java.time.Instant.now().toString())
+                        .build();
+                eventPublisher.publishEvent(event);
+            }
+        }
 
         // Log the update
         activityLogService.log(user, "UPDATE_RECEIPT",
@@ -293,10 +369,15 @@ public class WarehouseReceiptController {
         boolean isInbound = receipt.getType().name().equals("INBOUND");
         Warehouse warehouse = receipt.getWarehouse();
 
+        // Delete associated payments first to avoid FK constraint issues
+        paymentRepository.deleteByReceiptId(receiptId);
+
         // Rollback inventory
         for (ReceiptDetail d : receipt.getDetails()) {
             if (isInbound) {
-                adjustInventory(d.getProduct(), warehouse, d.getQuantity(), false);
+                if (receipt.getStatus() == Status.ReceiptStatus.APPROVED) {
+                    adjustInventory(d.getProduct(), warehouse, d.getQuantity(), false);
+                }
             } else {
                 if (receipt.getStatus() == Status.ReceiptStatus.COMPLETED) {
                     adjustInventory(d.getProduct(), warehouse, d.getQuantity(), true);
@@ -321,6 +402,33 @@ public class WarehouseReceiptController {
         if (r.getPartner() != null && !r.getPartner().isBlank()) return r.getPartner();
         if (isInbound && d.getProduct().getSupplier() != null) return d.getProduct().getSupplier().getName();
         return isInbound ? "Supplier" : "Customer";
+    }
+
+    private Status.PaymentTerm resolvePaymentTerm(String term, boolean outbound) {
+        if (!outbound || term == null || term.isBlank()) {
+            return outbound ? Status.PaymentTerm.COD : null;
+        }
+        try {
+            return Status.PaymentTerm.valueOf(term.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return Status.PaymentTerm.COD;
+        }
+    }
+
+    private BigDecimal calculateTotalAmount(WarehouseReceipt receipt) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (ReceiptDetail d : receipt.getDetails()) {
+            total = total.add(d.getPrice().multiply(BigDecimal.valueOf(d.getQuantity())));
+        }
+        return total;
+    }
+
+    private BigDecimal calculatePaidAmount(WarehouseReceipt receipt) {
+        BigDecimal paid = BigDecimal.ZERO;
+        for (Payment p : receipt.getPayments()) {
+            paid = paid.add(p.getAmount());
+        }
+        return paid;
     }
 
     private User resolveUser() {
@@ -350,13 +458,22 @@ public class WarehouseReceiptController {
                     .product(product)
                     .warehouse(warehouse)
                     .quantity(qty)
-                    .lowStockThreshold(0L)
+                    .lowStockThreshold(10L)
+                    .outOfStockWarningDays(3L)
                     .build());
         }
     }
 
     private MovementDTO buildReceiptMovement(WarehouseReceipt r, ReceiptDetail d,
                                               boolean isInbound, String partner) {
+        BigDecimal totalAmount = calculateTotalAmount(r);
+        BigDecimal paidAmount = calculatePaidAmount(r);
+        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = r.getApprovalHistories() != null 
+                ? r.getApprovalHistories().stream()
+                        .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
+                        .collect(Collectors.toList())
+                : new ArrayList<>();
+
         return MovementDTO.builder()
                 .id("R-" + r.getId() + "-" + d.getId())
                 .receiptId(r.getId())
@@ -365,6 +482,8 @@ public class WarehouseReceiptController {
                 .product(d.getProduct().getName())
                 .partner(partner)
                 .staff(r.getUser().getFullName())
+                .assignedUserId(r.getAssignedUser() != null ? r.getAssignedUser().getId() : null)
+                .assignedUserName(r.getAssignedUser() != null ? r.getAssignedUser().getFullName() : null)
                 .warehouseId(String.valueOf(r.getWarehouse().getId()))
                 .qty(d.getQuantity())
                 .date(r.getCreatedAt().format(DATE_FMT))
@@ -372,6 +491,11 @@ public class WarehouseReceiptController {
                 .remark(r.getRemark())
                 .createdAt(r.getCreatedAt().format(DATETIME_FMT))
                 .updatedAt(r.getUpdatedAt() != null ? r.getUpdatedAt().format(DATETIME_FMT) : null)
+                .paymentTerm(r.getPaymentTerm() != null ? r.getPaymentTerm().name() : null)
+                .paymentStatus(r.getPaymentStatus() != null ? r.getPaymentStatus().name() : null)
+                .totalAmount(totalAmount)
+                .paidAmount(paidAmount)
+                .history(historyList)
                 .build();
     }
 
@@ -380,6 +504,12 @@ public class WarehouseReceiptController {
         String warehouseId = isOut
                 ? String.valueOf(t.getWarehouse().getId())
                 : (t.getWarehouseDestination() != null ? String.valueOf(t.getWarehouseDestination().getId()) : "");
+        List<com.fpt.sccw.dto.response.ApprovalHistoryDTO> historyList = t.getApprovalHistories() != null 
+                ? t.getApprovalHistories().stream()
+                        .map(com.fpt.sccw.dto.response.ApprovalHistoryDTO::fromEntity)
+                        .collect(Collectors.toList())
+                : new ArrayList<>();
+
         return MovementDTO.builder()
                 .id("T-" + t.getId() + "-" + d.getId())
                 .type(isOut ? "Outbound" : "Inbound")
@@ -392,6 +522,7 @@ public class WarehouseReceiptController {
                 .date(t.getCreatedAt().format(DATE_FMT))
                 .createdAt(t.getCreatedAt().format(DATETIME_FMT))
                 .updatedAt(t.getUpdatedAt() != null ? t.getUpdatedAt().format(DATETIME_FMT) : null)
+                .history(historyList)
                 .build();
     }
 }

@@ -49,19 +49,35 @@ function TransferPage() {
   const { activeWarehouseId, currentUser } = useApp();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0); // 0-based server page
   const [q, setQ] = useState("");
   const limit = 15;
 
-  const { data: transfers = [], isLoading, error } = useQuery({
-    queryKey: ["transfers", activeWarehouseId],
+  // Reset to page 0 when warehouse or search changes
+  useEffect(() => { setPage(0); }, [activeWarehouseId, q]);
+
+  const { data: pageData, isLoading, error } = useQuery({
+    queryKey: ["transfers", activeWarehouseId, page],
     queryFn: async () => {
       const res = await api.get("/transfers", {
-        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {},
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          page,
+          size: limit, // Backend sends exactly 'limit' records per page
+        },
       });
-      return res.data as Transfer[];
+      return res.data as {
+        content: Transfer[];
+        totalPages: number;
+        totalElements: number;
+        last: boolean;
+      };
     },
   });
+
+  const transfers = pageData?.content ?? [];
+  const totalPages = pageData?.totalPages ?? 1;
+  const totalElements = pageData?.totalElements ?? 0;
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: Transfer["status"] }) => {
@@ -79,6 +95,7 @@ function TransferPage() {
     },
   });
 
+  // Client-side search on current page data
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return transfers;
@@ -99,23 +116,35 @@ function TransferPage() {
     );
   }, [q, transfers]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [q, activeWarehouseId]);
+  const pending = transfers.filter(
+    (transfer) => transfer.status === "Pending"
+  ).length;
 
-  const totalPages = Math.max(1, Math.ceil(list.length / limit));
-  const safePage = Math.min(page, totalPages);
-  const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
+  const inTransit = transfers.filter(
+    (transfer) => transfer.status === "InTransit"
+  ).length;
 
-  const pending = list.filter((t) => t.status === "Pending").length;
-  const inTransit = list.filter((t) => t.status === "InTransit").length;
-  const crossWarehouse = list.filter((t) => t.type === "Cross-Warehouse").length;
-  const internal = list.filter((t) => t.type === "Internal Movement").length;
-  const isGlobalManager = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+  const crossWarehouse = transfers.filter(
+    (transfer) => transfer.type === "Cross-Warehouse"
+  ).length;
+
+  const internal = transfers.filter(
+    (transfer) => transfer.type === "Internal Movement"
+  ).length;
+
+  const isGlobalManager =
+    currentUser?.role === "Admin" ||
+    currentUser?.role === "Manager";
+
   const isSourceWarehouse = (transfer: Transfer) =>
-    isGlobalManager || String(currentUser?.warehouseId) === String(transfer.sourceWarehouseId);
+    isGlobalManager ||
+    String(currentUser?.warehouseId) ===
+      String(transfer.sourceWarehouseId);
+
   const isDestinationWarehouse = (transfer: Transfer) =>
-    isGlobalManager || String(currentUser?.warehouseId) === String(transfer.destinationWarehouseId);
+    isGlobalManager ||
+    String(currentUser?.warehouseId) ===
+      String(transfer.destinationWarehouseId);
 
   if (isLoading) return <AppShell><div className="p-8">Loading transfers...</div></AppShell>;
   if (error) return <AppShell><div className="p-8 text-destructive">Error loading transfers</div></AppShell>;
@@ -167,7 +196,7 @@ function TransferPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedList.map((t) => (
+                {list.map((t) => (
                   <tr key={t.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors align-top">
                     <td className="p-4">
                       <div className="font-mono text-xs">{t.code}</div>
@@ -225,7 +254,7 @@ function TransferPage() {
                     </td>
                   </tr>
                 ))}
-                {paginatedList.length === 0 && (
+                {list.length === 0 && (
                   <tr>
                     <td colSpan={9} className="p-8 text-center text-muted-foreground text-sm">
                       No transfers match your search.
@@ -238,18 +267,18 @@ function TransferPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between p-4 border-t border-border/60 text-sm">
               <div className="text-muted-foreground text-xs">
-                Showing {(safePage - 1) * limit + 1}-{Math.min(safePage * limit, list.length)} of {list.length} entries
+                Showing {page * limit + 1}-{Math.min((page + 1) * limit, totalElements)} of {totalElements} entries
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40">
+                <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40">
                   <ChevronLeft className="size-4" />
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                  <button key={n} onClick={() => setPage(n)} className={`size-8 rounded-md text-xs font-medium ${n === safePage ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"}`}>
-                    {n}
+                {Array.from({ length: totalPages }, (_, i) => i).map((n) => (
+                  <button key={n} onClick={() => setPage(n)} className={`size-8 rounded-md text-xs font-medium ${n === page ? "bg-primary text-primary-foreground" : "bg-secondary border border-border hover:bg-muted"}`}>
+                    {n + 1}
                   </button>
                 ))}
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40">
+                <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted disabled:opacity-40">
                   <ChevronRight className="size-4" />
                 </button>
               </div>
@@ -287,12 +316,16 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
   });
 
   const { data: products = [] } = useQuery({
-    queryKey: ["products", sourceWarehouse],
+    queryKey: ["products", sourceWarehouse, "transfer-selector"],
     queryFn: async () => {
       const res = await api.get("/products", {
-        params: sourceWarehouse ? { warehouseIdParam: sourceWarehouse } : {},
+        params: {
+          ...(sourceWarehouse ? { warehouseIdParam: sourceWarehouse } : {}),
+          page: 0,
+          size: 100,
+        },
       });
-      return res.data;
+      return (res.data as any)?.content ?? [];
     },
     enabled: open && Boolean(sourceWarehouse),
   });

@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, Pencil, Power } from "lucide-react";
+import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, Pencil, Power, Search, Save } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ModalShell, Field, inputCls } from "@/components/modal-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — TechStock" }] }),
@@ -31,9 +32,12 @@ interface ManagerUser {
 }
 
 function SettingsPage() {
-  const { currentUser } = useApp();
+  const { currentUser, activeWarehouseId } = useApp();
   const [open, setOpen] = useState(false);
   const [editWarehouse, setEditWarehouse] = useState<WarehouseData | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [defaultThreshold, setDefaultThreshold] = useState("10");
+  const [outOfStockWarningDays, setOutOfStockWarningDays] = useState("3");
 
   const { data: warehousesData, isLoading } = useQuery<WarehouseData[]>({
     queryKey: ["warehouses"],
@@ -43,7 +47,44 @@ function SettingsPage() {
     },
   });
 
+  const { data: inventoryData } = useQuery({
+    queryKey: ["inventory", "thresholds", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/inventory", {
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          page: 0,
+          size: 1
+        }
+      });
+      return (res.data?.content ?? res.data) as any[];
+    }
+  });
+
+  useEffect(() => {
+    if (inventoryData && inventoryData.length > 0) {
+      const firstItem = inventoryData[0];
+      if (firstItem.reorder !== undefined && firstItem.reorder !== null) {
+        setDefaultThreshold(String(firstItem.reorder));
+      }
+      if (firstItem.outOfStockWarningDays !== undefined && firstItem.outOfStockWarningDays !== null) {
+        setOutOfStockWarningDays(String(firstItem.outOfStockWarningDays));
+      }
+    }
+  }, [inventoryData]);
+
   const warehouses = warehousesData ?? [];
+  const filteredWarehouses = warehouses.filter((w) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      w.name.toLowerCase().includes(q) ||
+      w.code.toLowerCase().includes(q) ||
+      (w.address && w.address.toLowerCase().includes(q)) ||
+      (w.city && w.city.toLowerCase().includes(q)) ||
+      (w.managerName && w.managerName.toLowerCase().includes(q))
+    );
+  });
 
   const totalCap = warehouses.reduce((s, w) => s + (w.capacity ?? 0), 0);
   const totalUsed = warehouses.reduce((s, w) => s + (w.usedCapacity ?? 0), 0);
@@ -60,6 +101,25 @@ function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["warehouses"] });
     },
+  });
+
+  const batchThresholdMutation = useMutation({
+    mutationFn: async (payload: { threshold: number; warningDays: number }) => {
+      await api.patch("/inventory/batch-threshold", {
+        warehouseId: activeWarehouseId || null,
+        lowStockThreshold: payload.threshold,
+        outOfStockWarningDays: payload.warningDays
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      toast.success("Alert thresholds updated successfully");
+    },
+    onError: (error: any) => {
+      console.error(error);
+      const msg = error.response?.data || "Failed to update thresholds. You may need Manager permissions.";
+      toast.error(typeof msg === 'string' ? msg : "Failed to update thresholds");
+    }
   });
 
   return (
@@ -92,20 +152,36 @@ function SettingsPage() {
               <Kpi icon={Building2} label="Warehouses" value={warehouses.length} tone="primary" />
               <Kpi icon={Package} label="Total capacity" value={totalCap.toLocaleString()} tone="accent" />
               <Kpi icon={TrendingUp} label="Utilization" value={`${utilization}%`} tone="primary" />
-              <Kpi icon={AlertTriangle} label="Low-stock rule" value="20 units" tone="warning" />
+              <Kpi icon={AlertTriangle} label="Low-stock rule" value={`${defaultThreshold} units`} tone="warning" />
             </div>
 
             {/* Warehouse list */}
             <div className="surface-card p-6">
-              <h2 className="font-semibold flex items-center gap-2">
-                <Building2 className="size-4 text-primary" />Warehouses
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1">All warehouses and their addresses.</p>
-              {warehouses.length === 0 ? (
-                <div className="mt-6 text-center text-sm text-muted-foreground py-8">No warehouses found.</div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold flex items-center gap-2">
+                    <Building2 className="size-4 text-primary" />Warehouses
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">All warehouses and their addresses.</p>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search warehouse..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 rounded-lg bg-input border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                  />
+                </div>
+              </div>
+              {filteredWarehouses.length === 0 ? (
+                <div className="mt-6 text-center text-sm text-muted-foreground py-8">
+                  {searchQuery ? `No warehouses found matching "${searchQuery}".` : "No warehouses found."}
+                </div>
               ) : (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {warehouses.map((w) => {
+                <div className="mt-4 max-h-[460px] overflow-y-auto pr-1.5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredWarehouses.map((w) => {
                     const usedPct = w.capacity > 0 ? Math.round((w.usedCapacity / w.capacity) * 100) : 0;
                     const isActive = (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE";
                     return (
@@ -183,18 +259,28 @@ function SettingsPage() {
           </>
         )}
 
-        {/* Alert thresholds — UI only, not yet connected to backend */}
+        {/* Alert thresholds */}
         <div className="surface-card p-6 space-y-4">
           <h2 className="font-semibold">Alert thresholds</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-muted-foreground">Default low-stock threshold</label>
-              <input defaultValue="20" className="mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm" />
+              <input value={defaultThreshold} onChange={e => setDefaultThreshold(e.target.value)} type="number" className="mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Out-of-stock warning (days)</label>
-              <input defaultValue="3" className="mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm" />
+              <input value={outOfStockWarningDays} onChange={e => setOutOfStockWarningDays(e.target.value)} type="number" className="mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm" />
             </div>
+          </div>
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={() => batchThresholdMutation.mutate({ threshold: Number(defaultThreshold), warningDays: Number(outOfStockWarningDays) })}
+              disabled={batchThresholdMutation.isPending}
+              className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium flex items-center gap-2 hover:opacity-90 disabled:opacity-60 transition-opacity"
+            >
+              {batchThresholdMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              Save changes
+            </button>
           </div>
         </div>
 
@@ -206,16 +292,6 @@ function SettingsPage() {
             <div><div className="text-xs text-muted-foreground">Region</div><div className="font-semibold mt-1">ap-southeast-1</div></div>
             <div><div className="text-xs text-muted-foreground">Support</div><div className="font-semibold mt-1">ops@techstock.vn</div></div>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <button className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm">Cancel</button>
-          <button
-            className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring"
-            style={{ background: "var(--gradient-primary)" }}
-          >
-            Save changes
-          </button>
         </div>
       </div>
 

@@ -62,7 +62,8 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [partner, setPartner] = useState<string>("");
   const [reference, setReference] = useState<string>("");
-  const [assignedStaff, setAssignedStaff] = useState<string>("");
+  const [assignedUserId, setAssignedUserId] = useState<number | "">("");
+  const [paymentTerm, setPaymentTerm] = useState<string>("COD");
   const [note, setNote] = useState<string>("");
   const [lines, setLines] = useState<LineItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -78,31 +79,46 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
 
     Promise.all([
       api.get<WarehouseOption[]>("/warehouses"),
-      api.get<ProductOption[]>("/products"),
       api.get<SupplierOption[]>("/suppliers"),
       api.get<UserOption[]>("/users"),
     ])
-      .then(([wRes, pRes, sRes, uRes]) => {
+      .then(([wRes, sRes, uRes]) => {
         setWarehouses(wRes.data);
-        setProducts(pRes.data);
-        setSuppliers(sRes.data);
+        setSuppliers((sRes.data as any).content ?? sRes.data);
         setUsers(uRes.data);
         // Default warehouse
         const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
-        const defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
+        let defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
+        if (currentUser?.role === "Staff" && currentUser?.warehouseId) {
+          defaultWh = currentUser.warehouseId;
+        }
         setWarehouseId(defaultWh);
 
         if (!isInbound) {
           setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
+          // Default staff assignee for Staff role
+          if (currentUser?.role === "Staff") {
+            const me = uRes.data.find((u) => String(u.id) === currentUser.id);
+            if (me) {
+              setAssignedUserId(me.id);
+            }
+          }
         }
       })
       .catch(() => setSubmitError("Failed to load form data. Please try again."))
       .finally(() => setDataLoading(false));
   }, [open, activeWarehouseId]);
 
+  useEffect(() => {
+    if (!open || !warehouseId) return;
+    api.get<{ content: ProductOption[] }>("/products", { params: { warehouseIdParam: warehouseId, page: 0, size: 100 } })
+      .then(res => setProducts(res.data?.content ?? (res.data as any)))
+      .catch(console.error);
+  }, [open, warehouseId]);
+
   // Filter products to selected warehouse
   const skuList = useMemo(
-    () => products.filter((p) => p.warehouseId === warehouseId),
+    () => products.filter((p) => String(p.warehouseId) === String(warehouseId)),
     [products, warehouseId],
   );
 
@@ -121,7 +137,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
       alert(`Barcode ${barcode} not found in catalog.`);
       return;
     }
-    if (product.warehouseId !== warehouseId) {
+    if (String(product.warehouseId) !== String(warehouseId)) {
       alert(`Product ${barcode} does not belong to selected warehouse.`);
       return;
     }
@@ -151,7 +167,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
     setLines([]);
     setPartner("");
     setReference("");
-    setAssignedStaff("");
+    setAssignedUserId("");
     setNote("");
     setSubmitError(null);
     setLineErrors({});
@@ -217,9 +233,10 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         warehouseId: Number(warehouseId),
         type: isInbound ? "INBOUND" : "OUTBOUND",
         partner: partner || null,
+        paymentTerm: isInbound ? null : paymentTerm,
+        assignedUserId: assignedUserId !== "" ? Number(assignedUserId) : null,
         remark: [
           reference ? `Ref: ${reference}` : "",
-          assignedStaff ? `Assignee: ${assignedStaff}` : "",
           note
         ].filter(Boolean).join(" | ") || null,
         items: validLines.map((l) => ({
@@ -294,8 +311,8 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   <select
                     value={warehouseId}
                     onChange={(e) => setWarehouseId(e.target.value)}
-                    className="input"
-                    disabled={!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager"}
+                    className="input disabled:opacity-50 disabled:bg-muted disabled:cursor-not-allowed"
+                    disabled={currentUser?.role === "Staff" || (!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager")}
                   >
                     {warehouses
                       .filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
@@ -350,23 +367,34 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   </Field>
                 )}
                 {!isInbound && (
+                  <Field label="Payment term">
+                    <select
+                      value={paymentTerm}
+                      onChange={(e) => setPaymentTerm(e.target.value)}
+                      className="input"
+                    >
+                      <option value="PREPAID">Prepaid</option>
+                      <option value="COD">COD</option>
+                      <option value="DEBT">Debt</option>
+                    </select>
+                  </Field>
+                )}
                   <Field label="Assign to Staff">
                     <select
-                      value={assignedStaff}
-                      onChange={(e) => setAssignedStaff(e.target.value)}
+                      value={assignedUserId}
+                      onChange={(e) => setAssignedUserId(e.target.value ? Number(e.target.value) : "")}
                       className="input"
                     >
                       <option value="">Select staff member…</option>
                       {users
                         .filter((u) => u.role === "STAFF" || u.role === "WAREHOUSE_MANAGER")
                         .map((u) => (
-                          <option key={u.id} value={u.fullName}>
+                          <option key={u.id} value={u.id}>
                             {u.fullName} — {u.role === "STAFF" ? "Staff" : "Warehouse Manager"}
                           </option>
                         ))}
                     </select>
                   </Field>
-                )}
               </div>
 
 
@@ -389,13 +417,13 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   <table className="w-full text-sm">
                     <thead className="bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground">
                       <tr>
-                        <th className="text-left px-3 py-2">Product</th>
-                        {!isInbound && <th className="text-right px-3 py-2 w-32">System Stock</th>}
-                        <th className="text-right px-3 py-2 w-24">Qty</th>
-                        <th className="text-right px-3 py-2 w-40">
+                        <th className="text-left px-3 py-2 min-w-65">Product</th>
+                        {!isInbound && <th className="text-right px-3 py-2 w-24">Stock</th>}
+                        <th className="text-right px-3 py-2 w-20">Qty</th>
+                        <th className="text-right px-3 py-2 w-28">
                           {isInbound ? "Unit cost" : "Unit price"}
                         </th>
-                        <th className="text-right px-3 py-2 w-40">Subtotal</th>
+                        <th className="text-right px-3 py-2 w-28">Subtotal</th>
                         <th className="w-10" />
                       </tr>
                     </thead>
@@ -484,7 +512,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
-                  className="input min-h-[64px] py-2"
+                  className="input min-h-16 py-2"
                   placeholder="Optional remarks for warehouse staff…"
                 />
               </Field>

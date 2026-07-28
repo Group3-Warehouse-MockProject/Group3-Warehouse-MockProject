@@ -13,9 +13,8 @@ import lombok.*;
 @Builder
 public class InventoryCheckDetail extends BaseEntity {
 
-    @NotNull(message = "Actual quantity is required")
     @Min(value = 0, message = "Actual quantity cannot be negative")
-    @Column(name = "actual_quantity", nullable = false)
+    @Column(name = "actual_quantity", nullable = true)
     private Long actualQuantity;
 
     @NotNull(message = "System quantity is required")
@@ -43,6 +42,8 @@ public class InventoryCheckDetail extends BaseEntity {
     public void calculateDifference() {
         if (this.actualQuantity != null && this.systemQuantity != null) {
             this.difference = Math.abs(this.actualQuantity - this.systemQuantity);
+        } else {
+            this.difference = 0L;
         }
     }
 }
