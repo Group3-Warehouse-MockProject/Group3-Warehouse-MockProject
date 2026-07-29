@@ -18,7 +18,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/locations")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class LocationController {
 
     private final LocationRepository locationRepository;

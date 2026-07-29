@@ -37,7 +37,6 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/transfers")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class TransferController {
 
     private final TransferRepository transferRepository;

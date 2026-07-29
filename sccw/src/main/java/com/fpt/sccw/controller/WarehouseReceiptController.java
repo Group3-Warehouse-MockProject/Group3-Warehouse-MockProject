@@ -32,7 +32,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/receipts")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class WarehouseReceiptController {
 
     private final WarehouseReceiptRepository receiptRepository;

@@ -18,7 +18,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/receipts/{receiptId}/payments")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class PaymentController {
 
     private final PaymentRepository paymentRepository;
