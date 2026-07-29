@@ -23,7 +23,6 @@ import com.fpt.sccw.dto.response.PageResponse;
 @RestController
 @RequestMapping("/api/stocktake")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class InventoryCheckController {
 
     private final InventoryCheckRepository inventoryCheckRepository;

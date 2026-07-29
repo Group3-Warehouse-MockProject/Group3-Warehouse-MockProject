@@ -18,7 +18,6 @@ import com.fpt.sccw.dto.response.PageResponse;
 @RestController
 @RequestMapping("/api/suppliers")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class SupplierController {
 
     private final SupplierRepository supplierRepository;

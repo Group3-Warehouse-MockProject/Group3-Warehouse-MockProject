@@ -22,7 +22,6 @@ import com.fpt.sccw.dto.request.ProductRequest;
 @RestController
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class ProductController {
 
     private final ProductRepository productRepository;

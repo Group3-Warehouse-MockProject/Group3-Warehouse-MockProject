@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/inventory")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class InventoryController {
 
     private final InventoryRepository inventoryRepository;
