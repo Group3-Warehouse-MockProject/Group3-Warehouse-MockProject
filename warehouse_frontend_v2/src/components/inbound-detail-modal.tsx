@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import {
   X, Calendar, User, Warehouse, FileText, Package,
-  CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save, Plus, History
+  CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save, Plus, History,
+  CreditCard, DollarSign
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
@@ -292,6 +293,11 @@ export function InboundDetailModal({
                 <div className="text-sm font-medium">{warehouseCode(movement.warehouseId)}</div>
               )}
             </div>
+
+            <MetaRow icon={CreditCard} label="Payment Term" value={movement.paymentTerm ?? "—"} />
+            <MetaRow icon={CreditCard} label="Payment Status" value={movement.paymentStatus ?? "—"} />
+            <MetaRow icon={DollarSign} label="Total Amount" value={movement.totalAmount != null ? `$${movement.totalAmount.toLocaleString()}` : "—"} />
+            <MetaRow icon={DollarSign} label="Paid Amount" value={movement.paidAmount != null ? `$${movement.paidAmount.toLocaleString()}` : "—"} />
 
             {/* Status */}
             <div className="col-span-2">

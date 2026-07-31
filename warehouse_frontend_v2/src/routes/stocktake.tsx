@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { warehouses } from "@/lib/warehouse-data";
 import { ApprovalHistoryItem } from "@/types";
+import { ConfirmModal } from "@/components/confirm-modal";
 import {
   ClipboardCheck, Plus, X, Save, ListChecks,
   AlertTriangle, CheckCircle2, Boxes,
@@ -93,6 +94,15 @@ function StocktakePage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [page, setPage] = useState(1);
   const limit = 15;
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    isPending: boolean;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: "", message: "", isPending: false, onConfirm: () => {} });
+  const closeConfirmModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
 
   const canCreate =
     currentUser?.role === "Warehouse_Manager" ||
@@ -358,7 +368,7 @@ function StocktakePage() {
                 setSearchQuery(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search sheet # (e.g. ST-0001), staff name..."
+              placeholder="Search sheet (e.g. ST-0001), staff name..."
               className="w-full h-10 pl-9 pr-8 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
             {searchQuery && (
@@ -538,7 +548,7 @@ function StocktakePage() {
                 <table className="w-full text-sm">
                   <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                     <tr>
-                      <th className="text-left p-4">Sheet #</th>
+                      <th className="text-left p-4">Sheet</th>
                       <th className="text-left p-4">Date</th>
                       <th className="text-left p-4">Warehouse</th>
                       <th className="text-left p-4">Created by</th>
@@ -875,10 +885,17 @@ function StocktakePage() {
                 {canCreate && viewing.status !== "COMPLETED" && viewing.status !== "CANCELLED" && (
                   <button
                     onClick={() => {
-                      if (window.confirm(`Are you sure you want to cancel stocktake sheet ST-${String(viewing.id).padStart(4, "0")}?`)) {
-                        updateStatusMutation.mutate({ id: viewing.id, status: "CANCELLED" });
-                        setViewing(null);
-                      }
+                      setConfirmModal({
+                        isOpen: true,
+                        title: "Cancel Stocktake Sheet",
+                        message: `Are you sure you want to cancel stocktake sheet ST-${String(viewing.id).padStart(4, "0")}?`,
+                        isPending: false,
+                        onConfirm: () => {
+                          updateStatusMutation.mutate({ id: viewing.id, status: "CANCELLED" });
+                          setViewing(null);
+                          closeConfirmModal();
+                        }
+                      });
                     }}
                     disabled={updateStatusMutation.isPending}
                     className="h-10 px-4 rounded-lg bg-destructive/15 text-destructive hover:bg-destructive/25 text-sm font-medium transition-colors"
@@ -912,6 +929,15 @@ function StocktakePage() {
           </div>
         </Modal>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        isPending={confirmModal.isPending}
+        onClose={closeConfirmModal}
+      />
     </AppShell>
   );
 }

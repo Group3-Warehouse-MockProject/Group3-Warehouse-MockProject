@@ -3,8 +3,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { useApp, roleLabels } from "@/lib/app-context";
 import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff, ChevronLeft, ChevronRight, Trash2, Edit, Save, Search, Filter, RefreshCcw, UserMinus, Activity, Clock, LogIn, Globe } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({ meta: [{ title: "Staff — TechStock" }] }),
@@ -30,10 +32,33 @@ function StaffPage() {
 
   if (!currentUser) return null;
 
-  const { data: dbUsers = [] } = useQuery({
-    queryKey: ["users"],
+  const limit = 15;
+  const [page, setPage] = useState(1);
+
+  let targetWarehouseId: string | null = null;
+  if (currentUser?.role === "Warehouse_Manager" || currentUser?.role === "Staff") {
+    targetWarehouseId = currentUser.warehouseId;
+  } else if (activeWarehouseId) {
+    targetWarehouseId = String(activeWarehouseId);
+  }
+
+  const { data: pageData } = useQuery({
+    queryKey: ["users", page, limit, q, filterRole, filterStatus, targetWarehouseId],
     queryFn: async () => {
-      const res = await api.get("/users");
+      const params: any = { page: page - 1, size: limit };
+      if (q) params.search = q;
+      if (filterRole) params.role = filterRole === "Warehouse_Manager" ? "WAREHOUSE_MANAGER" : filterRole.toUpperCase();
+      if (filterStatus) params.status = filterStatus;
+      if (targetWarehouseId) params.warehouseId = targetWarehouseId;
+      const res = await api.get("/users", { params });
+      return res.data;
+    }
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ["users-stats"],
+    queryFn: async () => {
+      const res = await api.get("/users/stats");
       return res.data;
     }
   });
@@ -58,51 +83,28 @@ function StaffPage() {
     return w ? w.code : "—";
   };
 
-  let list = dbUsers.filter((u: any) => true);
-  
+  let list = pageData?.content || [];
+
   list = list.map((u: any) => ({
     ...u,
     role: u.role === "WAREHOUSE_MANAGER" ? "Warehouse_Manager" : u.role === "ADMIN" ? "Admin" : u.role === "MANAGER" ? "Manager" : "Staff"
   }));
 
-  if (currentUser.role === "Warehouse_Manager" || currentUser.role === "Staff") {
-    list = list.filter((u: any) => u.warehouseId === currentUser.warehouseId);
-  } else if (activeWarehouseId) {
-    list = list.filter((u: any) => u.warehouseId === activeWarehouseId);
-  }
+  const totalUsers = stats?.total || 0;
+  const managers = list.filter((u: any) => u.role === "Warehouse_Manager").length; // Can approximate from current page or add to stats if needed
+  const staffCount = list.filter((u: any) => u.role === "Staff").length;
+  const warehouseSet = dbWarehouses.length;
+
+  const totalPages = pageData?.totalPages || 1;
+  const safePage = Math.min(page, totalPages);
+  const paginatedList = list;
 
   const scopeLabel =
     currentUser.role === "Warehouse_Manager" || currentUser.role === "Staff"
       ? `Scoped to ${getWarehouseName(currentUser.warehouseId)}`
       : activeWarehouseId
-      ? `Filtered: ${getWarehouseName(activeWarehouseId)}`
-      : "All warehouses";
-
-  // Apply search and filter
-  list = list.filter((u: any) => {
-    const matchesQ = 
-      (u.fullName || "").toLowerCase().includes(q.toLowerCase()) ||
-      (u.username || "").toLowerCase().includes(q.toLowerCase()) ||
-      (u.email || "").toLowerCase().includes(q.toLowerCase());
-    
-    const matchesRole = filterRole ? u.role === filterRole : true;
-    
-    let matchesStatus = true;
-    if (filterStatus === "Active") matchesStatus = u.isDeleted !== true;
-    else if (filterStatus === "Deactive") matchesStatus = u.isDeleted === true;
-
-    return matchesQ && matchesRole && matchesStatus;
-  });
-
-  const managers = list.filter((u: any) => u.role === "Warehouse_Manager").length;
-  const staffCount = list.filter((u: any) => u.role === "Staff").length;
-  const warehouseSet = new Set(list.map((u: any) => u.warehouseId).filter(Boolean)).size;
-
-  const [page, setPage] = useState(1);
-  const limit = 15;
-  const totalPages = Math.max(1, Math.ceil(list.length / limit));
-  const safePage = Math.min(page, totalPages);
-  const paginatedList = list.slice((safePage - 1) * limit, safePage * limit);
+        ? `Filtered: ${getWarehouseName(activeWarehouseId)}`
+        : "All warehouses";
 
   return (
     <AppShell>
@@ -130,7 +132,7 @@ function StaffPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={Users} label="Total people" value={list.length} tone="primary" />
+          <Kpi icon={Users} label="Total people" value={totalUsers} tone="primary" />
           <Kpi icon={UserCheck} label="Warehouse managers" value={managers} tone="accent" />
           <Kpi icon={Shield} label="Staff members" value={staffCount} tone="primary" />
           <Kpi icon={Building2} label="Warehouses covered" value={warehouseSet} tone="warning" />
@@ -154,7 +156,7 @@ function StaffPage() {
               <button onClick={() => setShowFilter(!showFilter)} className={`h-10 px-4 rounded-lg border text-sm flex items-center gap-2 transition-colors shrink-0 ${showFilter ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border hover:bg-muted"}`}>
                 <Filter className="size-4" />Filter
               </button>
-              
+
               {showFilter && (
                 <div className="absolute top-full right-0 mt-2 z-20 flex flex-col gap-5 p-5 surface-card rounded-xl border border-border/60 shadow-xl w-64">
                   <div>
@@ -197,7 +199,7 @@ function StaffPage() {
 
         <div className="surface-card overflow-hidden border border-border/50 shadow-sm rounded-xl">
           <div className="overflow-x-auto">
-            <div className="min-w-[950px] text-sm">
+            <div className="min-w-237.5 text-sm">
               {/* Grid Table Header */}
               <div className="grid grid-cols-[minmax(200px,2fr)_140px_130px_100px_110px_140px_60px] items-center gap-3 py-4 px-6 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/60 font-semibold border-b border-border/80">
                 <div>Employee</div>
@@ -244,7 +246,7 @@ function StaffPage() {
                     <div className="font-mono text-xs font-medium truncate">{getWarehouseCode(s.warehouseId)}</div>
                     <div className="text-muted-foreground font-medium truncate">{getWarehouseName(s.warehouseId)}</div>
                     <div className="text-right">
-                      <button 
+                      <button
                         onClick={() => setViewUser(s)}
                         className="size-8 inline-grid place-items-center rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100"
                         title="View details"
@@ -279,11 +281,10 @@ function StaffPage() {
                   <button
                     key={n}
                     onClick={() => setPage(n)}
-                    className={`size-8 rounded-md text-xs font-medium ${
-                      n === safePage
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary border border-border hover:bg-muted"
-                    }`}
+                    className={`size-8 rounded-md text-xs font-medium ${n === safePage
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary border border-border hover:bg-muted"
+                      }`}
                   >
                     {n}
                   </button>
@@ -300,8 +301,8 @@ function StaffPage() {
           )}
         </div>
       </div>
-      {registerOpen && <RegisterModal onClose={() => { setRegisterOpen(false); queryClient.invalidateQueries({queryKey: ["users"]}); }} dbWarehouses={dbWarehouses} />}
-      {viewUser && <UserDetailModal user={viewUser} dbWarehouses={dbWarehouses} onClose={() => setViewUser(null)} onUpdated={() => { queryClient.invalidateQueries({queryKey: ["users"]}); setViewUser(null); }} />}
+      {registerOpen && <RegisterModal onClose={() => { setRegisterOpen(false); queryClient.invalidateQueries({ queryKey: ["users"] }); }} dbWarehouses={dbWarehouses} />}
+      {viewUser && <UserDetailModal user={viewUser} dbWarehouses={dbWarehouses} onClose={() => setViewUser(null)} onUpdated={() => { queryClient.invalidateQueries({ queryKey: ["users"] }); setViewUser(null); }} />}
     </AppShell>
   );
 }
@@ -318,11 +319,13 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
   const [phone, setPhone] = useState(user.phone || "");
   const [department, setDepartment] = useState(user.department || "");
   const [error, setError] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; isPending: boolean; onConfirm: () => void }>({ isOpen: false, title: "", message: "", isPending: false, onConfirm: () => { } });
+  const closeModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
 
   if (!currentUser) return null;
 
   const canEdit = (currentUser.role === "Admin" || currentUser.role === "Manager") && user.role !== "Admin";
-  
+
   const getWarehouseName = (id: number | string | null) => {
     if (!id) return "All warehouses";
     const w = dbWarehouses.find((x: any) => String(x.id) === String(id));
@@ -331,62 +334,102 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const payload: any = { 
+      const payload: any = {
         fullName,
         email,
         phone,
         department,
-        role: role === "Warehouse_Manager" ? "WAREHOUSE_MANAGER" : role.toUpperCase() 
+        role: role === "Warehouse_Manager" ? "WAREHOUSE_MANAGER" : role.toUpperCase()
       };
       if (role !== "Admin" && role !== "Manager" && warehouseId) {
         payload.warehouseId = parseInt(warehouseId);
       }
       await api.put(`/users/${user.id}`, payload);
     },
-    onSuccess: onUpdated,
-    onError: (err: any) => setError(err.response?.data?.message || "Failed to update user")
+    onSuccess: () => {
+      onUpdated();
+      setIsEditing(false);
+      toast.success("User updated successfully");
+    },
+    onError: (err: any) => {
+      const e = setError(err.response?.data?.message || "Failed to update user");
+      toast.error(typeof e === "string" ? e : "Failed to update user");
+    }
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async () => {
-      await api.delete(`/users/${user.id}`);
+    mutationFn: () => api.delete(`/users/${user.id}`),
+    onSuccess: () => {
+      onUpdated();
+      toast.success("User deactivated successfully");
     },
-    onSuccess: onUpdated,
-    onError: (err: any) => setError(err.response?.data?.message || "Failed to deactivate user")
+    onError: (err: any) => {
+      const e = setError(err.response?.data?.message || "Failed to deactivate user");
+      toast.error(typeof e === "string" ? e : "Failed to deactivate user");
+    }
   });
 
   const activateMutation = useMutation({
-    mutationFn: async () => {
-      await api.put(`/users/${user.id}/activate`);
+    mutationFn: () => api.put(`/users/${user.id}/activate`),
+    onSuccess: () => {
+      onUpdated();
+      toast.success("User activated successfully");
     },
-    onSuccess: onUpdated,
-    onError: (err: any) => setError(err.response?.data?.message || "Failed to activate user")
+    onError: (err: any) => {
+      const e = setError(err.response?.data?.message || "Failed to activate user");
+      toast.error(typeof e === "string" ? e : "Failed to activate user");
+    }
   });
 
   const handleDeactivate = () => {
-    if (confirm("Are you sure you want to deactivate this account?")) {
-      deleteMutation.mutate();
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Deactive account",
+      message: "Are you sure you want to deactivate this account?",
+      isPending: false,
+      onConfirm: () => {
+        closeModal();
+        deleteMutation.mutate();
+      }
+    });
   };
 
   const handleActivate = () => {
-    if (confirm("Are you sure you want to reactivate this account?")) {
-      activateMutation.mutate();
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Reactive account",
+      message: "Are you sure you want to reactivate this account?",
+      isPending: false,
+      onConfirm: () => {
+        closeModal();
+        activateMutation.mutate();
+      }
+    });
   };
 
   const hardDeleteMutation = useMutation({
-    mutationFn: async () => {
-      await api.delete(`/users/${user.id}/hard`);
+    mutationFn: () => api.delete(`/users/${user.id}/hard`),
+    onSuccess: () => {
+      onUpdated();
+      toast.success("User permanently deleted successfully");
     },
-    onSuccess: onUpdated,
-    onError: (err: any) => setError(err.response?.data?.message || "Failed to delete user permanently")
+    onError: (err: any) => {
+      const e = setError(err.response?.data?.message || "Failed to delete user permanently");
+      toast.error(typeof e === "string" ? e : "Failed to delete user permanently");
+    }
   });
 
   const handleHardDelete = () => {
-    if (confirm("WARNING: This will permanently delete the user and all their data. Are you absolutely sure?")) {
-      hardDeleteMutation.mutate();
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete account",
+      message: "WARNING: This will permanently delete the user and all their data. Are you absolutely sure?",
+      isPending: false,
+      onConfirm: () => {
+        closeModal();
+        hardDeleteMutation.mutate();
+      }
+    });
   };
 
   const handleSave = () => {
@@ -416,22 +459,20 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
         <div className="flex border-b border-border px-6 pt-4 gap-1">
           <button
             onClick={() => setActiveTab("details")}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              activeTab === "details"
-                ? "bg-background text-foreground border border-border border-b-transparent -mb-px"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-            }`}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === "details"
+              ? "bg-background text-foreground border border-border border-b-transparent -mb-px"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+              }`}
           >
             <Info className="size-3.5 inline mr-1.5" />Details
           </button>
           {canViewActivity && (
             <button
               onClick={() => setActiveTab("activity")}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                activeTab === "activity"
-                  ? "bg-background text-foreground border border-border border-b-transparent -mb-px"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-              }`}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === "activity"
+                ? "bg-background text-foreground border border-border border-b-transparent -mb-px"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                }`}
             >
               <Activity className="size-3.5 inline mr-1.5" />Activity
             </button>
@@ -472,7 +513,7 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
 
               <div className="pt-4 border-t border-border">
                 <div className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Access & Role</div>
-                
+
                 {!isEditing ? (
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
@@ -494,11 +535,11 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
                     <Input label="Email" value={email} onChange={setEmail} type="email" />
                     <Input label="Phone" value={phone} onChange={setPhone} />
                     <Input label="Department" value={department} onChange={setDepartment} />
-                    
+
                     <label className="block">
                       <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Role</div>
-                      <select 
-                        value={role} 
+                      <select
+                        value={role}
                         onChange={(e) => setRole(e.target.value)}
                         className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
                       >
@@ -511,8 +552,8 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
                     {(role !== "Admin" && role !== "Manager") && (
                       <label className="block">
                         <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Warehouse</div>
-                        <select 
-                          value={warehouseId} 
+                        <select
+                          value={warehouseId}
                           onChange={(e) => setWarehouseId(e.target.value)}
                           className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
                         >
@@ -541,7 +582,7 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
           <div className="flex items-center justify-between px-6 py-4 bg-secondary/30 border-t border-border">
             <div className="flex items-center gap-2">
               {user.isDeleted ? (
-                <button 
+                <button
                   onClick={handleActivate}
                   disabled={activateMutation.isPending}
                   className="h-9 px-3 rounded-lg text-sm font-medium text-emerald-600 hover:bg-emerald-600/10 inline-flex items-center gap-2 transition-colors disabled:opacity-40"
@@ -549,7 +590,7 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
                   <RefreshCcw className="size-4" /> Activate
                 </button>
               ) : (
-                <button 
+                <button
                   onClick={handleDeactivate}
                   disabled={deleteMutation.isPending || currentUser.id === user.id}
                   className="h-9 px-3 rounded-lg text-sm font-medium text-warning hover:bg-warning/10 inline-flex items-center gap-2 transition-colors disabled:opacity-40"
@@ -559,7 +600,7 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
                   <UserMinus className="size-4" /> Deactive
                 </button>
               )}
-              <button 
+              <button
                 onClick={handleHardDelete}
                 disabled={hardDeleteMutation.isPending || currentUser.id === user.id}
                 className="h-9 px-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 transition-colors disabled:opacity-40"
@@ -567,17 +608,18 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
               >
                 <Trash2 className="size-4" /> Delete
               </button>
+              <ConfirmModal isOpen={confirmModal.isOpen} title={confirmModal.title} message={confirmModal.message} onConfirm={confirmModal.onConfirm} isPending={confirmModal.isPending} onClose={closeModal} />
             </div>
             <div className="flex items-center gap-2">
               {isEditing ? (
                 <>
-                  <button 
+                  <button
                     onClick={() => setIsEditing(false)}
                     className="h-9 px-4 rounded-lg text-sm font-medium border border-border hover:bg-secondary"
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={handleSave}
                     disabled={updateMutation.isPending}
                     className="h-9 px-4 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2"
@@ -586,7 +628,7 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
                   </button>
                 </>
               ) : (
-                <button 
+                <button
                   onClick={() => setIsEditing(true)}
                   className="h-9 px-4 rounded-lg text-sm font-medium border border-border hover:bg-secondary inline-flex items-center gap-2"
                 >
@@ -677,8 +719,8 @@ function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWareh
 
             <label className="block">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Role</div>
-              <select 
-                value={role} 
+              <select
+                value={role}
                 onChange={(e) => setRole(e.target.value)}
                 className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
               >
@@ -692,8 +734,8 @@ function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWareh
             {(role !== "Admin" && role !== "Manager") ? (
               <label className="block">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Warehouse</div>
-                <select 
-                  value={warehouseId} 
+                <select
+                  value={warehouseId}
                   onChange={(e) => setWarehouseId(e.target.value)}
                   className="w-full h-10 px-3 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
                   required
@@ -882,10 +924,10 @@ function ActivityTimeline({ userId }: { userId: number }) {
                   <Icon className="size-3.5" />
                 </div>
                 {idx < logs.length - 1 && (
-                  <div className="w-px flex-1 min-h-[1.5rem] bg-border group-hover:bg-primary/30 transition-colors my-1" />
+                  <div className="w-px flex-1 min-h-6 bg-border group-hover:bg-primary/30 transition-colors my-1" />
                 )}
               </div>
-              
+
               {/* Content */}
               <div className="flex-1 pb-6 pt-1">
                 <div className="flex items-start justify-between gap-2">
@@ -929,11 +971,10 @@ function ActivityTimeline({ userId }: { userId: number }) {
             <button
               key={n}
               onClick={() => setActivityPage(n - 1)}
-              className={`size-8 rounded-md text-xs font-medium ${
-                n === activityPage + 1
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary border border-border hover:bg-muted"
-              }`}
+              className={`size-8 rounded-md text-xs font-medium ${n === activityPage + 1
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary border border-border hover:bg-muted"
+                }`}
             >
               {n}
             </button>
