@@ -7,6 +7,7 @@ import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/component
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/transfer")({
   head: () => ({ meta: [{ title: "Transfers - TechStock" }] }),
@@ -109,7 +110,7 @@ function TransferPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message || err.message || "Could not update transfer status.");
+      toast.error(err.response?.data?.message || err.message || "Could not update transfer status.");
     },
   });
 
@@ -375,14 +376,14 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
       handleClose();
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message || err.message || "Could not create transfer.");
+      toast.error(err.response?.data?.message || err.message || "Could not create transfer.");
     },
   });
 
   const handleScan = (barcode: string) => {
     const product = availableProducts.find((p: any) => p.sku.toLowerCase() === barcode.toLowerCase());
     if (!product) {
-      alert(`Barcode ${barcode} not found in source warehouse stock.`);
+      toast.error(`Barcode ${barcode} not found in source warehouse stock.`);
       return;
     }
 

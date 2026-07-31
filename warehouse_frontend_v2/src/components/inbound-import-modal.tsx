@@ -4,6 +4,8 @@ import ExcelJS from "exceljs";
 import { Upload, Download, Loader2, FileSpreadsheet } from "lucide-react";
 import { ModalShell } from "@/components/modal-shell";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { useMutation } from "@tanstack/react-query";
 
 interface Props {
   open: boolean;
@@ -234,7 +236,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         });
       }
 
-      alert("Inbound receipts imported successfully!");
+      toast.success("Inbound receipts imported successfully!");
       onClose();
       onSaved?.();
     } catch (err: any) {

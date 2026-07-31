@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/confirm-modal"
 
 export const Route = createFileRoute("/location")({
   head: () => ({ meta: [{ title: "Locations — TechStock" }] }),
@@ -202,9 +203,26 @@ function LocationPage() {
     },
   });
 
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    isPending: boolean;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: "", message: "", isPending: false, onConfirm: () => { } });
+  const closeModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+
   const handleDeleteBin = async (loc: any) => {
-    if (!window.confirm(`Are you sure you want to delete Bin ${loc.rackCode}-${loc.binCode}?`)) return;
-    await deleteMutation.mutateAsync(loc.id);
+    setConfirmModal({
+      isOpen: true,
+      title: `Delete Bin ${loc.rackCode}-${loc.binCode}`,
+      message: `Are you sure you want to delete Bin ${loc.rackCode}-${loc.binCode}?`,
+      isPending: false,
+      onConfirm: () => {
+        closeModal();
+        deleteMutation.mutateAsync(loc.id);
+      },
+    })
   };
 
   return (
@@ -364,6 +382,14 @@ function LocationPage() {
           onClose={() => setViewingProduct(null)}
         />
       )}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        isPending={confirmModal.isPending}
+        onClose={closeModal}
+      />
     </AppShell>
   );
 }
@@ -406,11 +432,10 @@ function PaginationControls({
           <button
             key={p}
             onClick={() => onPageChange(p)}
-            className={`px-2.5 py-1 rounded border font-mono text-xs transition-colors ${
-              p === currentPage
-                ? "bg-primary text-primary-foreground font-bold border-primary"
-                : "bg-background border-border text-foreground hover:bg-secondary"
-            }`}
+            className={`px-2.5 py-1 rounded border font-mono text-xs transition-colors ${p === currentPage
+              ? "bg-primary text-primary-foreground font-bold border-primary"
+              : "bg-background border-border text-foreground hover:bg-secondary"
+              }`}
           >
             {p}
           </button>
@@ -939,11 +964,10 @@ function BinDetailsModal({
                 onToggleBinStatus(bin.id);
                 onClose();
               }}
-              className={`h-9 px-3 rounded-lg font-medium text-xs border flex items-center gap-1.5 transition-colors ${
-                binActive
-                  ? "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
-                  : "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20"
-              }`}
+              className={`h-9 px-3 rounded-lg font-medium text-xs border flex items-center gap-1.5 transition-colors ${binActive
+                ? "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
+                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20"
+                }`}
             >
               <Power className="size-3.5" /> {binActive ? "Deactivate Bin" : "Activate Bin"}
             </button>

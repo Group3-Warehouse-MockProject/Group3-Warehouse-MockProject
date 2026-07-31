@@ -24,16 +24,43 @@ public class SupplierController {
 
     @GetMapping
     public ResponseEntity<PageResponse<SupplierDTO>> getAllSuppliers(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String country,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (page < 0 || size < 1 || size > 100) return ResponseEntity.badRequest().build();
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "name"));
-        Page<Supplier> suppliers = supplierRepository.findAll(pageable);
+        Page<Supplier> suppliers = supplierRepository.findSuppliersFiltered(search, status, country, pageable);
         List<SupplierDTO> content = suppliers.getContent().stream()
                 .map(SupplierDTO::fromEntity)
                 .toList();
         return ResponseEntity.ok(new PageResponse<>(content, suppliers));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getSupplierStats() {
+        List<Supplier> all = supplierRepository.findAll();
+        long totalSuppliers = all.size();
+        
+        double avgRating = 0.0;
+        double avgOnTime = 0.0;
+        long countriesCount = 0;
+        
+        if (totalSuppliers > 0) {
+            avgRating = all.stream().mapToDouble(s -> s.getRating() != null ? s.getRating().doubleValue() : 0.0).average().orElse(0.0);
+            avgOnTime = all.stream().mapToDouble(s -> s.getOnTimeDelivery() != null ? s.getOnTimeDelivery() : 0.0).average().orElse(0.0);
+            countriesCount = all.stream().map(Supplier::getCountry).filter(c -> c != null && !c.isBlank()).distinct().count();
+        }
+
+        Map<String, Object> stats = new java.util.HashMap<>();
+        stats.put("total", totalSuppliers);
+        stats.put("avgRating", String.format(java.util.Locale.US, "%.2f", avgRating));
+        stats.put("avgOnTime", Math.round(avgOnTime) + "%");
+        stats.put("countriesCount", countriesCount);
+
+        return ResponseEntity.ok(stats);
     }
 
     // Tạo mới nhà cung cấp (Đã bổ sung nhận đủ rating và onTimeDelivery từ Entity)
