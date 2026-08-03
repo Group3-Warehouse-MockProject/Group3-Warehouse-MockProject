@@ -7,6 +7,7 @@ import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/component
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/transfer")({
   head: () => ({ meta: [{ title: "Transfers - TechStock" }] }),
@@ -96,6 +97,24 @@ function TransferPage() {
   const totalPages = pageData?.totalPages ?? 1;
   const totalElements = pageData?.totalElements ?? 0;
 
+  const { data: stats } = useQuery({
+    queryKey: ["transfers-stats", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/transfers/stats", {
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+        },
+      });
+      return res.data as {
+        total: number;
+        pending: number;
+        inTransit: number;
+        crossWarehouse: number;
+        internal: number;
+      };
+    },
+  });
+
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: Transfer["status"] }) => {
       const res = await api.put(`/transfers/${id}/status`, { status });
@@ -108,7 +127,7 @@ function TransferPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message || err.message || "Could not update transfer status.");
+      toast.error(err.response?.data?.message || err.message || "Could not update transfer status.");
     },
   });
 
@@ -124,21 +143,7 @@ function TransferPage() {
 
   const list = transfers;
 
-  const pending = transfers.filter(
-    (transfer) => transfer.status === "Pending"
-  ).length;
 
-  const inTransit = transfers.filter(
-    (transfer) => transfer.status === "InTransit"
-  ).length;
-
-  const crossWarehouse = transfers.filter(
-    (transfer) => transfer.type === "Cross-Warehouse"
-  ).length;
-
-  const internal = transfers.filter(
-    (transfer) => transfer.type === "Internal Movement"
-  ).length;
 
   const isGlobalManager =
     currentUser?.role === "Admin" ||
@@ -188,10 +193,10 @@ function TransferPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={ArrowRightLeft} label="Total transfers" value={list.length} tone="primary" />
-          <Kpi icon={Search} label="Pending" value={pending} tone="warning" />
-          <Kpi icon={Truck} label="In transit" value={inTransit} tone="primary" />
-          <Kpi icon={MapPin} label="Cross / Internal" value={`${crossWarehouse} / ${internal}`} tone="accent" />
+          <Kpi icon={ArrowRightLeft} label="Total transfers" value={stats?.total ?? "—"} tone="primary" />
+          <Kpi icon={Search} label="Pending" value={stats?.pending ?? "—"} tone="warning" />
+          <Kpi icon={Truck} label="In transit" value={stats?.inTransit ?? "—"} tone="primary" />
+          <Kpi icon={MapPin} label="Cross / Internal" value={stats ? `${stats.crossWarehouse} / ${stats.internal}` : "—"} tone="accent" />
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -223,7 +228,7 @@ function TransferPage() {
             <table className="w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                 <tr>
-                  <th className="text-left p-4">Transfer #</th>
+                  <th className="text-left p-4">Transfer</th>
                   <th className="text-left p-4">Type</th>
                   <th className="text-left p-4">From</th>
                   <th className="text-left p-4">To</th>
@@ -509,14 +514,18 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
       handleClose();
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message || err.message || "Could not save transfer.");
+      toast.error(
+        err.response?.data?.message
+          || err.message
+          || "Could not save transfer."
+      );
     },
   });
 
   const handleScan = (barcode: string) => {
     const product = availableProducts.find((p: any) => p.sku.toLowerCase() === barcode.toLowerCase());
     if (!product) {
-      alert(`Barcode ${barcode} not found in source warehouse stock.`);
+      toast.error(`Barcode ${barcode} not found in source warehouse stock.`);
       return;
     }
 

@@ -41,7 +41,6 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/transfers")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class TransferController {
 
     private final TransferRepository transferRepository;
@@ -126,7 +125,54 @@ public class TransferController {
                 .stream()
                 .map(ApprovalHistoryDTO::fromEntity)
                 .toList();
+
         return ResponseEntity.ok(history);
+    }
+
+    @GetMapping("/stats")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Map<String, Long>> getTransferStats(
+            @RequestParam(required = false) Long warehouseIdParam
+    ) {
+        User user = currentUser();
+        String roleName = user.getRole().getRoleName().name();
+
+        List<Transfer> all;
+        if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) {
+            all = warehouseIdParam == null
+                    ? transferRepository.findAll()
+                    : transferRepository.findByWarehouseIdOrWarehouseDestinationId(
+                            warehouseIdParam, warehouseIdParam);
+        } else {
+            Long warehouseId = user.getWarehouse() != null
+                    ? user.getWarehouse().getId()
+                    : null;
+            all = warehouseId == null
+                    ? Collections.emptyList()
+                    : transferRepository.findByWarehouseIdOrWarehouseDestinationId(
+                            warehouseId, warehouseId);
+        }
+
+        long pending = all.stream()
+                .filter(t -> t.getStatus() == Status.TransactionStatus.PENDING)
+                .count();
+        long inTransit = all.stream()
+                .filter(t -> t.getStatus() == Status.TransactionStatus.DELIVERING
+                        || t.getStatus() == Status.TransactionStatus.DELIVERED)
+                .count();
+        long crossWarehouse = all.stream()
+                .filter(t -> isCrossWarehouse(t.getTransferType()))
+                .count();
+
+        Map<String, Long> result = new HashMap<>();
+        result.put("total", (long) all.size());
+        result.put("pending", pending);
+        result.put("inTransit", inTransit);
+        result.put("crossWarehouse", crossWarehouse);
+        result.put("internal", all.size() - crossWarehouse);
+
+        return ResponseEntity.ok(result);
+    }
     }
 
     @PostMapping
@@ -185,11 +231,12 @@ public class TransferController {
         Transfer saved = transferRepository.save(transfer);
 
         ApprovalHistory history = ApprovalHistory.builder()
-                .transfer(saved)
+                .documentId(saved.getId())
                 .documentType(Status.DocumentType.TRANSFER)
                 .newStatus(saved.getStatus().name())
                 .note("Transfer created")
-                .approver(user)
+                .approverId(user.getId())
+                .approverName(user.getFullName())
                 .build();
 
         approvalHistoryRepository.save(history);
@@ -318,7 +365,7 @@ public class TransferController {
 
         if (!oldStatus.equals(saved.getStatus().name())) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .transfer(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.TRANSFER)
                     .oldStatus(oldStatus)
                     .newStatus(saved.getStatus().name())
@@ -326,7 +373,8 @@ public class TransferController {
                             "Status updated to "
                                     + saved.getStatus().name()
                     )
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
 
             approvalHistoryRepository.save(history);

@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, useEffect, type ReactNode } from "react";
 import { type AppUser, type Role } from "@/types";
-import { parseJwt } from "@/lib/api";
+import { api, parseJwt } from "@/lib/api";
 
 interface AppContextValue {
   currentUser: AppUser | null;
@@ -66,6 +66,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      api.get("/users/me")
+        .then(res => {
+          if (res.data) {
+            setCurrentUser(prev => prev ? { 
+              ...prev, 
+              avatarUrl: res.data.avatarUrl,
+              name: res.data.fullName || prev.name 
+            } : null);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [currentUser?.id]);
 
   const value = useMemo<AppContextValue>(() => {
     const scope = canSwitchWarehouse ? activeWarehouseId : currentUser?.warehouseId ?? null;

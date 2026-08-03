@@ -69,7 +69,7 @@ export function NotificationModal() {
                 // Đề phòng backend gửi về Plain Text
                 newNotif = {
                     id: Date.now().toString(),
-                    title: "Thông báo hệ thống",
+                    title: "System Notification",
                     message: event.data,
                     type: "INFO",
                     createdAt: new Date().toISOString(),
@@ -161,15 +161,15 @@ export function NotificationModal() {
             <SheetContent className="w-100 sm:w-135 flex flex-col">
                 <SheetHeader className="pb-4 border-b">
                     <div className="flex items-center justify-between">
-                        <SheetTitle className="text-xl">Thông báo</SheetTitle>
+                        <SheetTitle className="text-xl">Notifications</SheetTitle>
                         {unreadCount > 0 && (
                             <Button variant="ghost" size="sm" onClick={markAllAsRead} className="h-8 px-2 text-xs text-muted-foreground">
-                                <Check className="mr-1 h-3 w-3" /> Đánh dấu đã đọc tất cả
+                                <Check className="mr-1 h-3 w-3" /> Mark all as read
                             </Button>
                         )}
                     </div>
                     <SheetDescription>
-                        Cập nhật các thông tin mới nhất từ hệ thống kho.
+                        Get the latest updates from the warehouse system.
                     </SheetDescription>
                 </SheetHeader>
 
@@ -177,7 +177,7 @@ export function NotificationModal() {
                     {notifications.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-40 text-muted-foreground space-y-2">
                             <Bell className="h-8 w-8 opacity-20" />
-                            <p>Chưa có thông báo nào</p>
+                            <p>No notifications yet</p>
                         </div>
                     ) : (
                         <div className="space-y-4">

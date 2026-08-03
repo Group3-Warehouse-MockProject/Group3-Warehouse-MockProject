@@ -219,7 +219,7 @@ function Dashboard() {
                           : "color-mix(in oklab, var(--accent) 15%, transparent)",
                     }}
                   >
-                    {m.type === "Inbound" ? <TrendingDown className="size-4" /> : <TrendingUp className="size-4" />}
+                    {m.type === "Inbound" ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{m.product}</div>

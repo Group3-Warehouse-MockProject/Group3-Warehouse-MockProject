@@ -2,6 +2,7 @@ package com.fpt.sccw.controller;
 
 import com.fpt.sccw.dto.response.UserDTO;
 import com.fpt.sccw.entity.User;
+import com.fpt.sccw.repository.UserRepository;
 import com.fpt.sccw.service.ActivityLogService;
 import com.fpt.sccw.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -17,21 +18,49 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class UserController {
 
     private final UserService userService;
     private final ActivityLogService activityLogService;
+    private final UserRepository userRepository;
 
     @GetMapping
-    public ResponseEntity<List<UserDTO>> getAllUsers(
-            @RequestParam(required = false) String role
+    public ResponseEntity<?> getAllUsers(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
     ) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
             return ResponseEntity.status(401).build();
         }
 
+        if (page != null && size != null) {
+            // Paginated response
+            Boolean isDeleted = null;
+            if ("Active".equalsIgnoreCase(status)) isDeleted = false;
+            else if ("Deactive".equalsIgnoreCase(status)) isDeleted = true;
+
+            com.fpt.sccw.entity.Role.RoleName roleEnum = null;
+            if (role != null && !role.isBlank()) {
+                try {
+                    roleEnum = com.fpt.sccw.entity.Role.RoleName.valueOf(role.trim().toUpperCase());
+                } catch (IllegalArgumentException e) {}
+            }
+
+            org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "fullName"));
+            org.springframework.data.domain.Page<User> userPage = userRepository.findUsersFiltered(search, roleEnum, isDeleted, warehouseId, pageable);
+            
+            List<UserDTO> content = userPage.getContent().stream()
+                    .map(UserDTO::fromEntity)
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(new com.fpt.sccw.dto.response.PageResponse<>(content, userPage));
+        }
+
+        // Backward compatibility: Unpaginated response
         List<User> users = userService.getAllUsers();
 
         // Filter by role if provided (e.g. ?role=WAREHOUSE_MANAGER)
@@ -48,6 +77,20 @@ public class UserController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(userDTOs);
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getUserStats() {
+        long totalUsers = userRepository.count();
+        long activeCount = userRepository.findByIsDeletedFalse().size();
+        long inactiveCount = totalUsers - activeCount;
+
+        Map<String, Object> stats = new java.util.HashMap<>();
+        stats.put("total", totalUsers);
+        stats.put("active", activeCount);
+        stats.put("inactive", inactiveCount);
+
+        return ResponseEntity.ok(stats);
     }
 
     @PutMapping("/{id}")

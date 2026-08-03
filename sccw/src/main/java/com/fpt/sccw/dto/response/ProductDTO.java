@@ -20,11 +20,16 @@ public class ProductDTO {
     private String location; 
     private String warehouseId;
     private String imageUrl;
+    private String locationStatus;
+    private String warehouseStatus;
+
     public static ProductDTO fromEntity(Product product, Inventory inventory) {
         Long stock = 0L;
         Long reorder = 0L;
         String location = "N/A";
         String wId = "";
+        String locStatus = "ACTIVE";
+        String whStatus = "ACTIVE";
         
         if (inventory != null) {
             stock = inventory.getQuantity();
@@ -33,11 +38,13 @@ public class ProductDTO {
             }
             if (inventory.getWarehouse() != null) {
                 wId = String.valueOf(inventory.getWarehouse().getId());
+                whStatus = inventory.getWarehouse().getStatus();
             }
             if (inventory.getLocation() != null) {
                 location = inventory.getLocation().getZoneCode() + "-" + 
                            inventory.getLocation().getRackCode() + "-" + 
                            inventory.getLocation().getBinCode();
+                locStatus = inventory.getLocation().getStatus();
             }
         }
         return ProductDTO.builder()
@@ -52,6 +59,8 @@ public class ProductDTO {
                 .location(location) 
                 .warehouseId(wId)
                 .imageUrl(product.getImageUrl())
+                .locationStatus(locStatus)
+                .warehouseStatus(whStatus)
                 .build();
     }
 }

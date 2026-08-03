@@ -4,6 +4,7 @@ import { formatVND } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
 import { api } from "@/lib/api";
 import { BarcodeScanner } from "./barcode-scanner";
+import { toast } from "sonner";
 
 export type ReceiptType = "Inbound" | "Outbound";
 
@@ -38,6 +39,7 @@ interface UserOption {
   id: number;
   fullName: string;
   role: string;
+  warehouseId?: string | number;
 }
 
 interface Props {
@@ -71,6 +73,9 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
+  const userRole = (currentUser?.role as string | undefined)?.toUpperCase();
+  const isStaffOrWhManager = userRole === "STAFF" || userRole === "WAREHOUSE_MANAGER";
+
   // Fetch reference data when modal opens
   useEffect(() => {
     if (!open) return;
@@ -89,7 +94,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         // Default warehouse
         const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
         let defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
-        if (currentUser?.role === "Staff" && currentUser?.warehouseId) {
+        if (isStaffOrWhManager && currentUser?.warehouseId) {
           defaultWh = currentUser.warehouseId;
         }
         setWarehouseId(defaultWh);
@@ -97,8 +102,8 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         if (!isInbound) {
           setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
           // Default staff assignee for Staff role
-          if (currentUser?.role === "Staff") {
-            const me = uRes.data.find((u) => String(u.id) === currentUser.id);
+          if (userRole === "STAFF" && currentUser) {
+            const me = uRes.data.find((u) => String(u.id) === String(currentUser.id));
             if (me) {
               setAssignedUserId(me.id);
             }
@@ -134,11 +139,11 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const handleScan = (barcode: string) => {
     const product = products.find((p) => p.sku.toLowerCase() === barcode.toLowerCase());
     if (!product) {
-      alert(`Barcode ${barcode} not found in catalog.`);
+      toast.error(`Barcode ${barcode} not found in catalog.`);
       return;
     }
     if (String(product.warehouseId) !== String(warehouseId)) {
-      alert(`Product ${barcode} does not belong to selected warehouse.`);
+      toast.error(`Product ${barcode} does not belong to selected warehouse.`);
       return;
     }
     setLines((prevLines) => {
@@ -312,7 +317,10 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     value={warehouseId}
                     onChange={(e) => setWarehouseId(e.target.value)}
                     className="input disabled:opacity-50 disabled:bg-muted disabled:cursor-not-allowed"
-                    disabled={currentUser?.role === "Staff" || (!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager")}
+                    disabled={
+                      isStaffOrWhManager ||
+                      (!!activeWarehouseId && currentUser?.role !== "Admin" && currentUser?.role !== "Manager")
+                    }
                   >
                     {warehouses
                       .filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
@@ -387,10 +395,15 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     >
                       <option value="">Select staff member…</option>
                       {users
-                        .filter((u) => u.role === "STAFF" || u.role === "WAREHOUSE_MANAGER")
+                        .filter((u) => {
+                          const isStaff = u.role === "STAFF" || u.role === "Staff" || u.role?.toUpperCase() === "STAFF";
+                          if (!isStaff) return false;
+                          if (warehouseId && u.warehouseId && String(u.warehouseId) !== String(warehouseId)) return false;
+                          return true;
+                        })
                         .map((u) => (
                           <option key={u.id} value={u.id}>
-                            {u.fullName} — {u.role === "STAFF" ? "Staff" : "Warehouse Manager"}
+                            {u.fullName} (Staff)
                           </option>
                         ))}
                     </select>

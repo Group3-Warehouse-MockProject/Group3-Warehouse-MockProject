@@ -12,4 +12,12 @@ public class UpdateReceiptRequest {
     private String status;
     /** null = không đổi */
     private String remark;
+    /** New warehouse ID — null = không đổi. Only allowed when PENDING. */
+    private Long warehouseId;
+    /** Partner name (supplier) — null = không đổi */
+    private String partner;
+    /** Updated line items — null = không đổi. Only allowed when PENDING. */
+    private java.util.List<CreateReceiptRequest.LineItemRequest> items;
+    /** Assigned user id — null = không đổi, -1 = unassign */
+    private Long assignedUserId;
 }

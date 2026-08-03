@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { warehouses } from "@/lib/warehouse-data";
 import { ApprovalHistoryItem } from "@/types";
+import { ConfirmModal } from "@/components/confirm-modal";
 import {
   ClipboardCheck, Plus, X, Save, ListChecks,
   AlertTriangle, CheckCircle2, Boxes,
@@ -94,6 +95,15 @@ function StocktakePage() {
   const [page, setPage] = useState(1);
   const limit = 15;
 
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    isPending: boolean;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: "", message: "", isPending: false, onConfirm: () => {} });
+  const closeConfirmModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+
   const canCreate =
     currentUser?.role === "Warehouse_Manager" ||
     currentUser?.role === "Admin" ||
@@ -103,30 +113,23 @@ function StocktakePage() {
     currentUser?.role === "Staff" ||
     currentUser?.role === "Warehouse_Manager";
 
-  // Chỉ nhân viên được gán (hoặc Manager/Admin/Phiếu chưa gán) mới được bấm đếm
+  // Chỉ nhân viên được gán (hoặc Manager/Admin) mới được bấm đếm
   const isUserAssignedOrManager = (sheet: Stocktake) => {
     if (currentUser?.role === "Warehouse_Manager" || currentUser?.role === "Admin" || currentUser?.role === "Manager") {
       return true;
     }
-    // Nếu phiếu chưa gán cho ai, Staff trong kho đều được đếm
-    if (!sheet.assignedUserId && (!sheet.assignedUserName || sheet.assignedUserName === "—")) {
-      return true;
-    }
-    // Kiểm tra theo ID nhân viên
-    if (currentUser?.id && sheet.assignedUserId) {
-      if (String(sheet.assignedUserId) === String(currentUser.id)) {
-        return true;
+    // Đối với STAFF: CHỈ được bấm đếm khi phiếu ĐƯỢC GÁN ĐÍCH DANH CHO CHÍNH MÌNH
+    if (currentUser?.role === "Staff") {
+      if (currentUser?.id && sheet.assignedUserId) {
+        return String(sheet.assignedUserId) === String(currentUser.id);
       }
-    }
-    // Kiểm tra theo tên / username nhân viên
-    if (currentUser?.name && sheet.assignedUserName) {
-      const uName = currentUser.name.trim().toLowerCase();
-      const aName = sheet.assignedUserName.trim().toLowerCase();
-      if (aName === uName || aName.includes(uName) || uName.includes(aName)) {
-        return true;
+      if (currentUser?.name && sheet.assignedUserName) {
+        const uName = currentUser.name.trim().toLowerCase();
+        const aName = sheet.assignedUserName.trim().toLowerCase();
+        return aName === uName || aName.includes(uName) || uName.includes(aName);
       }
+      return false;
     }
-    // Phiếu đã gán cho người khác -> STAFF này không được đếm!
     return false;
   };
 
@@ -365,7 +368,7 @@ function StocktakePage() {
                 setSearchQuery(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search sheet # (e.g. ST-0001), staff name..."
+              placeholder="Search sheet (e.g. ST-0001), staff name..."
               className="w-full h-10 pl-9 pr-8 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
             {searchQuery && (
@@ -545,7 +548,7 @@ function StocktakePage() {
                 <table className="w-full text-sm">
                   <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40">
                     <tr>
-                      <th className="text-left p-4">Sheet #</th>
+                      <th className="text-left p-4">Sheet</th>
                       <th className="text-left p-4">Date</th>
                       <th className="text-left p-4">Warehouse</th>
                       <th className="text-left p-4">Created by</th>
@@ -882,10 +885,17 @@ function StocktakePage() {
                 {canCreate && viewing.status !== "COMPLETED" && viewing.status !== "CANCELLED" && (
                   <button
                     onClick={() => {
-                      if (window.confirm(`Are you sure you want to cancel stocktake sheet ST-${String(viewing.id).padStart(4, "0")}?`)) {
-                        updateStatusMutation.mutate({ id: viewing.id, status: "CANCELLED" });
-                        setViewing(null);
-                      }
+                      setConfirmModal({
+                        isOpen: true,
+                        title: "Cancel Stocktake Sheet",
+                        message: `Are you sure you want to cancel stocktake sheet ST-${String(viewing.id).padStart(4, "0")}?`,
+                        isPending: false,
+                        onConfirm: () => {
+                          updateStatusMutation.mutate({ id: viewing.id, status: "CANCELLED" });
+                          setViewing(null);
+                          closeConfirmModal();
+                        }
+                      });
                     }}
                     disabled={updateStatusMutation.isPending}
                     className="h-10 px-4 rounded-lg bg-destructive/15 text-destructive hover:bg-destructive/25 text-sm font-medium transition-colors"
@@ -919,6 +929,15 @@ function StocktakePage() {
           </div>
         </Modal>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        isPending={confirmModal.isPending}
+        onClose={closeConfirmModal}
+      />
     </AppShell>
   );
 }
@@ -1001,13 +1020,25 @@ function CreateForm({
   });
   const allUsers = Array.isArray(rawAllUsers) ? rawAllUsers : [];
 
-  const staffOptions = allUsers.filter(
-    (u: any) =>
-      (u.role === "STAFF" || u.role === "Staff") &&
-      u.warehouseId !== null &&
-      String(u.warehouseId) === String(selectedWarehouseId) &&
-      !u.isDeleted
-  );
+  const staffOptions = allUsers.filter((u: any) => {
+    if (u.isDeleted) return false;
+    const roleStr = String(u.role || "").toUpperCase();
+    const canCountRole = roleStr === "STAFF" || roleStr === "WAREHOUSE_MANAGER";
+    const matchesWarehouse = u.warehouseId !== null && String(u.warehouseId) === String(selectedWarehouseId);
+    return canCountRole && matchesWarehouse;
+  });
+
+  // Mặc định gán phiếu cho người đang tạo NẾU người đó có quyền đếm (chỉ Warehouse Manager)
+  useEffect(() => {
+    if (assignedUserId === "" && currentUser?.id) {
+      const isCountableUser = currentUser.role === "Warehouse_Manager" || currentUser.role === "Staff";
+      if (isCountableUser) {
+        setAssignedUserId(Number(currentUser.id));
+      } else if (staffOptions.length > 0) {
+        setAssignedUserId(Number(staffOptions[0].id));
+      }
+    }
+  }, [currentUser, staffOptions]);
 
   // Lọc sản phẩm theo category đã chọn
   const filteredItems = categoryFilter

@@ -13,7 +13,7 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Warehouse extends BaseEntity{
+public class Warehouse extends BaseEntity {
 
     @NotBlank(message = "Warehouse code is required")
     @Column(name = "warehouse_code", nullable = false, unique = true)
@@ -33,6 +33,10 @@ public class Warehouse extends BaseEntity{
     @Column(name = "status")
     @Builder.Default
     private String status = "ACTIVE";
+
+    @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @Builder.Default
+    private List<Location> locations = new ArrayList<>();
 
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default

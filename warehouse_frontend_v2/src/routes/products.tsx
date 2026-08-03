@@ -22,11 +22,11 @@ function ProductsPage() {
   const [openImport, setOpenImport] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  
+
   // Server-side pagination state
   const [page, setPage] = useState(0); // 0-indexed for backend
   const limit = 15;
-  
+
   const [q, setQ] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
@@ -106,14 +106,14 @@ function ProductsPage() {
   };
 
   const list = (productData || []).filter((p: any) => {
-    const matchesQ = 
+    const matchesQ =
       p.name.toLowerCase().includes(q.toLowerCase()) ||
       p.sku.toLowerCase().includes(q.toLowerCase()) ||
       p.category.toLowerCase().includes(q.toLowerCase()) ||
       p.brand.toLowerCase().includes(q.toLowerCase());
-    
+
     const matchesCategory = filterCategory ? p.category === filterCategory : true;
-    
+
     let matchesStatus = true;
     if (filterStatus === "Out") matchesStatus = p.stock === 0;
     else if (filterStatus === "Low") matchesStatus = p.stock > 0 && p.stock < p.reorder;
@@ -129,7 +129,7 @@ function ProductsPage() {
 
     return matchesQ && matchesCategory && matchesStatus && matchesCost && matchesPrice;
   });
-  
+
   const units = list.reduce((s: number, p: any) => s + p.stock, 0);
   const low = list.filter((p: any) => p.stock < p.reorder).length;
   const value = list.reduce((s: number, p: any) => s + p.stock * p.cost, 0);
@@ -142,7 +142,7 @@ function ProductsPage() {
     const headers = ["SKU", "Product Name", "Brand", "Category", "Warehouse", "Location", "Stock", "Cost", "Price"];
     const csvContent = [
       headers.join(","),
-      ...list.map((p: any) => 
+      ...list.map((p: any) =>
         [
           p.sku,
           `"${p.name.replace(/"/g, '""')}"`,
@@ -156,7 +156,7 @@ function ProductsPage() {
         ].join(",")
       )
     ].join("\n");
-    
+
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -207,14 +207,14 @@ function ProductsPage() {
             </div>
             <div className="relative flex items-center gap-2">
               <div className="hidden sm:flex bg-secondary p-1 rounded-lg border border-border">
-                <button 
+                <button
                   onClick={() => setViewMode("grid")}
                   className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-background shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"}`}
                   title="Grid View"
                 >
                   <LayoutGrid className="size-4" />
                 </button>
-                <button 
+                <button
                   onClick={() => setViewMode("list")}
                   className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-background shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"}`}
                   title="List View"
@@ -225,7 +225,7 @@ function ProductsPage() {
               <button onClick={() => setShowFilter(!showFilter)} className={`h-10 px-4 rounded-lg border text-sm flex items-center gap-2 transition-colors shrink-0 ${showFilter ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border hover:bg-muted"}`}>
                 <Filter className="size-4" />Filter
               </button>
-              
+
               {showFilter && (
                 <div className="absolute top-full right-0 mt-2 z-20 flex flex-col gap-5 p-5 surface-card rounded-xl border border-border/60 shadow-xl w-72">
                   <div>
@@ -244,7 +244,7 @@ function ProductsPage() {
                       ))}
                     </select>
                   </div>
-                  
+
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Status</div>
                     <select
@@ -322,7 +322,7 @@ function ProductsPage() {
                         </div>
                         <div className="font-semibold text-[15px] leading-tight mb-1 line-clamp-2 mt-1" title={p.name}>{p.name}</div>
                         <div className="text-xs text-muted-foreground mb-3 line-clamp-1">{p.brand} &bull; {p.category}</div>
-                        
+
                         <div className="mt-auto space-y-2.5 bg-secondary/20 rounded-lg p-3 border border-border/40">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Price</span>
@@ -440,11 +440,10 @@ function ProductsPage() {
                   <button
                     key={n}
                     onClick={() => setPage(n)}
-                    className={`size-8 rounded-md text-xs font-medium transition-colors ${
-                      n === page
+                    className={`size-8 rounded-md text-xs font-medium transition-colors ${n === page
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "bg-background border border-border hover:bg-secondary"
-                    }`}
+                      }`}
                   >
                     {n + 1}
                   </button>
@@ -472,7 +471,7 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
   if (!product) return null;
   const out = product.stock === 0;
   const low = product.stock > 0 && product.stock < product.reorder;
-  
+
   const getWarehouseCode = (id: string | null | undefined) => {
     if (!id) return "—";
     if (id.includes(",")) {
@@ -512,13 +511,13 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
             )}
           </div>
         </div>
-        
+
         <div className="space-y-5">
           <div>
             <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wider mb-1">SKU Code</div>
             <div className="font-mono text-base bg-secondary/50 px-2 py-1 rounded border border-border/40 inline-block">{product.sku}</div>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="surface-card p-3 rounded-lg border border-border/40">
               <div className="text-xs text-muted-foreground mb-1">Category</div>
@@ -635,7 +634,7 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
       onClose();
     } catch (err: any) {
       console.error(err);
-      alert("Error saving product: " + (err.response?.data?.message || err.response?.data?.error || err.message || JSON.stringify(err)));
+      toast.error("Error saving product: " + (err.response?.data?.message || err.response?.data?.error || err.message || JSON.stringify(err)));
     } finally {
       setLoading(false);
     }
@@ -732,7 +731,7 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
         Price: 1500000
       }
     ];
-    
+
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Template");
@@ -742,14 +741,14 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setLoading(true);
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      
+
       const payload = jsonData.map((row: any) => ({
         code: String(row.Code),
         name: String(row.Name),
@@ -767,11 +766,11 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
 
       await api.post("/products/bulk", payload);
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      alert("Products imported successfully!");
+      toast.success("Products imported successfully!");
       onClose();
     } catch (err: any) {
       console.error(err);
-      alert("Error importing products: " + (err.response?.data?.message || err.response?.data?.error || err.message || JSON.stringify(err)));
+      toast.error("Error importing products: " + (err.response?.data?.message || err.response?.data?.error || err.message || JSON.stringify(err)));
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -802,11 +801,11 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
             <Download className="size-4" /> Download Template
           </button>
         </div>
-        
+
         <div className="p-4 surface-card border border-border/60 rounded-lg">
           <h3 className="font-medium mb-2">Step 2: Upload Data</h3>
           <p className="text-muted-foreground mb-4">Fill out the template and upload it back. The system will process all rows simultaneously.</p>
-          
+
           <input
             type="file"
             accept=".xlsx, .xls, .csv"
@@ -814,7 +813,7 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
             ref={fileInputRef}
             onChange={handleFileUpload}
           />
-          
+
           <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-secondary/30 transition-colors">
             <Upload className="size-8 text-muted-foreground mx-auto mb-3" />
             <div className="font-medium">Click to browse or drag and drop</div>
@@ -830,9 +829,7 @@ function InlineReorderEdit({ product }: { product: any }) {
   const [val, setVal] = useState(product.reorder?.toString() || "0");
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: async (newVal: number) => {
-      await api.patch(`/inventory/${product.inventoryId}/threshold`, { lowStockThreshold: newVal });
-    },
+    mutationFn: (newVal: number) => api.patch(`/inventory/${product.inventoryId}/threshold`, { lowStockThreshold: newVal }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       toast.success("Reorder level updated");

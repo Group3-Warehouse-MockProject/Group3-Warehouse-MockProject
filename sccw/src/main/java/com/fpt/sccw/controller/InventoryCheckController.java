@@ -23,7 +23,6 @@ import com.fpt.sccw.dto.response.PageResponse;
 @RestController
 @RequestMapping("/api/stocktake")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class InventoryCheckController {
 
     private final InventoryCheckRepository inventoryCheckRepository;
@@ -64,7 +63,7 @@ public class InventoryCheckController {
         }
 
         List<InventoryCheckDTO> result = checks.getContent().stream()
-                .map(InventoryCheckDTO::fromEntity)
+                .map(this::toDTO)
                 .toList();
 
         return ResponseEntity.ok(new PageResponse<>(result, checks));
@@ -80,7 +79,7 @@ public class InventoryCheckController {
         if (user == null) return ResponseEntity.status(401).build();
 
         return inventoryCheckRepository.findById(id)
-                .map(check -> ResponseEntity.ok(InventoryCheckDTO.fromEntity(check)))
+                .map(check -> ResponseEntity.ok(toDTO(check)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -158,11 +157,12 @@ public class InventoryCheckController {
             InventoryCheck saved = inventoryCheckRepository.save(check);
 
             ApprovalHistory history = ApprovalHistory.builder()
-                    .inventoryCheck(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)
                     .newStatus(saved.getStatus().name())
                     .note("Stocktake sheet created")
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
 
@@ -178,7 +178,7 @@ public class InventoryCheckController {
                 eventPublisher.publishEvent(event);
             }
 
-            return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+            return ResponseEntity.ok(toDTO(saved));
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Error creating stocktake sheet"));
@@ -206,12 +206,11 @@ public class InventoryCheckController {
 
         String role = user.getRole() != null && user.getRole().getRoleName() != null ? user.getRole().getRoleName().name() : "";
 
-        // Nếu phiếu được giao cho nhân viên cụ thể (assignedUser != null)
-        // và người đang đếm là STAFF nhưng KHÔNG PHẢI nhân viên được gán -> Chặn 403
-        if ("STAFF".equalsIgnoreCase(role) 
-                && check.getAssignedUser() != null 
-                && !check.getAssignedUser().getId().equals(user.getId())) {
-            return ResponseEntity.status(403).build();
+        // STAFF chỉ được đếm khi phiếu được gán ĐÍCH DANH cho chính STAFF đó -> Chặn 403 nếu sai/chưa gán
+        if ("STAFF".equalsIgnoreCase(role)) {
+            if (check.getAssignedUser() == null || !check.getAssignedUser().getId().equals(user.getId())) {
+                return ResponseEntity.status(403).build();
+            }
         }
 
         // Cập nhật số đếm thực tế cho từng dòng sản phẩm
@@ -240,12 +239,13 @@ public class InventoryCheckController {
 
         if (statusChanged) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .inventoryCheck(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)
                     .oldStatus(oldStatus)
                     .newStatus(saved.getStatus().name())
                     .note("Started counting")
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
 
@@ -262,7 +262,7 @@ public class InventoryCheckController {
             }
         }
 
-        return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+        return ResponseEntity.ok(toDTO(saved));
     }
 
     // ------------------------------------------------------------------
@@ -302,34 +302,70 @@ public class InventoryCheckController {
 
         if (!oldStatusStr.equals(newStatus)) {
             ApprovalHistory history = ApprovalHistory.builder()
-                    .inventoryCheck(saved)
+                    .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)
                     .oldStatus(oldStatusStr)
                     .newStatus(newStatus)
                     .note(body.getOrDefault("remark", "Status updated to " + newStatus))
-                    .approver(user)
+                    .approverId(user.getId())
+                    .approverName(user.getFullName())
                     .build();
             approvalHistoryRepository.save(history);
 
-            if ("COMPLETED".equals(newStatus) && saved.getAssignedUser() != null) {
-                NotificationEventDTO event = NotificationEventDTO.builder()
-                        .id(java.util.UUID.randomUUID().toString())
-                        .userId(saved.getAssignedUser().getId().toString())
-                        .title("Inventory Check Completed")
-                        .message("Inventory check #" + saved.getId() + " was completed and closed by Manager " + user.getUsername())
-                        .type("SUCCESS")
-                        .createdAt(java.time.Instant.now().toString())
-                        .build();
-                eventPublisher.publishEvent(event);
+            if ("COMPLETED".equals(newStatus)) {
+                // Tự động cập nhật lại số lượng tồn kho thực tế vào bảng inventories / product khi chốt phiếu COMPLETED
+                if (saved.getDetails() != null && saved.getWarehouse() != null) {
+                    Long warehouseId = saved.getWarehouse().getId();
+                    for (InventoryCheckDetail d : saved.getDetails()) {
+                        if (d.getProduct() != null && d.getActualQuantity() != null) {
+                            Long productId = d.getProduct().getId();
+                            Long actualQty = d.getActualQuantity();
+                            
+                            Inventory inv = inventoryRepository.findByWarehouseIdAndProductId(warehouseId, productId)
+                                    .orElse(null);
+                            if (inv != null) {
+                                inv.setQuantity(actualQty);
+                                inventoryRepository.save(inv);
+                            } else {
+                                Inventory newInv = Inventory.builder()
+                                        .warehouse(saved.getWarehouse())
+                                        .product(d.getProduct())
+                                        .quantity(actualQty)
+                                        .build();
+                                inventoryRepository.save(newInv);
+                            }
+                        }
+                    }
+                }
+
+                if (saved.getAssignedUser() != null) {
+                    NotificationEventDTO event = NotificationEventDTO.builder()
+                            .id(java.util.UUID.randomUUID().toString())
+                            .userId(saved.getAssignedUser().getId().toString())
+                            .title("Inventory Check Completed")
+                            .message("Inventory check #" + saved.getId() + " was completed and closed by Manager " + user.getUsername())
+                            .type("SUCCESS")
+                            .createdAt(java.time.Instant.now().toString())
+                            .build();
+                    eventPublisher.publishEvent(event);
+                }
             }
         }
 
-        return ResponseEntity.ok(InventoryCheckDTO.fromEntity(saved));
+        return ResponseEntity.ok(toDTO(saved));
     }
 
     // ------------------------------------------------------------------
     // Helper
     // ------------------------------------------------------------------
+    private InventoryCheckDTO toDTO(InventoryCheck check) {
+        if (check == null) return null;
+        List<ApprovalHistory> histories = approvalHistoryRepository
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(check.getId(), Status.DocumentType.INVENTORY_CHECK);
+        check.setApprovalHistories(histories);
+        return InventoryCheckDTO.fromEntity(check);
+    }
+
     private User getAuthenticatedUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return null;

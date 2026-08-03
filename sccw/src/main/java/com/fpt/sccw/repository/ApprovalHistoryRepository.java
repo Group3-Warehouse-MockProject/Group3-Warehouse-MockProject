@@ -1,19 +1,29 @@
 package com.fpt.sccw.repository;
 
-import com.fpt.sccw.entity.ApprovalHistory;
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import com.fpt.sccw.entity.ApprovalHistory;
 
 @Repository
 public interface ApprovalHistoryRepository extends JpaRepository<ApprovalHistory, Long> {
-    List<ApprovalHistory> findByInventoryCheckIdOrderByCreatedAtAsc(Long inventoryCheckId);
-    List<ApprovalHistory> findByTransferIdOrderByCreatedAtAsc(Long transferId);
-    List<ApprovalHistory> findByWarehouseReceiptIdOrderByCreatedAtAsc(Long warehouseReceiptId);
+
+    List<ApprovalHistory> findByInventoryCheckIdOrderByCreatedAtAsc(
+            Long inventoryCheckId
+    );
+
+    List<ApprovalHistory> findByTransferIdOrderByCreatedAtAsc(
+            Long transferId
+    );
+
+    List<ApprovalHistory> findByWarehouseReceiptIdOrderByCreatedAtAsc(
+            Long warehouseReceiptId
+    );
 
     @Modifying
     @Query("DELETE FROM ApprovalHistory h WHERE h.transfer.id = :transferId")

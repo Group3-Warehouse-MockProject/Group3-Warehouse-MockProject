@@ -22,7 +22,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/logs")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class ActivityLogController {
 
     private final ActivityLogRepository activityLogRepository;
