@@ -1,6 +1,7 @@
 package com.fpt.sccw.repository;
 
 import com.fpt.sccw.entity.Transfer;
+import com.fpt.sccw.entity.Status;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -71,4 +72,79 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
            "LEFT JOIN FETCH td.product",
            countQuery = "SELECT COUNT(DISTINCT t) FROM Transfer t")
     Page<Transfer> findAllEagerPaged(Pageable pageable);
+
+    @Query(value =
+           "SELECT DISTINCT t FROM Transfer t " +
+           "LEFT JOIN FETCH t.warehouse " +
+           "LEFT JOIN FETCH t.warehouseDestination " +
+           "LEFT JOIN FETCH t.createdByUser " +
+           "LEFT JOIN FETCH t.assignedByUser " +
+           "LEFT JOIN FETCH t.details td " +
+           "LEFT JOIN FETCH td.product " +
+           "WHERE t.status IN :statuses " +
+           "AND t.transferType IN :types " +
+           "AND (:keyword IS NULL OR LOWER(CONCAT('tr-', t.id)) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.remark, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouse.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouseDestination.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.createdByUser.fullName, '')) LIKE :keyword " +
+           "OR EXISTS (SELECT 1 FROM TransferDetail detail JOIN detail.product product " +
+           "WHERE detail.transfer = t AND (LOWER(product.code) LIKE :keyword " +
+           "OR LOWER(product.name) LIKE :keyword)))",
+           countQuery =
+           "SELECT COUNT(DISTINCT t) FROM Transfer t " +
+           "WHERE t.status IN :statuses " +
+           "AND t.transferType IN :types " +
+           "AND (:keyword IS NULL OR LOWER(CONCAT('tr-', t.id)) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.remark, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouse.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouseDestination.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.createdByUser.fullName, '')) LIKE :keyword " +
+           "OR EXISTS (SELECT 1 FROM TransferDetail detail JOIN detail.product product " +
+           "WHERE detail.transfer = t AND (LOWER(product.code) LIKE :keyword " +
+           "OR LOWER(product.name) LIKE :keyword)))")
+    Page<Transfer> findAllEagerPagedFiltered(
+            @Param("statuses") List<Status.TransactionStatus> statuses,
+            @Param("types") List<Status.TransferType> types,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
+    @Query(value =
+           "SELECT DISTINCT t FROM Transfer t " +
+           "LEFT JOIN FETCH t.warehouse " +
+           "LEFT JOIN FETCH t.warehouseDestination " +
+           "LEFT JOIN FETCH t.createdByUser " +
+           "LEFT JOIN FETCH t.assignedByUser " +
+           "LEFT JOIN FETCH t.details td " +
+           "LEFT JOIN FETCH td.product " +
+           "WHERE (t.warehouse.id = :warehouseId OR t.warehouseDestination.id = :warehouseId) " +
+           "AND t.status IN :statuses " +
+           "AND t.transferType IN :types " +
+           "AND (:keyword IS NULL OR LOWER(CONCAT('tr-', t.id)) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.remark, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouse.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouseDestination.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.createdByUser.fullName, '')) LIKE :keyword " +
+           "OR EXISTS (SELECT 1 FROM TransferDetail detail JOIN detail.product product " +
+           "WHERE detail.transfer = t AND (LOWER(product.code) LIKE :keyword " +
+           "OR LOWER(product.name) LIKE :keyword)))",
+           countQuery =
+           "SELECT COUNT(DISTINCT t) FROM Transfer t " +
+           "WHERE (t.warehouse.id = :warehouseId OR t.warehouseDestination.id = :warehouseId) " +
+           "AND t.status IN :statuses " +
+           "AND t.transferType IN :types " +
+           "AND (:keyword IS NULL OR LOWER(CONCAT('tr-', t.id)) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.remark, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouse.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.warehouseDestination.code, '')) LIKE :keyword " +
+           "OR LOWER(COALESCE(t.createdByUser.fullName, '')) LIKE :keyword " +
+           "OR EXISTS (SELECT 1 FROM TransferDetail detail JOIN detail.product product " +
+           "WHERE detail.transfer = t AND (LOWER(product.code) LIKE :keyword " +
+           "OR LOWER(product.name) LIKE :keyword)))")
+    Page<Transfer> findByWarehouseEagerPagedFiltered(
+            @Param("warehouseId") Long warehouseId,
+            @Param("statuses") List<Status.TransactionStatus> statuses,
+            @Param("types") List<Status.TransferType> types,
+            @Param("keyword") String keyword,
+            Pageable pageable);
 }
