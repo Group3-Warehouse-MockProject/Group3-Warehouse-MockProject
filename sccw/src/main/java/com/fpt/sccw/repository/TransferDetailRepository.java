@@ -5,9 +5,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 public interface TransferDetailRepository extends JpaRepository<TransferDetail, Long> {
+
+    @Modifying
+    @Query("DELETE FROM TransferDetail d WHERE d.transfer.id = :transferId")
+    void deleteByTransferId(@Param("transferId") Long transferId);
 
     @Query(value = "SELECT d FROM TransferDetail d " +
             "JOIN FETCH d.transfer t " +

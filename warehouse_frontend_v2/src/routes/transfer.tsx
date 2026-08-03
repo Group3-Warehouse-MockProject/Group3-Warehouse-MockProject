@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
-import { ArrowRightLeft, MapPin, Search, Plus, Trash2, ChevronLeft, ChevronRight, CheckCircle2, Truck, XCircle } from "lucide-react";
+import { ArrowRightLeft, MapPin, Search, Plus, Trash2, ChevronLeft, ChevronRight, CheckCircle2, Truck, XCircle, Pencil, History, Clock } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/components/modal-shell";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarcodeScanner } from "@/components/barcode-scanner";
 import { toast } from "sonner";
@@ -34,9 +34,19 @@ type Transfer = {
   destinationWarehouseCode?: string;
   destinationWarehouseName?: string;
   createdBy: string;
+  assignedById?: number | null;
   assignedBy?: string;
   totalQuantity: number;
   lines: TransferLine[];
+};
+
+type ApprovalHistory = {
+  id: number;
+  oldStatus?: string | null;
+  newStatus: string;
+  note?: string | null;
+  approverName?: string | null;
+  createdAt?: string | null;
 };
 
 const statusTone: Record<Transfer["status"], string> = {
@@ -50,19 +60,26 @@ function TransferPage() {
   const { activeWarehouseId, currentUser } = useApp();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
+  const [viewingTransfer, setViewingTransfer] = useState<Transfer | null>(null);
   const [page, setPage] = useState(0); // 0-based server page
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const limit = 15;
 
   // Reset to page 0 when warehouse or search changes
-  useEffect(() => { setPage(0); }, [activeWarehouseId, q]);
+  useEffect(() => { setPage(0); }, [activeWarehouseId, q, statusFilter, typeFilter]);
 
   const { data: pageData, isLoading, error } = useQuery({
-    queryKey: ["transfers", activeWarehouseId, page],
+    queryKey: ["transfers", activeWarehouseId, page, q, statusFilter, typeFilter],
     queryFn: async () => {
       const res = await api.get("/transfers", {
         params: {
           ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(typeFilter ? { type: typeFilter } : {}),
+          ...(q.trim() ? { keyword: q.trim() } : {}),
           page,
           size: limit, // Backend sends exactly 'limit' records per page
         },
@@ -114,26 +131,17 @@ function TransferPage() {
     },
   });
 
-  // Client-side search on current page data
-  const list = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return transfers;
-    return transfers.filter((t) =>
-      [
-        t.code,
-        t.type,
-        t.status,
-        t.sourceWarehouseCode,
-        t.destinationWarehouseCode,
-        t.createdBy,
-        t.assignedBy,
-        t.remark,
-        ...(t.lines || []).flatMap((line) => [line.sku, line.productName]),
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(needle))
-    );
-  }, [q, transfers]);
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => api.delete(`/transfers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transfers"] });
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || err.message || "Could not delete transfer.");
+    },
+  });
+
+  const list = transfers;
 
 
 
@@ -151,6 +159,23 @@ function TransferPage() {
     String(currentUser?.warehouseId) ===
       String(transfer.destinationWarehouseId);
 
+  const isAdmin = currentUser?.role === "Admin";
+  const openNewTransfer = () => {
+    setEditingTransfer(null);
+    setOpen(true);
+  };
+
+  const openEditTransfer = (transfer: Transfer) => {
+    setEditingTransfer(transfer);
+    setOpen(true);
+  };
+
+  const deleteTransfer = (transfer: Transfer) => {
+    if (window.confirm(`Delete ${transfer.code}? This cannot be undone.`)) {
+      deleteMutation.mutate(transfer.id);
+    }
+  };
+
   if (isLoading) return <AppShell><div className="p-8">Loading transfers...</div></AppShell>;
   if (error) return <AppShell><div className="p-8 text-destructive">Error loading transfers</div></AppShell>;
 
@@ -162,7 +187,7 @@ function TransferPage() {
             <h1 className="text-3xl font-bold">Transfers</h1>
             <p className="text-sm text-muted-foreground mt-1">Manage cross-warehouse and internal movements</p>
           </div>
-          <button onClick={() => setOpen(true)} className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
+          <button onClick={openNewTransfer} className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
             <Plus className="size-4" />New transfer
           </button>
         </div>
@@ -174,14 +199,28 @@ function TransferPage() {
           <Kpi icon={MapPin} label="Cross / Internal" value={stats ? `${stats.crossWarehouse} / ${stats.internal}` : "—"} tone="accent" />
         </div>
 
-        <div className="relative max-w-md w-full sm:w-96">
-          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search transfer, SKU, warehouse..."
-            className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
-          />
+        <div className="flex flex-wrap gap-3">
+          <div className="relative max-w-md w-full sm:w-80">
+            <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search transfer, SKU, warehouse..."
+              className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
+            />
+          </div>
+          <select aria-label="Filter by transfer type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={`${selectCls} h-10 w-full sm:w-48`}>
+            <option value="">All types</option>
+            <option value="cross">Cross-Warehouse</option>
+            <option value="internal">Internal Movement</option>
+          </select>
+          <select aria-label="Filter by transfer status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${selectCls} h-10 w-full sm:w-40`}>
+            <option value="">All statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="InTransit">In transit</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
         </div>
 
         <div className="surface-card overflow-hidden">
@@ -204,7 +243,9 @@ function TransferPage() {
                 {list.map((t) => (
                   <tr key={t.id} className="border-t border-border/60 hover:bg-secondary/30 transition-colors align-top">
                     <td className="p-4">
-                      <div className="font-mono text-xs">{t.code}</div>
+                      <button type="button" onClick={() => setViewingTransfer(t)} className="font-mono text-xs text-primary hover:underline" title="View transfer details">
+                        {t.code}
+                      </button>
                       <div className="text-[11px] text-muted-foreground mt-1">{t.lines?.length || 0} SKU(s)</div>
                     </td>
                     <td className="p-4 font-medium">{t.type}</td>
@@ -220,7 +261,7 @@ function TransferPage() {
                     <td className="p-4 text-right font-semibold">{t.totalQuantity}</td>
                     <td className="p-4">
                       <div>{t.createdBy}</div>
-                      {t.assignedBy && <div className="text-[11px] text-muted-foreground">Assigned: {t.assignedBy}</div>}
+                      <div className="text-[11px] text-muted-foreground">Responsible: {t.assignedBy || "Unassigned"}</div>
                     </td>
                     <td className="p-4 text-center">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[t.status]}`}>{t.status}</span>
@@ -253,6 +294,27 @@ function TransferPage() {
                             className="h-8 px-2 rounded-md bg-destructive/15 text-destructive text-xs hover:bg-destructive/20 inline-flex items-center gap-1"
                           >
                             <XCircle className="size-3.5" />Cancel
+                          </button>
+                        )}
+                        {t.status === "Pending" && isSourceWarehouse(t) && (
+                          <button
+                            type="button"
+                            title="Edit transfer"
+                            onClick={() => openEditTransfer(t)}
+                            className="size-8 grid place-items-center rounded-md border border-border bg-secondary hover:bg-muted"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                        )}
+                        {isAdmin && (t.status === "Pending" || t.status === "Cancelled") && (
+                          <button
+                            type="button"
+                            title="Delete transfer"
+                            onClick={() => deleteTransfer(t)}
+                            disabled={deleteMutation.isPending}
+                            className="size-8 grid place-items-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20 disabled:opacity-50"
+                          >
+                            <Trash2 className="size-3.5" />
                           </button>
                         )}
                       </div>
@@ -291,12 +353,72 @@ function TransferPage() {
           )}
         </div>
       </div>
-      <AddTransferModal open={open} onClose={() => setOpen(false)} />
+      <AddTransferModal open={open} transfer={editingTransfer} onClose={() => { setOpen(false); setEditingTransfer(null); }} />
+      <TransferDetailModal transfer={viewingTransfer} onClose={() => setViewingTransfer(null)} />
     </AppShell>
   );
 }
 
-function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function TransferDetailModal({ transfer, onClose }: { transfer: Transfer | null; onClose: () => void }) {
+  const { data: history = [], isLoading } = useQuery({
+    queryKey: ["transfer-history", transfer?.id],
+    queryFn: async () => (await api.get(`/transfers/${transfer?.id}/history`)).data as ApprovalHistory[],
+    enabled: Boolean(transfer),
+  });
+
+  if (!transfer) return null;
+
+  return (
+    <ModalShell
+      open={Boolean(transfer)}
+      onClose={onClose}
+      title={transfer.code}
+      subtitle={`${transfer.type} - ${transfer.status}`}
+      icon={<History className="size-5" />}
+      maxWidth="48rem"
+      footer={<button type="button" onClick={onClose} className="h-10 px-4 ml-auto rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Close</button>}
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+        <div><div className="text-xs text-muted-foreground">From</div><div className="mt-1 font-medium">{transfer.sourceWarehouseCode} - {transfer.sourceWarehouseName}</div></div>
+        <div><div className="text-xs text-muted-foreground">To</div><div className="mt-1 font-medium">{transfer.destinationWarehouseCode ? `${transfer.destinationWarehouseCode} - ${transfer.destinationWarehouseName}` : "Internal movement"}</div></div>
+        <div><div className="text-xs text-muted-foreground">Created by</div><div className="mt-1 font-medium">{transfer.createdBy}</div></div>
+        <div><div className="text-xs text-muted-foreground">Assigned manager</div><div className="mt-1 font-medium">{transfer.assignedBy || "Unassigned"}</div></div>
+      </div>
+
+      {transfer.remark && <div className="mt-5 border-y border-border/60 py-4 text-sm text-muted-foreground">{transfer.remark}</div>}
+
+      <section className="mt-5">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Items</div>
+        <div className="border border-border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground"><tr><th className="text-left p-3">SKU</th><th className="text-left p-3">Product</th><th className="text-right p-3">Quantity</th></tr></thead>
+            <tbody>{transfer.lines.map((line) => <tr key={line.sku} className="border-t border-border/60"><td className="p-3 font-mono text-xs">{line.sku}</td><td className="p-3">{line.productName}</td><td className="p-3 text-right font-semibold">{line.quantity}</td></tr>)}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5"><History className="size-3.5" /> Processing history</div>
+        {isLoading ? <div className="text-sm text-muted-foreground">Loading history...</div> : (
+          <div className="border-l-2 border-border/60 ml-2 space-y-5">
+            {history.slice().reverse().map((event) => (
+              <div key={event.id} className="relative pl-5">
+                <div className="absolute -left-[7px] top-1 size-3 rounded-full bg-primary border-2 border-background" />
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                  <div><div className="font-medium text-sm">{event.newStatus}</div><div className="text-xs text-muted-foreground mt-1">By {event.approverName || "Unknown"}{event.note ? ` - ${event.note}` : ""}</div></div>
+                  {event.createdAt && <div className="text-[11px] text-muted-foreground flex items-center gap-1"><Clock className="size-3" />{new Date(event.createdAt).toLocaleString()}</div>}
+                </div>
+              </div>
+            ))}
+            {history.length === 0 && <div className="pl-5 text-sm text-muted-foreground">No history recorded.</div>}
+          </div>
+        )}
+      </section>
+    </ModalShell>
+  );
+}
+
+function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer: Transfer | null; onClose: () => void }) {
   const { activeWarehouseId, canSwitchWarehouse } = useApp();
   const queryClient = useQueryClient();
   const [type, setType] = useState<"cross" | "internal">("cross");
@@ -341,16 +463,30 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
 
   useEffect(() => {
     if (!open) return;
+    if (transfer) {
+      const sourceLocation = transfer.remark?.split(" | ").find((part) => part.startsWith("From: "))?.slice(6) ?? "";
+      const destinationLocation = transfer.remark?.split(" | ").find((part) => part.startsWith("To: "))?.slice(4) ?? "";
+      const note = transfer.remark?.split(" | ").filter((part) => !part.startsWith("From: ") && !part.startsWith("To: ")).join(" | ") ?? "";
+      setType(transfer.type === "Cross-Warehouse" ? "cross" : "internal");
+      setSourceWarehouse(String(transfer.sourceWarehouseId));
+      setDestWarehouse(transfer.destinationWarehouseId ? String(transfer.destinationWarehouseId) : "");
+      setAssignedById(transfer.assignedById ? String(transfer.assignedById) : "");
+      setSourceZone(sourceLocation);
+      setDestZone(destinationLocation);
+      setRemark(note);
+      setLines(transfer.lines.map((line) => ({ sku: line.sku, qty: line.quantity })));
+      return;
+    }
     const activeSelection = activeWarehouses.some((w: any) => String(w.id) === String(activeWarehouseId))
       ? activeWarehouseId
       : canSwitchWarehouse ? activeWarehouses[0]?.id : "";
     const defaultWarehouse = activeSelection ?? "";
     setSourceWarehouse(String(defaultWarehouse));
-  }, [activeWarehouseId, canSwitchWarehouse, open, warehouses]);
+  }, [activeWarehouseId, canSwitchWarehouse, open, transfer, warehouses]);
 
   const availableProducts = products.filter((p: any) => String(p.warehouseId) === String(sourceWarehouse) && p.stock > 0);
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async () => {
       const cleanLines = lines.filter((line) => line.sku && line.qty > 0);
       if (!sourceWarehouse) throw new Error("Select a source warehouse.");
@@ -368,7 +504,9 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
         remark,
         lines: cleanLines.map((line) => ({ sku: line.sku, quantity: Number(line.qty) })),
       };
-      const res = await api.post("/transfers", payload);
+      const res = transfer
+        ? await api.put(`/transfers/${transfer.id}`, payload)
+        : await api.post("/transfers", payload);
       return res.data;
     },
     onSuccess: () => {
@@ -376,7 +514,11 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
       handleClose();
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || err.message || "Could not create transfer.");
+      toast.error(
+        err.response?.data?.message
+          || err.message
+          || "Could not save transfer."
+      );
     },
   });
 
@@ -406,6 +548,7 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
     setLines((l) => l.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
 
   const handleClose = () => {
+    setType("cross");
     setDestWarehouse("");
     setAssignedById("");
     setSourceZone("");
@@ -419,15 +562,15 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
     <ModalShell
       open={open}
       onClose={handleClose}
-      title="New Transfer"
-      subtitle="Record internal product movements"
+      title={transfer ? `Edit ${transfer.code}` : "New Transfer"}
+      subtitle={transfer ? "Update a pending transfer before dispatch" : "Record internal product movements"}
       icon={<ArrowRightLeft className="size-5" />}
       maxWidth="52rem"
       footer={
         <>
-          <button onClick={handleClose} type="button" disabled={createMutation.isPending} className="h-10 px-4 ml-auto rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
-          <button onClick={() => createMutation.mutate()} type="button" disabled={createMutation.isPending} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>
-            {createMutation.isPending ? "Creating..." : "Confirm Transfer"}
+          <button onClick={handleClose} type="button" disabled={saveMutation.isPending} className="h-10 px-4 ml-auto rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+          <button onClick={() => saveMutation.mutate()} type="button" disabled={saveMutation.isPending} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>
+            {saveMutation.isPending ? "Saving..." : transfer ? "Save changes" : "Confirm Transfer"}
           </button>
         </>
       }
@@ -476,7 +619,7 @@ function AddTransferModal({ open, onClose }: { open: boolean; onClose: () => voi
           </>
         )}
         <Field label="Date" required><input type="date" className={inputCls} value={new Date().toISOString().slice(0, 10)} readOnly /></Field>
-        <Field label="Assigned manager">
+        <Field label="Responsible manager">
           <select className={selectCls} value={assignedById} onChange={(e) => setAssignedById(e.target.value)}>
             <option value="">No assignee</option>
             {users

@@ -34,6 +34,7 @@ public class TransferDTO {
     private String destinationWarehouseCode;
     private String destinationWarehouseName;
     private String createdBy;
+    private Long assignedById;
     private String assignedBy;
     private Long totalQuantity;
     private List<TransferLineDTO> lines;
@@ -59,6 +60,7 @@ public class TransferDTO {
                 .destinationWarehouseCode(transfer.getWarehouseDestination() != null ? transfer.getWarehouseDestination().getCode() : "")
                 .destinationWarehouseName(transfer.getWarehouseDestination() != null ? transfer.getWarehouseDestination().getWarehouseName() : "")
                 .createdBy(safeUserName(transfer.getCreatedByUser(), transfer.getLegacyUser()))
+                .assignedById(transfer.getAssignedByUser() != null ? transfer.getAssignedByUser().getId() : null)
                 .assignedBy(safeUserName(transfer.getAssignedByUser()))
                 .totalQuantity(total)
                 .lines(lineDTOs)
