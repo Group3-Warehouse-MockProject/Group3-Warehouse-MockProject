@@ -312,16 +312,43 @@ public class InventoryCheckController {
                     .build();
             approvalHistoryRepository.save(history);
 
-            if ("COMPLETED".equals(newStatus) && saved.getAssignedUser() != null) {
-                NotificationEventDTO event = NotificationEventDTO.builder()
-                        .id(java.util.UUID.randomUUID().toString())
-                        .userId(saved.getAssignedUser().getId().toString())
-                        .title("Inventory Check Completed")
-                        .message("Inventory check #" + saved.getId() + " was completed and closed by Manager " + user.getUsername())
-                        .type("SUCCESS")
-                        .createdAt(java.time.Instant.now().toString())
-                        .build();
-                eventPublisher.publishEvent(event);
+            if ("COMPLETED".equals(newStatus)) {
+                // Tự động cập nhật lại số lượng tồn kho thực tế vào bảng inventories / product khi chốt phiếu COMPLETED
+                if (saved.getDetails() != null && saved.getWarehouse() != null) {
+                    Long warehouseId = saved.getWarehouse().getId();
+                    for (InventoryCheckDetail d : saved.getDetails()) {
+                        if (d.getProduct() != null && d.getActualQuantity() != null) {
+                            Long productId = d.getProduct().getId();
+                            Long actualQty = d.getActualQuantity();
+                            
+                            Inventory inv = inventoryRepository.findByWarehouseIdAndProductId(warehouseId, productId)
+                                    .orElse(null);
+                            if (inv != null) {
+                                inv.setQuantity(actualQty);
+                                inventoryRepository.save(inv);
+                            } else {
+                                Inventory newInv = Inventory.builder()
+                                        .warehouse(saved.getWarehouse())
+                                        .product(d.getProduct())
+                                        .quantity(actualQty)
+                                        .build();
+                                inventoryRepository.save(newInv);
+                            }
+                        }
+                    }
+                }
+
+                if (saved.getAssignedUser() != null) {
+                    NotificationEventDTO event = NotificationEventDTO.builder()
+                            .id(java.util.UUID.randomUUID().toString())
+                            .userId(saved.getAssignedUser().getId().toString())
+                            .title("Inventory Check Completed")
+                            .message("Inventory check #" + saved.getId() + " was completed and closed by Manager " + user.getUsername())
+                            .type("SUCCESS")
+                            .createdAt(java.time.Instant.now().toString())
+                            .build();
+                    eventPublisher.publishEvent(event);
+                }
             }
         }
 
