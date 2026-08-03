@@ -32,22 +32,7 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const { activeWarehouseId, currentUser } = useApp();
   
-  const { data: inventoryData, isLoading } = useQuery({
-    queryKey: ["inventory", activeWarehouseId],
-    queryFn: async () => {
-      const res = await api.get("/inventory", {
-        params: {
-          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
-          page: 0,
-          size: 100, // Dashboard summary only needs a reasonable top-N
-        }
-      });
-      // Backend now returns PageResponse; extract content array
-      return (res.data?.content ?? res.data) as any[];
-    }
-  });
-
-  const { data: dashboardData } = useQuery({
+  const { data: dashboardData, isLoading } = useQuery({
     queryKey: ["dashboard", activeWarehouseId],
     queryFn: async () => {
       const res = await api.get("/dashboard", {
@@ -70,7 +55,7 @@ function Dashboard() {
     return warehouses.find((w: any) => w.id === id)?.code || id;
   };
 
-  const scopedProducts = inventoryData || [];
+
     
   const scopedMovements = dashboardData?.movements || [];
 
@@ -89,18 +74,14 @@ function Dashboard() {
   const pendingOrders = dashboardData?.pendingOrders || 0;
   const weeklyFlow = dashboardData?.weeklyFlow || [];
 
-  const categoryMap = new Map();
-  scopedProducts.forEach((p: any) => {
-    categoryMap.set(p.category, (categoryMap.get(p.category) || 0) + p.stock);
-  });
-  const categoryShare = Array.from(categoryMap.entries()).map(([name, value]) => ({ name, value }));
+  const categoryShare = dashboardData?.categoryShare ?? [];
 
   const kpis = [
-    { label: "Total SKUs", value: scopedProducts.length.toString(), delta: "+3 this week", icon: Package, tone: "primary" as const },
-    { label: "Units in stock", value: scopedProducts.reduce((s: number, p: any) => s + p.stock, 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" as const },
+    { label: "Total SKUs", value: (dashboardData?.totalSKUs ?? 0).toString(), delta: "+3 this week", icon: Package, tone: "primary" as const },
+    { label: "Units in stock", value: (dashboardData?.totalUnits ?? 0).toLocaleString(), delta: "+128 units", icon: Boxes, tone: "accent" as const },
     isStaff 
       ? { label: "Pending Orders", value: pendingOrders.toString(), delta: "Action required", icon: ClipboardList, tone: "warning" as const }
-      : { label: "Inventory value", value: formatVND(scopedProducts.reduce((s: number, p: any) => s + p.stock * p.cost, 0)), delta: "+2.4%", icon: TrendingUp, tone: "primary" as const },
+      : { label: "Inventory value", value: formatVND(dashboardData?.inventoryValue ?? 0), delta: "+2.4%", icon: TrendingUp, tone: "primary" as const },
     { label: "Low stock", value: lowStock.length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" as const },
   ];
 

@@ -5,11 +5,11 @@ import { useApp } from "@/lib/app-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search, LayoutGrid, List } from "lucide-react";
+import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search, LayoutGrid, List, Pencil, Trash2, AlertCircle } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import * as XLSX from "xlsx";
+
 
 export const Route = createFileRoute("/products")({
   head: () => ({ meta: [{ title: "Products — TechStock" }] }),
@@ -40,11 +40,13 @@ function ProductsPage() {
   useEffect(() => { setPage(0); }, [q, filterCategory, filterStatus, filterCostMin, filterCostMax, filterPriceMin, filterPriceMax, activeWarehouseId]);
 
   const { data: pageData, isLoading, error } = useQuery({
-    queryKey: ["products", activeWarehouseId, page],
+    queryKey: ["products", activeWarehouseId, page, q, filterCategory],
     queryFn: async () => {
       const res = await api.get("/products", {
         params: {
           ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          ...(q ? { search: q } : {}),
+          ...(filterCategory ? { category: filterCategory } : {}),
           page,
           size: limit,
         }
@@ -60,6 +62,16 @@ function ProductsPage() {
   const productData = pageData?.content ?? [];
   const totalPages = pageData?.totalPages ?? 1;
   const totalElements = pageData?.totalElements ?? 0;
+
+  const { data: productStats } = useQuery({
+    queryKey: ["product-stats", activeWarehouseId],
+    queryFn: async () => {
+      const res = await api.get("/products/stats", {
+        params: activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}
+      });
+      return res.data as { totalSKUs: number; totalUnits: number; lowStockCount: number; inventoryValue: number };
+    }
+  });
 
   const { data: warehouses } = useQuery({
     queryKey: ["warehouses"],
@@ -130,41 +142,57 @@ function ProductsPage() {
     return matchesQ && matchesCategory && matchesStatus && matchesCost && matchesPrice;
   });
 
-  const units = list.reduce((s: number, p: any) => s + p.stock, 0);
-  const low = list.filter((p: any) => p.stock < p.reorder).length;
-  const value = list.reduce((s: number, p: any) => s + p.stock * p.cost, 0);
+  const units = productStats?.totalUnits ?? list.reduce((s: number, p: any) => s + p.stock, 0);
+  const low = productStats?.lowStockCount ?? list.filter((p: any) => p.stock < p.reorder).length;
+  const value = productStats?.inventoryValue ?? list.reduce((s: number, p: any) => s + p.stock * p.cost, 0);
 
   if (isLoading) return <AppShell><div className="p-8">Loading data...</div></AppShell>;
   if (error) return <AppShell><div className="p-8 text-destructive">Error loading data</div></AppShell>;
 
-  const handleExport = () => {
-    if (list.length === 0) return;
-    const headers = ["SKU", "Product Name", "Brand", "Category", "Warehouse", "Location", "Stock", "Cost", "Price"];
-    const csvContent = [
-      headers.join(","),
-      ...list.map((p: any) =>
-        [
-          p.sku,
-          `"${p.name.replace(/"/g, '""')}"`,
-          p.brand,
-          p.category,
-          getWarehouseCode(p.warehouseId),
-          p.location,
-          p.stock,
-          p.cost,
-          p.price
-        ].join(",")
-      )
-    ].join("\n");
+  const handleExport = async () => {
+    try {
+      // Fetch all products for export (not just current page)
+      const res = await api.get("/products", {
+        params: {
+          ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
+          ...(q ? { search: q } : {}),
+          ...(filterCategory ? { category: filterCategory } : {}),
+          page: 0,
+          size: totalElements || 10000,
+        }
+      });
+      const allProducts = res.data?.content ?? [];
+      if (allProducts.length === 0) return;
 
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `products_export_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const headers = ["SKU", "Product Name", "Brand", "Category", "Warehouse", "Location", "Stock", "Cost", "Price"];
+      const csvContent = [
+        headers.join(","),
+        ...allProducts.map((p: any) =>
+          [
+            p.sku,
+            `"${p.name.replace(/"/g, '""')}"`,
+            p.brand,
+            p.category,
+            getWarehouseCode(p.warehouseId),
+            p.location,
+            p.stock,
+            p.cost,
+            p.price
+          ].join(",")
+        )
+      ].join("\n");
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `products_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      toast.error("Failed to export products");
+    }
   };
 
   return (
@@ -469,6 +497,51 @@ function ProductsPage() {
 
 function ProductDetailModal({ product, warehouses, onClose }: { product: any; warehouses: any[]; onClose: () => void }) {
   if (!product) return null;
+
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmHardDelete, setConfirmHardDelete] = useState(false);
+  const queryClient = useQueryClient();
+  const { currentUser } = useApp();
+  const isAdmin = currentUser?.role === "Admin";
+  const canEdit = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
+  const canDelete = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => api.put(`/products/${product.id || product.sku}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-stats"] });
+      toast.success("Product updated successfully");
+      setEditing(false);
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to update product"),
+  });
+
+  const softDeleteMutation = useMutation({
+    mutationFn: () => api.delete(`/products/${product.id || product.sku}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-stats"] });
+      toast.success("Product deactivated");
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to delete product"),
+  });
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: () => api.delete(`/products/${product.id || product.sku}/hard`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-stats"] });
+      toast.success("Product permanently deleted");
+      setConfirmHardDelete(false);
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to permanently delete product"),
+  });
+
   const out = product.stock === 0;
   const low = product.stock > 0 && product.stock < product.reorder;
 
@@ -484,14 +557,45 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
   };
 
   return (
-    <ModalShell
+    <>
+      <ModalShell
       open={!!product}
       onClose={onClose}
       title="Product Details"
       subtitle={product.name}
       icon={<Package className="size-5" />}
       footer={
-        <button onClick={onClose} className="h-10 px-6 rounded-lg bg-secondary border border-border text-sm hover:bg-muted font-medium">Close</button>
+        <div className="flex items-center gap-2 w-full">
+          {canDelete && (
+            <>
+              <button
+                onClick={() => setDeleting(true)}
+                className="h-10 px-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm hover:bg-destructive/20 flex items-center gap-2"
+              >
+                <Trash2 className="size-3.5" />Deactivate
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setConfirmHardDelete(true)}
+                  className="h-10 px-4 rounded-lg border border-destructive bg-destructive text-destructive-foreground text-sm hover:bg-destructive/90 flex items-center gap-2"
+                >
+                  <Trash2 className="size-3.5" />Delete
+                </button>
+              )}
+            </>
+          )}
+          <div className="flex-1" />
+          {canEdit && (
+            <button
+              onClick={() => setEditing(true)}
+              className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring"
+              style={{ background: "var(--gradient-primary)" }}
+            >
+              <Pencil className="size-3.5" />Edit
+            </button>
+          )}
+          <button onClick={onClose} className="h-10 px-6 rounded-lg bg-secondary border border-border text-sm hover:bg-muted font-medium">Close</button>
+        </div>
       }
     >
       <div className="flex flex-col gap-6">
@@ -578,6 +682,141 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
         </div>
       </div>
     </ModalShell>
+
+      {/* Soft Delete Confirmation */}
+      <ModalShell
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        title="Deactivate Product"
+        subtitle="This will hide the product from listings"
+        icon={<AlertCircle className="size-5" />}
+        maxWidth="28rem"
+        footer={
+          <>
+            <button onClick={() => setDeleting(false)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+            <button
+              onClick={() => softDeleteMutation.mutate()}
+              disabled={softDeleteMutation.isPending}
+              className="h-10 px-5 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90"
+            >
+              {softDeleteMutation.isPending ? "Deactivating..." : "Confirm Deactivate"}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">Are you sure you want to deactivate <strong>{product.name}</strong> ({product.sku})? The product will be hidden but can be restored later.</p>
+      </ModalShell>
+
+      {/* Hard Delete Confirmation */}
+      <ModalShell
+        open={confirmHardDelete}
+        onClose={() => setConfirmHardDelete(false)}
+        title="Permanently Delete Product"
+        subtitle="This action cannot be undone"
+        icon={<AlertCircle className="size-5" />}
+        maxWidth="28rem"
+        footer={
+          <>
+            <button onClick={() => setConfirmHardDelete(false)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+            <button
+              onClick={() => hardDeleteMutation.mutate()}
+              disabled={hardDeleteMutation.isPending}
+              className="h-10 px-5 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90"
+            >
+              {hardDeleteMutation.isPending ? "Deleting..." : "Permanently Delete"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Are you sure you want to <strong className="text-destructive">permanently delete</strong> <strong>{product.name}</strong> ({product.sku})?</p>
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-xs text-destructive">
+            ⚠️ This will remove the product and all associated inventory records. This action cannot be undone.
+          </div>
+        </div>
+      </ModalShell>
+
+      {/* Edit Product Modal */}
+      {editing && (
+        <EditProductModal
+          product={product}
+          onClose={() => setEditing(false)}
+          onSave={(data: any) => updateMutation.mutate(data)}
+          saving={updateMutation.isPending}
+        />
+      )}
+    </>
+  );
+}
+
+function EditProductModal({ product, onClose, onSave, saving }: {
+  product: any;
+  onClose: () => void;
+  onSave: (data: any) => void;
+  saving: boolean;
+}) {
+  const { data: categories } = useQuery({
+    queryKey: ["categories"],
+    queryFn: async () => { const res = await api.get("/categories"); return res.data; }
+  });
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers", "reference"],
+    queryFn: async () => { const res = await api.get("/suppliers", { params: { page: 0, size: 100 } }); return res.data?.content ?? []; },
+    staleTime: 5 * 60_000,
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    onSave({
+      name: fd.get("name"),
+      code: fd.get("code"),
+      specification: fd.get("specification"),
+      cost: Number(fd.get("cost")),
+      price: Number(fd.get("price")),
+      imageUrl: fd.get("imageUrl") || null,
+      categoryId: Number(fd.get("categoryId")),
+      supplierId: Number(fd.get("supplierId")),
+    });
+  };
+
+  return (
+    <ModalShell
+      open={true}
+      onClose={onClose}
+      title="Edit Product"
+      subtitle={product.name}
+      icon={<Pencil className="size-5" />}
+      footer={
+        <>
+          <button onClick={onClose} disabled={saving} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+          <button type="submit" form="edit-product-form" disabled={saving} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </>
+      }
+    >
+      <form id="edit-product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="SKU Code" required><input name="code" className={inputCls} defaultValue={product.sku} required /></Field>
+        <Field label="Supplier" required>
+          <select name="supplierId" className={selectCls} defaultValue={suppliers.find((s: any) => s.name === product.brand)?.id || ""} required>
+            <option value="" disabled>Select supplier</option>
+            {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Product Name" required className="sm:col-span-2"><input name="name" className={inputCls} defaultValue={product.name} required /></Field>
+        <Field label="Image URL" className="sm:col-span-2"><input name="imageUrl" className={inputCls} defaultValue={product.imageUrl || ""} /></Field>
+        <Field label="Specification" className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} /></Field>
+        <Field label="Category" required>
+          <select name="categoryId" className={selectCls} defaultValue={categories?.find((c: any) => c.name === product.category)?.id || ""} required>
+            <option value="" disabled>Select category</option>
+            {categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Cost (₫)"><input name="cost" type="number" className={inputCls} defaultValue={product.cost} min={0} /></Field>
+        <Field label="Sell Price (₫)" className="sm:col-span-2"><input name="price" type="number" className={inputCls} defaultValue={product.price} min={0} /></Field>
+      </form>
+    </ModalShell>
   );
 }
 
@@ -605,9 +844,19 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
 
   const occupiedLocations = new Set(occupiedLocationsData);
 
-  const availableLocations = locations.filter((loc: any) => {
-    const locStr = `${loc.zoneCode}-${loc.rackCode}-${loc.binCode}`;
-    return !occupiedLocations.has(locStr);
+  const availableLocations = (locations || []).filter((loc: any) => {
+    if (!selectedWarehouse) return true;
+    if (String(loc.warehouseId) !== String(selectedWarehouse)) return false;
+
+    const isInactive = (loc.effectiveStatus || loc.status || "ACTIVE").toUpperCase() === "INACTIVE";
+    if (isInactive) return false;
+
+    const currentQty = loc.currentQuantity || 0;
+    const maxCap = loc.maxCapacity != null ? loc.maxCapacity : null;
+    const isFull = maxCap != null && currentQty >= maxCap;
+    if (isFull) return false;
+
+    return true;
   });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -679,11 +928,22 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
         <Field label="Bin location">
           <select name="locationId" className={selectCls} defaultValue="">
             <option value="">No location assigned</option>
-            {availableLocations.map((loc: any) => (
-              <option key={loc.id} value={loc.id}>
-                Zone {loc.zoneCode} - Rack {loc.rackCode} - Bin {loc.binCode}
-              </option>
-            ))}
+            {availableLocations.map((loc: any) => {
+              const currentQty = loc.currentQuantity || 0;
+              const maxCap = loc.maxCapacity != null ? loc.maxCapacity : null;
+              let capacityLabel = "";
+              if (maxCap != null) {
+                capacityLabel = ` (${currentQty}/${maxCap})`;
+              } else if (currentQty > 0) {
+                capacityLabel = ` (${currentQty} items)`;
+              }
+
+              return (
+                <option key={loc.id} value={loc.id}>
+                  Rack {loc.rackCode} - Bin {loc.binCode}{capacityLabel}
+                </option>
+              );
+            })}
           </select>
         </Field>
         <Field label="Initial stock"><input name="initialStock" type="number" className={inputCls} defaultValue={0} min={0} /></Field>
@@ -715,7 +975,8 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
     const templateData = [
       {
         Code: "SKU-001",
@@ -745,6 +1006,7 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     setLoading(true);
     try {
       const data = await file.arrayBuffer();
+      const XLSX = await import("xlsx");
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);

@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Package,
+  Layers,
   ArrowDownToLine,
   ArrowUpFromLine,
   Truck,
@@ -39,6 +40,7 @@ interface NavItem {
 const nav: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/products", label: "Products", icon: Package },
+  { to: "/categories", label: "Categories", icon: Layers },
   { to: "/inbound", label: "Inbound", icon: ArrowDownToLine },
   { to: "/outbound", label: "Outbound", icon: ArrowUpFromLine },
   { to: "/stocktake", label: "Stocktake", icon: ClipboardCheck },

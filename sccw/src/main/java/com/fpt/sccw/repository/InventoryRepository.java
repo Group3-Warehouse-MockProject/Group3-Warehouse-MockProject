@@ -17,6 +17,7 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
     Page<Inventory> findByWarehouseId(Long warehouseId, Pageable pageable);
     Optional<Inventory> findByWarehouseIdAndProductId(Long warehouseId, Long productId);
     Optional<Inventory> findByProductIdAndWarehouseId(Long productId, Long warehouseId);
+    List<Inventory> findAllByProductIdAndWarehouseId(Long productId, Long warehouseId);
 
     /**
      * Fetch all inventory rows for a warehouse, eagerly loading product → category,

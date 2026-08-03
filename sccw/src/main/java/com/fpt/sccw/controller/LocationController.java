@@ -24,12 +24,11 @@ public class LocationController {
     private final InventoryRepository inventoryRepository;
     private final WarehouseRepository warehouseRepository;
 
-    /** GET /api/locations — lấy tất cả, tuỳ chọn filter theo warehouseId, zoneCode, rackCode */
+    /** GET /api/locations — lấy tất cả, tuỳ chọn filter theo warehouseId, rackCode */
     @GetMapping
     @Transactional(readOnly = true)
     public ResponseEntity<List<LocationDTO>> getAllLocations(
             @RequestParam(required = false) Long warehouseId,
-            @RequestParam(required = false) String zoneCode,
             @RequestParam(required = false) String rackCode) {
 
         List<Location> locations = locationRepository.findAll();
@@ -37,11 +36,6 @@ public class LocationController {
         if (warehouseId != null) {
             locations = locations.stream()
                     .filter(l -> l.getWarehouse() != null && l.getWarehouse().getId().equals(warehouseId))
-                    .collect(Collectors.toList());
-        }
-        if (zoneCode != null && !zoneCode.isBlank()) {
-            locations = locations.stream()
-                    .filter(l -> zoneCode.equalsIgnoreCase(l.getZoneCode()))
                     .collect(Collectors.toList());
         }
         if (rackCode != null && !rackCode.isBlank()) {
@@ -70,7 +64,6 @@ public class LocationController {
     @PostMapping
     @Transactional
     public ResponseEntity<?> createLocation(@RequestBody Map<String, Object> body) {
-        String zoneCode    = getString(body, "zoneCode");
         String rackCode    = getString(body, "rackCode");
         String binCode     = getString(body, "binCode");
         String status      = getString(body, "status");
@@ -80,36 +73,26 @@ public class LocationController {
         if (rackCode == null || binCode == null) {
             return ResponseEntity.badRequest().body("rackCode and binCode are required");
         }
-
-        Warehouse warehouse = null;
-        if (warehouseId != null) {
-            warehouse = warehouseRepository.findById(warehouseId).orElse(null);
+        if (warehouseId == null) {
+            return ResponseEntity.badRequest().body("warehouseId is required");
         }
 
-        // If zoneCode is not provided, default to warehouse code or "WH"
-        if (zoneCode == null || zoneCode.isBlank()) {
-            zoneCode = (warehouse != null && warehouse.getCode() != null) ? warehouse.getCode() : "WH";
+        Warehouse warehouse = warehouseRepository.findById(warehouseId).orElse(null);
+        if (warehouse == null) {
+            return ResponseEntity.badRequest().body("Warehouse not found with id: " + warehouseId);
         }
-
-        final Long finalWarehouseId = warehouse != null ? warehouse.getId() : null;
-        final String finalZoneCode = zoneCode;
 
         // Check duplicate within the same warehouse
-        boolean exists = locationRepository.findAll().stream().anyMatch(l ->
-                rackCode.equalsIgnoreCase(l.getRackCode()) &&
-                binCode.equalsIgnoreCase(l.getBinCode()) &&
-                ((finalWarehouseId == null && l.getWarehouse() == null) ||
-                 (finalWarehouseId != null && l.getWarehouse() != null && l.getWarehouse().getId().equals(finalWarehouseId)))
-        );
+        boolean exists = locationRepository.existsByWarehouseIdAndRackCodeIgnoreCaseAndBinCodeIgnoreCase(
+                warehouseId, rackCode.trim(), binCode.trim());
         if (exists) {
             return ResponseEntity.badRequest().body("Location Rack " + rackCode + " - Bin " + binCode + " already exists in this warehouse");
         }
 
         Location location = Location.builder()
-                .zoneCode(finalZoneCode.toUpperCase())
-                .rackCode(rackCode.toUpperCase())
-                .binCode(binCode.toUpperCase())
-                .status(status != null ? status.toUpperCase() : "ACTIVE")
+                .rackCode(rackCode.trim().toUpperCase())
+                .binCode(binCode.trim().toUpperCase())
+                .status(status != null ? status.trim().toUpperCase() : "ACTIVE")
                 .maxCapacity(maxCapacity)
                 .warehouse(warehouse)
                 .build();
@@ -125,28 +108,43 @@ public class LocationController {
         Location location = locationRepository.findById(id).orElse(null);
         if (location == null) return ResponseEntity.notFound().build();
 
-        String zoneCode    = getString(body, "zoneCode");
         String rackCode    = getString(body, "rackCode");
         String binCode     = getString(body, "binCode");
         String status      = getString(body, "status");
         Long maxCapacity   = getLong(body, "maxCapacity");
         Long warehouseId   = getLong(body, "warehouseId");
 
+        Warehouse warehouse = location.getWarehouse();
         if (warehouseId != null) {
-            Warehouse warehouse = warehouseRepository.findById(warehouseId).orElse(null);
+            warehouse = warehouseRepository.findById(warehouseId).orElse(null);
+            if (warehouse == null) return ResponseEntity.badRequest().body("Warehouse not found with id: " + warehouseId);
             location.setWarehouse(warehouse);
         }
 
-        if (zoneCode != null && !zoneCode.isBlank()) {
-            location.setZoneCode(zoneCode.toUpperCase());
-        } else if (location.getWarehouse() != null && location.getWarehouse().getCode() != null) {
-            location.setZoneCode(location.getWarehouse().getCode().toUpperCase());
+        String targetRack = rackCode != null ? rackCode.trim().toUpperCase() : location.getRackCode();
+        String targetBin  = binCode  != null ? binCode.trim().toUpperCase()  : location.getBinCode();
+
+        if (warehouse != null && (!targetRack.equalsIgnoreCase(location.getRackCode()) || !targetBin.equalsIgnoreCase(location.getBinCode()))) {
+            boolean exists = locationRepository.existsByWarehouseIdAndRackCodeIgnoreCaseAndBinCodeIgnoreCase(
+                    warehouse.getId(), targetRack, targetBin);
+            if (exists) {
+                return ResponseEntity.badRequest().body("Location Rack " + targetRack + " - Bin " + targetBin + " already exists in this warehouse");
+            }
         }
 
-        if (rackCode  != null) location.setRackCode(rackCode.toUpperCase());
-        if (binCode   != null) location.setBinCode(binCode.toUpperCase());
-        if (status    != null) location.setStatus(status.toUpperCase());
-        if (maxCapacity != null) location.setMaxCapacity(maxCapacity);
+        if (maxCapacity != null) {
+            long currentStock = inventoryRepository.findAll().stream()
+                    .filter(inv -> inv.getLocation() != null && inv.getLocation().getId().equals(id))
+                    .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L).sum();
+            if (maxCapacity < currentStock) {
+                return ResponseEntity.badRequest().body("Location max capacity (" + maxCapacity + ") cannot be less than current stock (" + currentStock + ")");
+            }
+            location.setMaxCapacity(maxCapacity);
+        }
+
+        if (rackCode  != null) location.setRackCode(targetRack);
+        if (binCode   != null) location.setBinCode(targetBin);
+        if (status    != null) location.setStatus(status.trim().toUpperCase());
 
         Location saved = locationRepository.save(location);
         return ResponseEntity.ok(LocationDTO.fromEntity(saved));
@@ -170,13 +168,11 @@ public class LocationController {
     @Transactional
     public ResponseEntity<?> toggleRackStatus(
             @RequestParam(required = false) Long warehouseId,
-            @RequestParam(required = false) String zoneCode,
             @RequestParam String rackCode,
             @RequestParam(required = false) String targetStatus) {
 
         List<Location> locations = locationRepository.findAll().stream()
                 .filter(l -> (warehouseId == null || (l.getWarehouse() != null && l.getWarehouse().getId().equals(warehouseId)))
-                        && (zoneCode == null || zoneCode.isBlank() || zoneCode.equalsIgnoreCase(l.getZoneCode()))
                         && rackCode.equalsIgnoreCase(l.getRackCode()))
                 .collect(Collectors.toList());
 
@@ -211,13 +207,20 @@ public class LocationController {
         Location location = locationRepository.findById(id).orElse(null);
         if (location == null) return ResponseEntity.notFound().build();
 
-        // Unlink inventories trước khi xóa
-        inventoryRepository.findAll().stream()
+        // Check if location currently contains stock
+        List<com.fpt.sccw.entity.Inventory> invList = inventoryRepository.findAll().stream()
                 .filter(inv -> inv.getLocation() != null && inv.getLocation().getId().equals(id))
-                .forEach(inv -> {
-                    inv.setLocation(null);
-                    inventoryRepository.save(inv);
-                });
+                .collect(Collectors.toList());
+
+        long totalQty = invList.stream().mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L).sum();
+        if (totalQty > 0) {
+            return ResponseEntity.badRequest().body("Cannot delete location containing " + totalQty + " items in stock");
+        }
+
+        invList.forEach(inv -> {
+            inv.setLocation(null);
+            inventoryRepository.save(inv);
+        });
 
         locationRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("message", "Location deleted successfully"));

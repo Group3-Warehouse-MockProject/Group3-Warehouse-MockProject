@@ -25,6 +25,7 @@ public class WarehouseController {
 
     private final WarehouseRepository warehouseRepository;
     private final UserRepository userRepository;
+    private final com.fpt.sccw.repository.InventoryRepository inventoryRepository;
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -139,6 +140,15 @@ public class WarehouseController {
             return ResponseEntity.status(404).body("Warehouse not found: " + id);
         }
 
+        // Kiểm tra sức chứa mới không được nhỏ hơn tổng tồn kho hiện tại
+        if (request.getCapacity() != null) {
+            long currentTotalStock = inventoryRepository.findByWarehouseId(id).stream()
+                    .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L).sum();
+            if (request.getCapacity() < currentTotalStock) {
+                return ResponseEntity.badRequest().body("Warehouse capacity cannot be less than current total stock (" + currentTotalStock + ")");
+            }
+        }
+
         // Cập nhật thông tin cơ bản
         warehouse.setWarehouseName(request.getName().trim());
         warehouse.setLocation(request.getAddress().trim());
@@ -212,6 +222,14 @@ public class WarehouseController {
         }
 
         String newStatus = "INACTIVE".equalsIgnoreCase(warehouse.getStatus()) ? "ACTIVE" : "INACTIVE";
+        if ("INACTIVE".equals(newStatus)) {
+            long totalStock = inventoryRepository.findByWarehouseId(id).stream()
+                    .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L).sum();
+            if (totalStock > 0) {
+                return ResponseEntity.badRequest().body("Cannot deactivate warehouse containing " + totalStock + " items in stock");
+            }
+        }
+
         warehouse.setStatus(newStatus);
         Warehouse saved = warehouseRepository.save(warehouse);
 
