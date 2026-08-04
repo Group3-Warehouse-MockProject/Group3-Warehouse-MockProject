@@ -67,6 +67,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
+  // Sync activeWarehouseId when currentUser changes (e.g. cross-tab login)
+  useEffect(() => {
+    if (currentUser && !canSwitchWarehouse && currentUser.warehouseId) {
+      setActiveWarehouseId(currentUser.warehouseId);
+    }
+  }, [currentUser?.warehouseId, canSwitchWarehouse]);
+
   useEffect(() => {
     if (currentUser?.id) {
       api.get("/users/me")

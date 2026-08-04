@@ -6,6 +6,9 @@ import com.fpt.sccw.dto.response.WeeklyFlowDTO;
 import com.fpt.sccw.entity.*;
 import com.fpt.sccw.repository.TransferRepository;
 import com.fpt.sccw.repository.WarehouseReceiptRepository;
+import com.fpt.sccw.dto.response.CategoryShareDTO;
+import com.fpt.sccw.entity.Inventory;
+import com.fpt.sccw.repository.InventoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +23,7 @@ import java.util.stream.Collectors;
 public class DashboardService {
     private final WarehouseReceiptRepository receiptRepository;
     private final TransferRepository transferRepository;
+    private final InventoryRepository inventoryRepository;
 
     @Transactional(readOnly = true)
     public DashboardDTO getDashboardData(Long warehouseId) {
@@ -156,10 +160,57 @@ public class DashboardService {
             weeklyFlow.add(new WeeklyFlowDTO(dayStr, inMap.get(dayStr), outMap.get(dayStr)));
         }
 
+        // ── Inventory aggregates ──────────────────────────────────────────
+        List<Inventory> allInventory;
+        if (warehouseId != null) {
+            allInventory = inventoryRepository.findByWarehouseIdEager(warehouseId);
+        } else {
+            allInventory = inventoryRepository.findAllEager();
+        }
+
+        long totalSKUs = allInventory.stream()
+                .map(inv -> inv.getProduct().getId())
+                .distinct()
+                .count();
+
+        long totalUnits = allInventory.stream()
+                .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L)
+                .sum();
+
+        java.math.BigDecimal inventoryValue = allInventory.stream()
+                .map(inv -> {
+                    long qty = inv.getQuantity() != null ? inv.getQuantity() : 0L;
+                    java.math.BigDecimal cost = inv.getProduct().getCost() != null ? inv.getProduct().getCost() : java.math.BigDecimal.ZERO;
+                    return cost.multiply(java.math.BigDecimal.valueOf(qty));
+                })
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+
+        long lowStockCount = allInventory.stream()
+                .filter(inv -> inv.getLowStockThreshold() != null && inv.getLowStockThreshold() > 0
+                        && inv.getQuantity() != null && inv.getQuantity() <= inv.getLowStockThreshold())
+                .count();
+
+        // Category share
+        Map<String, Long> catMap = new java.util.HashMap<>();
+        for (Inventory inv : allInventory) {
+            String catName = inv.getProduct().getCategory() != null ? inv.getProduct().getCategory().getName() : "Uncategorized";
+            long qty = inv.getQuantity() != null ? inv.getQuantity() : 0L;
+            catMap.merge(catName, qty, Long::sum);
+        }
+        List<CategoryShareDTO> categoryShare = catMap.entrySet().stream()
+                .map(e -> new CategoryShareDTO(e.getKey(), e.getValue()))
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .collect(Collectors.toList());
+
         return DashboardDTO.builder()
                 .movements(recentMovements)
                 .weeklyFlow(weeklyFlow)
                 .pendingOrders(pendingOrders)
+                .totalSKUs(totalSKUs)
+                .totalUnits(totalUnits)
+                .inventoryValue(inventoryValue)
+                .lowStockCount(lowStockCount)
+                .categoryShare(categoryShare)
                 .build();
     }
 }

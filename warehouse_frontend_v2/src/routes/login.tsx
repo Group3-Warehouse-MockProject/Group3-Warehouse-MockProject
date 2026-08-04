@@ -32,6 +32,8 @@ function LoginPage() {
         localStorage.setItem("token", res.data.token);
         // Force context to re-evaluate or reload window
         window.location.href = "/";
+      } else {
+        setError(res.data.message || "Login failed. Please try again.");
       }
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials. Please try again.");

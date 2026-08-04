@@ -301,6 +301,31 @@ public class InventoryCheckController {
         InventoryCheck saved = inventoryCheckRepository.save(check);
 
         if (!oldStatusStr.equals(newStatus)) {
+            if ("COMPLETED".equals(newStatus)) {
+                Warehouse warehouse = saved.getWarehouse();
+                if (warehouse != null && saved.getDetails() != null) {
+                    for (InventoryCheckDetail detail : saved.getDetails()) {
+                        if (detail.getProduct() == null) continue;
+                        Product product = detail.getProduct();
+                        Inventory inv = inventoryRepository
+                                .findByWarehouseIdAndProductId(warehouse.getId(), product.getId())
+                                .orElse(null);
+                        if (inv != null) {
+                            inv.setQuantity(detail.getActualQuantity() != null ? detail.getActualQuantity() : 0L);
+                            inventoryRepository.save(inv);
+                        } else {
+                            inventoryRepository.save(Inventory.builder()
+                                    .product(product)
+                                    .warehouse(warehouse)
+                                    .quantity(detail.getActualQuantity() != null ? detail.getActualQuantity() : 0L)
+                                    .lowStockThreshold(10L)
+                                    .outOfStockWarningDays(3L)
+                                    .build());
+                        }
+                    }
+                }
+            }
+
             ApprovalHistory history = ApprovalHistory.builder()
                     .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)

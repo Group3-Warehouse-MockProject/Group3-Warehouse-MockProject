@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -79,6 +80,62 @@ public class ProductController {
     }
 
     /**
+     * Returns aggregate product/inventory statistics for the KPI cards.
+     * This avoids the frontend calculating stats from paginated data.
+     */
+    @GetMapping("/stats")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getProductStats(
+            @RequestParam(required = false) Long warehouseIdParam) {
+
+        User user = resolveUser();
+        if (user == null) return ResponseEntity.status(401).build();
+
+        String roleName = user.getRole().getRoleName().name();
+        Long effectiveWarehouseId = warehouseIdParam;
+        if (!roleName.equals("ADMIN") && !roleName.equals("MANAGER")) {
+            effectiveWarehouseId = user.getWarehouse() != null ? user.getWarehouse().getId() : null;
+        }
+
+        List<Inventory> inventories;
+        if (effectiveWarehouseId != null) {
+            inventories = inventoryRepository.findByWarehouseIdEager(effectiveWarehouseId);
+        } else {
+            inventories = inventoryRepository.findAllEager();
+        }
+
+        long totalSKUs = inventories.stream()
+                .map(inv -> inv.getProduct().getId())
+                .distinct()
+                .count();
+
+        long totalUnits = inventories.stream()
+                .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L)
+                .sum();
+
+        long lowStockCount = inventories.stream()
+                .filter(inv -> inv.getLowStockThreshold() != null && inv.getLowStockThreshold() > 0
+                        && inv.getQuantity() != null && inv.getQuantity() <= inv.getLowStockThreshold())
+                .count();
+
+        java.math.BigDecimal inventoryValue = inventories.stream()
+                .map(inv -> {
+                    long qty = inv.getQuantity() != null ? inv.getQuantity() : 0L;
+                    java.math.BigDecimal cost = inv.getProduct().getCost() != null
+                            ? inv.getProduct().getCost() : java.math.BigDecimal.ZERO;
+                    return cost.multiply(java.math.BigDecimal.valueOf(qty));
+                })
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+
+        return ResponseEntity.ok(java.util.Map.of(
+                "totalSKUs", totalSKUs,
+                "totalUnits", totalUnits,
+                "lowStockCount", lowStockCount,
+                "inventoryValue", inventoryValue
+        ));
+    }
+
+    /**
      * A product list page contains one row per product. For a warehouse-scoped
      * request its matching inventory is displayed; in the all-warehouses scope
      * stock is aggregated across inventories rather than expanding product × warehouse.
@@ -120,11 +177,12 @@ public class ProductController {
         return ResponseEntity.ok(inventoryRepository.findByWarehouseId(warehouseId).stream()
                 .map(Inventory::getLocation)
                 .filter(java.util.Objects::nonNull)
-                .map(location -> location.getZoneCode() + "-" + location.getRackCode() + "-" + location.getBinCode())
+                .map(location -> location.getRackCode() + "-" + location.getBinCode())
                 .distinct()
                 .toList());
     }
 
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER')")
     @PostMapping
     @Transactional
     public ResponseEntity<ProductDTO> saveNewProduct(@RequestBody ProductRequest request) {
@@ -177,6 +235,7 @@ public class ProductController {
         return ResponseEntity.ok(ProductDTO.fromEntity(savedProduct, savedInventory));
     }
 
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER')")
     @PostMapping("/bulk")
     @Transactional
     public ResponseEntity<List<ProductDTO>> saveBulkProducts(@RequestBody List<ProductRequest> requests) {
@@ -226,9 +285,92 @@ public class ProductController {
         return ResponseEntity.ok(result);
     }
 
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER')")
+    @PutMapping("/{id}")
+    @Transactional
+    public ResponseEntity<?> updateProduct(@PathVariable Long id, @RequestBody ProductRequest request) {
+        Product product = productRepository.findById(id).orElse(null);
+        if (product == null || product.getIsDeleted()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (request.getName() != null) product.setName(request.getName());
+        if (request.getCode() != null) product.setCode(request.getCode());
+        if (request.getSpecification() != null) product.setSpecification(request.getSpecification());
+        if (request.getCost() != null) product.setCost(request.getCost());
+        if (request.getPrice() != null) product.setPrice(request.getPrice());
+        if (request.getImageUrl() != null) product.setImageUrl(request.getImageUrl());
+
+        if (request.getCategoryId() != null) {
+            Category category = categoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> new RuntimeException("Category not found"));
+            product.setCategory(category);
+        }
+        if (request.getSupplierId() != null) {
+            Supplier supplier = supplierRepository.findById(request.getSupplierId())
+                    .orElseThrow(() -> new RuntimeException("Supplier not found"));
+            product.setSupplier(supplier);
+        }
+
+        Product saved = productRepository.save(product);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            activityLogService.log(currentUser, "UPDATE_PRODUCT",
+                    "Updated product " + saved.getCode() + " - " + saved.getName());
+        }
+
+        return ResponseEntity.ok(ProductDTO.fromEntity(saved, null));
+    }
+
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
+    @DeleteMapping("/{id}")
+    @Transactional
+    public ResponseEntity<?> softDeleteProduct(@PathVariable Long id) {
+        Product product = productRepository.findById(id).orElse(null);
+        if (product == null) return ResponseEntity.notFound().build();
+
+        product.setIsDeleted(true);
+        productRepository.save(product);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            activityLogService.log(currentUser, "DELETE_PRODUCT",
+                    "Soft-deleted product " + product.getCode() + " - " + product.getName());
+        }
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @DeleteMapping("/{id}/hard")
+    @Transactional
+    public ResponseEntity<?> hardDeleteProduct(@PathVariable Long id) {
+        Product product = productRepository.findById(id).orElse(null);
+        if (product == null) return ResponseEntity.notFound().build();
+
+        // Remove associated inventory records first
+        inventoryRepository.findAllByProductIdAndWarehouseId(product.getId(), null);
+        List<Inventory> inventories = product.getInventories();
+        if (inventories != null && !inventories.isEmpty()) {
+            inventoryRepository.deleteAll(inventories);
+        }
+
+        productRepository.delete(product);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            activityLogService.log(currentUser, "HARD_DELETE_PRODUCT",
+                    "Permanently deleted product " + product.getCode());
+        }
+
+        return ResponseEntity.noContent().build();
+    }
+
     private User resolveUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return null;
-        return userRepository.findByEmail(auth.getName()).orElse(null);
+        return userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found in database"));
     }
 }

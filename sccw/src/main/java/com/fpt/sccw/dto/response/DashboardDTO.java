@@ -15,4 +15,9 @@ public class DashboardDTO {
     private List<MovementDTO> movements;
     private List<WeeklyFlowDTO> weeklyFlow;
     private Long pendingOrders;
+    private Long totalSKUs;
+    private Long totalUnits;
+    private java.math.BigDecimal inventoryValue;
+    private Long lowStockCount;
+    private java.util.List<CategoryShareDTO> categoryShare;
 }

@@ -94,6 +94,17 @@ function ProfilePage() {
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
+
+    // Validate file size (max 5MB) and type
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setMessage({ type: "error", text: "File too large. Maximum size is 5MB." });
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setMessage({ type: "error", text: "Invalid file type. Please upload an image." });
+      return;
+    }
     
     setUploadingAvatar(true);
     const formData = new FormData();

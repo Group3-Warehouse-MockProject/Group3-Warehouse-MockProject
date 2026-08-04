@@ -407,13 +407,13 @@ public class WarehouseReceiptController {
                         Warehouse warehouse = receipt.getWarehouse();
                         // Verify inventory for all items
                         for (ReceiptDetail d : receipt.getDetails()) {
-                            Inventory inv = inventoryRepository
-                                    .findByProductIdAndWarehouseId(d.getProduct().getId(), warehouse.getId())
-                                    .orElse(null);
-                            if (inv == null || inv.getQuantity() < d.getQuantity()) {
+                            List<Inventory> invList = inventoryRepository
+                                    .findAllByProductIdAndWarehouseId(d.getProduct().getId(), warehouse.getId());
+                            long totalAvailable = invList.stream().mapToLong(i -> i.getQuantity() != null ? i.getQuantity() : 0L).sum();
+                            if (invList.isEmpty() || totalAvailable < d.getQuantity()) {
                                 receipt.setStatus(Status.ReceiptStatus.CANCELLED);
                                 receiptRepository.save(receipt);
-                                return ResponseEntity.badRequest().body("Insufficient inventory for product: " + d.getProduct().getCode() + " (Required: " + d.getQuantity() + "). Outbound request cancelled.");
+                                return ResponseEntity.badRequest().body("Insufficient inventory for product: " + d.getProduct().getCode() + " (Required: " + d.getQuantity() + ", Available: " + totalAvailable + "). Outbound request cancelled.");
                             }
                         }
                         // Subtract inventory
@@ -645,24 +645,43 @@ public class WarehouseReceiptController {
     }
 
     private void adjustInventory(Product product, Warehouse warehouse, Long qty, boolean add) {
-        Inventory inv = inventoryRepository
-                .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
-                .orElse(null);
+        List<Inventory> invList = inventoryRepository
+                .findAllByProductIdAndWarehouseId(product.getId(), warehouse.getId());
 
-        if (inv != null) {
-            long newQty = add
-                    ? inv.getQuantity() + qty
-                    : Math.max(0, inv.getQuantity() - qty);
-            inv.setQuantity(newQty);
-            inventoryRepository.save(inv);
-        } else if (add) {
-            inventoryRepository.save(Inventory.builder()
-                    .product(product)
-                    .warehouse(warehouse)
-                    .quantity(qty)
-                    .lowStockThreshold(10L)
-                    .outOfStockWarningDays(3L)
-                    .build());
+        if (add) {
+            // For adding: use existing record or create new
+            Inventory inv = invList.isEmpty() ? null : invList.get(0);
+            if (inv != null) {
+                inv.setQuantity(inv.getQuantity() + qty);
+                inventoryRepository.save(inv);
+            } else {
+                inventoryRepository.save(Inventory.builder()
+                        .product(product)
+                        .warehouse(warehouse)
+                        .quantity(qty)
+                        .lowStockThreshold(10L)
+                        .outOfStockWarningDays(3L)
+                        .build());
+            }
+        } else {
+            // For deducting: aggregate across all locations
+            if (invList.isEmpty()) {
+                throw new IllegalArgumentException("No inventory record found for product: " + product.getCode());
+            }
+            long totalAvailable = invList.stream().mapToLong(i -> i.getQuantity() != null ? i.getQuantity() : 0L).sum();
+            if (totalAvailable < qty) {
+                throw new IllegalArgumentException("Insufficient inventory for product: " + product.getCode()
+                        + " (Required: " + qty + ", Available: " + totalAvailable + ")");
+            }
+            long remaining = qty;
+            for (Inventory inv : invList) {
+                if (remaining <= 0) break;
+                long available = inv.getQuantity() != null ? inv.getQuantity() : 0L;
+                long deduct = Math.min(available, remaining);
+                inv.setQuantity(available - deduct);
+                remaining -= deduct;
+                inventoryRepository.save(inv);
+            }
         }
     }
 
