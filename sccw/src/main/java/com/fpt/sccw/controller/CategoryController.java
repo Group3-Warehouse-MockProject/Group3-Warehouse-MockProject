@@ -7,6 +7,10 @@ import com.fpt.sccw.repository.CategoryRepository;
 import com.fpt.sccw.repository.UserRepository;
 import com.fpt.sccw.service.ActivityLogService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -29,27 +33,92 @@ public class CategoryController {
 
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<List<CategoryDTO>> getAllCategories() {
-        List<Category> categories = categoryRepository.findAll();
+    public ResponseEntity<Map<String, Object>> getAllCategories(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String categoryGroup,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size) {
 
-        List<CategoryDTO> result = categories.stream()
-                .filter(c -> !c.getIsDeleted())
+        Specification<Category> spec = (root, query, cb) -> cb.conjunction();
+
+        if (search != null && !search.isBlank()) {
+            String q = "%" + search.trim().toLowerCase() + "%";
+            spec = spec.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("name")), q),
+                    cb.like(cb.lower(root.get("code")), q),
+                    cb.like(cb.lower(root.get("description")), q)
+            ));
+        }
+
+        if (categoryGroup != null && !categoryGroup.isBlank()) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("categoryGroup"), categoryGroup));
+        }
+
+        if (status != null && !status.isBlank()) {
+            if ("Active".equalsIgnoreCase(status)) {
+                spec = spec.and((root, query, cb) -> cb.equal(root.get("isDeleted"), false));
+            } else if ("Archived".equalsIgnoreCase(status)) {
+                spec = spec.and((root, query, cb) -> cb.equal(root.get("isDeleted"), true));
+            }
+        }
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Category> categoryPage = categoryRepository.findAll(spec, pageable);
+
+        List<CategoryDTO> content = categoryPage.getContent().stream()
                 .map(CategoryDTO::fromEntity)
                 .collect(Collectors.toList());
 
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(Map.of(
+                "content", content,
+                "totalPages", categoryPage.getTotalPages(),
+                "totalElements", categoryPage.getTotalElements()
+        ));
+    }
+
+    @GetMapping("/stats")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Map<String, Object>> getCategoryStats() {
+        List<Category> all = categoryRepository.findAll();
+        long totalCategories = all.size();
+        long activeCount = all.stream().filter(c -> !Boolean.TRUE.equals(c.getIsDeleted())).count();
+        long archivedCount = all.stream().filter(c -> Boolean.TRUE.equals(c.getIsDeleted())).count();
+        long totalUnitsInStock = all.stream()
+                .filter(c -> !Boolean.TRUE.equals(c.getIsDeleted()))
+                .flatMap(c -> c.getProducts() != null ? c.getProducts().stream() : java.util.stream.Stream.empty())
+                .filter(p -> !Boolean.TRUE.equals(p.getIsDeleted()))
+                .flatMap(p -> p.getInventories() != null ? p.getInventories().stream() : java.util.stream.Stream.empty())
+                .mapToLong(inv -> inv.getQuantity())
+                .sum();
+
+        return ResponseEntity.ok(Map.of(
+                "totalCategories", totalCategories,
+                "activeCount", activeCount,
+                "archivedCount", archivedCount,
+                "totalUnitsInStock", totalUnitsInStock
+        ));
     }
 
     @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
     @PostMapping
     @Transactional
     public ResponseEntity<?> createCategory(@RequestBody Map<String, String> request) {
+        String code = request.get("code");
         String name = request.get("name");
+        String categoryGroup = request.get("categoryGroup");
         String description = request.get("description");
-        String imageUrl = request.get("imageUrl");
+
+        if (code == null || code.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Category code is required"));
+        }
 
         if (name == null || name.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Category name is required"));
+        }
+
+        if (categoryRepository.existsByCode(code.trim().toUpperCase())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Category code '" + code.trim().toUpperCase() + "' already exists"));
         }
 
         if (categoryRepository.existsByName(name.trim())) {
@@ -57,9 +126,10 @@ public class CategoryController {
         }
 
         Category category = Category.builder()
+                .code(code.trim().toUpperCase())
                 .name(name.trim())
+                .categoryGroup(categoryGroup != null ? categoryGroup.trim() : "Components")
                 .description(description)
-                .imageUrl(imageUrl)
                 .isDeleted(false)
                 .build();
 
@@ -68,7 +138,7 @@ public class CategoryController {
         User currentUser = resolveUser();
         if (currentUser != null) {
             activityLogService.log(currentUser, "CREATE_CATEGORY",
-                    "Created category '" + saved.getName() + "'");
+                    "Created category '" + saved.getName() + "' [" + saved.getCode() + "]");
         }
 
         return ResponseEntity.ok(CategoryDTO.fromEntity(saved));
@@ -79,30 +149,45 @@ public class CategoryController {
     @Transactional
     public ResponseEntity<?> updateCategory(@PathVariable Long id, @RequestBody Map<String, String> request) {
         Category category = categoryRepository.findById(id).orElse(null);
-        if (category == null || category.getIsDeleted()) {
+        if (category == null) {
             return ResponseEntity.notFound().build();
         }
 
+        String code = request.get("code");
         String name = request.get("name");
+        String categoryGroup = request.get("categoryGroup");
         String description = request.get("description");
-        String imageUrl = request.get("imageUrl");
+        String status = request.get("status");
+
+        if (code != null && !code.isBlank()) {
+            String upperCode = code.trim().toUpperCase();
+            if (!upperCode.equals(category.getCode()) && categoryRepository.existsByCode(upperCode)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Category code '" + upperCode + "' already exists"));
+            }
+            category.setCode(upperCode);
+        }
 
         if (name != null && !name.isBlank()) {
-            // Check for duplicate name (excluding current category)
             if (!name.trim().equals(category.getName()) && categoryRepository.existsByName(name.trim())) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Category '" + name.trim() + "' already exists"));
             }
             category.setName(name.trim());
         }
+
+        if (categoryGroup != null) category.setCategoryGroup(categoryGroup.trim());
         if (description != null) category.setDescription(description);
-        if (imageUrl != null) category.setImageUrl(imageUrl);
+
+        // Handle status: "Active" or "Archived"
+        if (status != null) {
+            category.setIsDeleted("Archived".equalsIgnoreCase(status.trim()));
+        }
 
         Category saved = categoryRepository.save(category);
 
         User currentUser = resolveUser();
         if (currentUser != null) {
             activityLogService.log(currentUser, "UPDATE_CATEGORY",
-                    "Updated category '" + saved.getName() + "'");
+                    "Updated category '" + saved.getName() + "' [" + saved.getCode() + "]");
         }
 
         return ResponseEntity.ok(CategoryDTO.fromEntity(saved));

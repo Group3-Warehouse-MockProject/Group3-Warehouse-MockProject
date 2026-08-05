@@ -662,6 +662,9 @@ function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWareh
     e.preventDefault();
     if (!fullName || !userName || !email || !password) return setError("Please fill in all required fields.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
+    if (!/[A-Z]/.test(password)) return setError("Password must contain at least 1 uppercase letter.");
+    if (!/\d/.test(password)) return setError("Password must contain at least 1 digit.");
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?`~]/.test(password)) return setError("Password must contain at least 1 special character.");
     if (password !== confirm) return setError("Passwords do not match.");
     if (!accept) return setError("You must accept the terms to continue.");
     setError(null);

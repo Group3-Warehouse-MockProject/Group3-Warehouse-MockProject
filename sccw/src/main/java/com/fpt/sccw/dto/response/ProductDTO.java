@@ -23,6 +23,7 @@ public class ProductDTO {
     private String imageUrl;
     private String locationStatus;
     private String warehouseStatus;
+    private Boolean isDeleted;
 
     public static ProductDTO fromEntity(Product product, Inventory inventory) {
         Long stock = 0L;
@@ -62,6 +63,7 @@ public class ProductDTO {
                 .imageUrl(product.getImageUrl())
                 .locationStatus(locStatus)
                 .warehouseStatus(whStatus)
+                .isDeleted(product.getIsDeleted())
                 .build();
     }
 }

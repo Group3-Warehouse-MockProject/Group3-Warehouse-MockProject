@@ -9,23 +9,19 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.fpt.sccw.entity.ApprovalHistory;
+import com.fpt.sccw.entity.Status;
 
 @Repository
 public interface ApprovalHistoryRepository extends JpaRepository<ApprovalHistory, Long> {
 
-    List<ApprovalHistory> findByInventoryCheckIdOrderByCreatedAtAsc(
-            Long inventoryCheckId
-    );
-
-    List<ApprovalHistory> findByTransferIdOrderByCreatedAtAsc(
-            Long transferId
-    );
-
-    List<ApprovalHistory> findByWarehouseReceiptIdOrderByCreatedAtAsc(
-            Long warehouseReceiptId
+    List<ApprovalHistory> findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(
+            Long documentId, Status.DocumentType documentType
     );
 
     @Modifying
-    @Query("DELETE FROM ApprovalHistory h WHERE h.transfer.id = :transferId")
-    void deleteByTransferId(@Param("transferId") Long transferId);
+    @Query("DELETE FROM ApprovalHistory h WHERE h.documentId = :documentId AND h.documentType = :documentType")
+    void deleteByDocumentIdAndDocumentType(
+            @Param("documentId") Long documentId,
+            @Param("documentType") Status.DocumentType documentType
+    );
 }

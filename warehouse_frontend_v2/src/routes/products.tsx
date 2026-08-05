@@ -2,13 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { formatVND } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search, LayoutGrid, List, Pencil, Trash2, AlertCircle } from "lucide-react";
+import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search, LayoutGrid, List, Pencil, Trash2, AlertCircle, RefreshCw } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
 import { useState, useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 
 
 export const Route = createFileRoute("/products")({
@@ -17,11 +16,20 @@ export const Route = createFileRoute("/products")({
 });
 
 function ProductsPage() {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, currentUser } = useApp();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [openImport, setOpenImport] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [editProduct, setEditProduct] = useState<any>(null);
+  const [deleteProduct, setDeleteProduct] = useState<any>(null);
+  const [reactivateProduct, setReactivateProduct] = useState<any>(null);
+  const [hardDeleteProduct, setHardDeleteProduct] = useState<any>(null);
+
+  const isAdmin = currentUser?.role === "Admin";
+  const canEdit = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
+  const canDelete = currentUser?.role === "Admin" || currentUser?.role === "Manager";
 
   // Server-side pagination state
   const [page, setPage] = useState(0); // 0-indexed for backend
@@ -30,6 +38,7 @@ function ProductsPage() {
   const [q, setQ] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
+  const [lifecycleFilter, setLifecycleFilter] = useState("ACTIVE");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCostMin, setFilterCostMin] = useState("");
   const [filterCostMax, setFilterCostMax] = useState("");
@@ -37,16 +46,17 @@ function ProductsPage() {
   const [filterPriceMax, setFilterPriceMax] = useState("");
 
   // Reset page whenever filters change
-  useEffect(() => { setPage(0); }, [q, filterCategory, filterStatus, filterCostMin, filterCostMax, filterPriceMin, filterPriceMax, activeWarehouseId]);
+  useEffect(() => { setPage(0); }, [q, filterCategory, lifecycleFilter, filterStatus, filterCostMin, filterCostMax, filterPriceMin, filterPriceMax, activeWarehouseId]);
 
   const { data: pageData, isLoading, error } = useQuery({
-    queryKey: ["products", activeWarehouseId, page, q, filterCategory],
+    queryKey: ["products", activeWarehouseId, page, q, filterCategory, lifecycleFilter],
     queryFn: async () => {
       const res = await api.get("/products", {
         params: {
           ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
           ...(q ? { search: q } : {}),
           ...(filterCategory ? { category: filterCategory } : {}),
+          lifecycleStatus: lifecycleFilter,
           page,
           size: limit,
         }
@@ -84,8 +94,8 @@ function ProductsPage() {
   const { data: categories } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
-      const res = await api.get("/categories");
-      return res.data;
+      const res = await api.get("/categories", { params: { page: 0, size: 1000 } });
+      return res.data?.content ?? [];
     }
   });
 
@@ -157,6 +167,7 @@ function ProductsPage() {
           ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
           ...(q ? { search: q } : {}),
           ...(filterCategory ? { category: filterCategory } : {}),
+          lifecycleStatus: lifecycleFilter,
           page: 0,
           size: totalElements || 10000,
         }
@@ -201,11 +212,11 @@ function ProductsPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">Products</h1>
-            <p className="text-sm text-muted-foreground mt-1">{list.length} SKUs in scope</p>
+            <p className="text-sm text-muted-foreground mt-1">{totalElements} SKUs in scope</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setOpenImport(true)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"><Upload className="size-4" />Import</button>
-            <button onClick={handleExport} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"><Download className="size-4" />Export</button>
+            <button onClick={() => setOpenImport(true)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"><Download className="size-4" />Import</button>
+            <button onClick={handleExport} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm flex items-center gap-2 hover:bg-muted"><Upload className="size-4" />Export</button>
             <button onClick={() => setOpen(true)} className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring" style={{ background: "var(--gradient-primary)" }}>
               <Plus className="size-4" />Add SKU
             </button>
@@ -213,7 +224,7 @@ function ProductsPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={Package} label="Total SKUs" value={list.length} tone="primary" />
+          <Kpi icon={Package} label="Total SKUs" value={totalElements} tone="primary" />
           <Kpi icon={Boxes} label="Units in stock" value={units.toLocaleString()} tone="accent" />
           <Kpi icon={TrendingUp} label="Inventory value" value={formatVND(value)} tone="primary" />
           <Kpi icon={AlertTriangle} label="Low stock" value={low} tone="warning" />
@@ -227,7 +238,7 @@ function ProductsPage() {
                 value={q}
                 onChange={(e) => {
                   setQ(e.target.value);
-                  setPage(1);
+                  setPage(0);
                 }}
                 placeholder="Search SKU, product name, brand..."
                 className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm"
@@ -262,7 +273,7 @@ function ProductsPage() {
                       value={filterCategory}
                       onChange={(e) => {
                         setFilterCategory(e.target.value);
-                        setPage(1);
+                        setPage(0);
                       }}
                       className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm"
                     >
@@ -274,12 +285,28 @@ function ProductsPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Status</div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Product Status</div>
+                    <select
+                      value={lifecycleFilter}
+                      onChange={(e) => {
+                        setLifecycleFilter(e.target.value);
+                        setPage(0);
+                      }}
+                      className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="ALL">All</option>
+                      <option value="DEACTIVE">Deactive</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Stock Status</div>
                     <select
                       value={filterStatus}
                       onChange={(e) => {
                         setFilterStatus(e.target.value);
-                        setPage(1);
+                        setPage(0);
                       }}
                       className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm"
                     >
@@ -293,18 +320,18 @@ function ProductsPage() {
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Cost Range (₫)</div>
                     <div className="flex items-center gap-2">
-                      <input type="number" placeholder="Min" value={filterCostMin} onChange={(e) => { setFilterCostMin(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                      <input type="number" placeholder="Min" value={filterCostMin} onChange={(e) => { setFilterCostMin(e.target.value); setPage(0); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
                       <span className="text-muted-foreground">-</span>
-                      <input type="number" placeholder="Max" value={filterCostMax} onChange={(e) => { setFilterCostMax(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                      <input type="number" placeholder="Max" value={filterCostMax} onChange={(e) => { setFilterCostMax(e.target.value); setPage(0); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
                     </div>
                   </div>
 
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Price Range (₫)</div>
                     <div className="flex items-center gap-2">
-                      <input type="number" placeholder="Min" value={filterPriceMin} onChange={(e) => { setFilterPriceMin(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                      <input type="number" placeholder="Min" value={filterPriceMin} onChange={(e) => { setFilterPriceMin(e.target.value); setPage(0); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
                       <span className="text-muted-foreground">-</span>
-                      <input type="number" placeholder="Max" value={filterPriceMax} onChange={(e) => { setFilterPriceMax(e.target.value); setPage(1); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
+                      <input type="number" placeholder="Max" value={filterPriceMax} onChange={(e) => { setFilterPriceMax(e.target.value); setPage(0); }} className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm" />
                     </div>
                   </div>
                 </div>
@@ -365,6 +392,45 @@ function ProductsPage() {
                             <span className="font-mono text-[11px] text-right max-w-30 truncate" title={`${getWarehouseCode(p.warehouseId)} / ${p.location}`}>{getWarehouseCode(p.warehouseId)} / {p.location}</span>
                           </div>
                         </div>
+
+                        {/* Inline action buttons */}
+                        {(canEdit || canDelete) && (
+                          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/40">
+                            {canEdit && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditProduct(p); }}
+                                className="h-7 px-2.5 rounded-md text-[11px] font-medium bg-secondary/80 border border-border/60 hover:bg-muted hover:border-border flex items-center gap-1 transition-all duration-200"
+                              >
+                                <Pencil className="size-3" />Edit
+                              </button>
+                            )}
+                            {canDelete && !p.isDeleted && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeleteProduct(p); }}
+                                className="h-7 px-2.5 rounded-md text-[11px] font-medium border border-destructive/25 bg-destructive/8 text-destructive hover:bg-destructive/15 flex items-center gap-1 transition-all duration-200"
+                              >
+                                <Trash2 className="size-3" />Deactivate
+                              </button>
+                            )}
+                            {canDelete && p.isDeleted && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setReactivateProduct(p); }}
+                                className="h-7 px-2.5 rounded-md text-[11px] font-medium border border-success/30 bg-success/10 text-success hover:bg-success/20 flex items-center gap-1 transition-all duration-200"
+                              >
+                                <RefreshCw className="size-3" />Reactivate
+                              </button>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setHardDeleteProduct(p); }}
+                                className="h-7 px-2.5 rounded-md text-[11px] font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center gap-1 transition-all duration-200 ml-auto"
+                                title="Permanently delete"
+                              >
+                                <Trash2 className="size-3" />Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -381,7 +447,7 @@ function ProductsPage() {
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-250 text-sm">
-                <div className="grid grid-cols-[130px_minmax(180px,2fr)_110px_90px_90px_60px_70px_100px_100px_90px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
+                <div className="grid grid-cols-[130px_minmax(180px,2fr)_110px_90px_90px_60px_70px_100px_100px_90px_100px] items-center gap-3 px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/40 font-medium border-b border-border/60">
                   <div>SKU</div>
                   <div>Product</div>
                   <div>Category</div>
@@ -392,6 +458,7 @@ function ProductsPage() {
                   <div className="text-right">Cost</div>
                   <div className="text-right">Price</div>
                   <div className="text-center">Status</div>
+                  <div className="text-center">Actions</div>
                 </div>
                 <div className="divide-y divide-border/60">
                   {list.map((p: any) => {
@@ -401,7 +468,7 @@ function ProductsPage() {
                       <div
                         key={`${p.sku}-${p.warehouseId}`}
                         onClick={() => setSelectedProduct(p)}
-                        className="grid grid-cols-[130px_minmax(180px,2fr)_110px_90px_90px_60px_70px_100px_100px_90px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors cursor-pointer"
+                        className="grid grid-cols-[130px_minmax(180px,2fr)_110px_90px_90px_60px_70px_100px_100px_90px_100px] items-center gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-colors cursor-pointer"
                       >
                         <div className="font-mono text-xs text-muted-foreground truncate">{p.sku}</div>
                         <div>
@@ -437,6 +504,35 @@ function ProductsPage() {
                             <span className="px-2 py-1 rounded-md text-xs bg-warning/15 text-warning">Low</span>
                           ) : (
                             <span className="px-2 py-1 rounded-md text-xs bg-success/15 text-success">In stock</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-center gap-1">
+                          {canEdit && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEditProduct(p); }}
+                              className="size-7 grid place-items-center rounded-md hover:bg-secondary border border-transparent hover:border-border transition-all duration-150"
+                              title="Edit"
+                            >
+                              <Pencil className="size-3.5 text-muted-foreground" />
+                            </button>
+                          )}
+                          {canDelete && !p.isDeleted && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteProduct(p); }}
+                              className="size-7 grid place-items-center rounded-md hover:bg-destructive/15 border border-transparent hover:border-destructive/30 transition-all duration-150"
+                              title="Deactivate"
+                            >
+                              <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+                            </button>
+                          )}
+                          {canDelete && p.isDeleted && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setReactivateProduct(p); }}
+                              className="size-7 grid place-items-center rounded-md hover:bg-success/15 border border-transparent hover:border-success/30 transition-all duration-150"
+                              title="Reactivate"
+                            >
+                              <RefreshCw className="size-3.5 text-success" />
+                            </button>
                           )}
                         </div>
                       </div>
@@ -491,6 +587,73 @@ function ProductsPage() {
       <AddSkuModal open={open} onClose={() => setOpen(false)} warehouses={warehouses || []} categories={categories || []} suppliers={suppliers || []} locations={locations || []} />
       <ImportModal open={openImport} onClose={() => setOpenImport(false)} />
       <ProductDetailModal product={selectedProduct} warehouses={warehouses || []} onClose={() => setSelectedProduct(null)} />
+
+      {/* Inline Edit Product Modal (from grid/list action buttons) */}
+      {editProduct && (
+        <InlineEditProductModal
+          product={editProduct}
+          onClose={() => setEditProduct(null)}
+          queryClient={queryClient}
+        />
+      )}
+
+      {/* Inline Soft Delete Confirmation */}
+      <ModalShell
+        open={!!deleteProduct}
+        onClose={() => setDeleteProduct(null)}
+        title="Deactivate Product"
+        subtitle="This will hide the product from listings"
+        icon={<AlertCircle className="size-5" />}
+        maxWidth="28rem"
+        footer={
+          <>
+            <button onClick={() => setDeleteProduct(null)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+            <InlineDeleteButton product={deleteProduct} onDone={() => setDeleteProduct(null)} queryClient={queryClient} mode="soft" />
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">Are you sure you want to deactivate <strong>{deleteProduct?.name}</strong> ({deleteProduct?.sku})? The product will be hidden but can be restored later.</p>
+      </ModalShell>
+
+      <ModalShell
+        open={!!reactivateProduct}
+        onClose={() => setReactivateProduct(null)}
+        title="Reactivate Product"
+        subtitle="This will make the product available again"
+        icon={<RefreshCw className="size-5" />}
+        maxWidth="28rem"
+        footer={
+          <>
+            <button onClick={() => setReactivateProduct(null)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+            <InlineReactivateButton product={reactivateProduct} onDone={() => setReactivateProduct(null)} queryClient={queryClient} />
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">Reactivate <strong>{reactivateProduct?.name}</strong> ({reactivateProduct?.sku})? The product will return to the active product list.</p>
+      </ModalShell>
+
+      {/* Inline Hard Delete Confirmation */}
+      <ModalShell
+        open={!!hardDeleteProduct}
+        onClose={() => setHardDeleteProduct(null)}
+        title="Permanently Delete Product"
+        subtitle="This action cannot be undone"
+        icon={<AlertCircle className="size-5" />}
+        maxWidth="28rem"
+        footer={
+          <>
+            <button onClick={() => setHardDeleteProduct(null)} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+            <InlineDeleteButton product={hardDeleteProduct} onDone={() => setHardDeleteProduct(null)} queryClient={queryClient} mode="hard" />
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Are you sure you want to <strong className="text-destructive">permanently delete</strong> <strong>{hardDeleteProduct?.name}</strong> ({hardDeleteProduct?.sku})?</p>
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-xs text-destructive">
+            ⚠️ Permanent deletion is available only for products without receipt, transfer, or stock-check history. Otherwise, deactivate the product instead.
+          </div>
+        </div>
+      </ModalShell>
     </AppShell>
   );
 }
@@ -731,7 +894,7 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">Are you sure you want to <strong className="text-destructive">permanently delete</strong> <strong>{product.name}</strong> ({product.sku})?</p>
           <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-xs text-destructive">
-            ⚠️ This will remove the product and all associated inventory records. This action cannot be undone.
+            ⚠️ Permanent deletion is available only for products without receipt, transfer, or stock-check history. Otherwise, deactivate the product instead.
           </div>
         </div>
       </ModalShell>
@@ -757,7 +920,7 @@ function EditProductModal({ product, onClose, onSave, saving }: {
 }) {
   const { data: categories } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => { const res = await api.get("/categories"); return res.data; }
+    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000 } }); return res.data?.content ?? []; }
   });
   const { data: suppliers = [] } = useQuery({
     queryKey: ["suppliers", "reference"],
@@ -1121,5 +1284,145 @@ function InlineReorderEdit({ product }: { product: any }) {
       disabled={mutation.isPending}
       onClick={(e) => e.stopPropagation()}
     />
+  );
+}
+
+function InlineEditProductModal({ product, onClose, queryClient }: {
+  product: any;
+  onClose: () => void;
+  queryClient: any;
+}) {
+  const { data: categories } = useQuery({
+    queryKey: ["categories"],
+    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000 } }); return res.data?.content ?? []; }
+  });
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers", "reference"],
+    queryFn: async () => { const res = await api.get("/suppliers", { params: { page: 0, size: 100 } }); return res.data?.content ?? []; },
+    staleTime: 5 * 60_000,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => api.put(`/products/${product.id || product.sku}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-stats"] });
+      toast.success("Product updated successfully");
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to update product"),
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    updateMutation.mutate({
+      name: fd.get("name"),
+      code: fd.get("code"),
+      specification: fd.get("specification"),
+      cost: Number(fd.get("cost")),
+      price: Number(fd.get("price")),
+      imageUrl: fd.get("imageUrl") || null,
+      categoryId: Number(fd.get("categoryId")),
+      supplierId: Number(fd.get("supplierId")),
+    });
+  };
+
+  return (
+    <ModalShell
+      open={true}
+      onClose={onClose}
+      title="Edit Product"
+      subtitle={product.name}
+      icon={<Pencil className="size-5" />}
+      footer={
+        <>
+          <button onClick={onClose} disabled={updateMutation.isPending} className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm hover:bg-muted">Cancel</button>
+          <button type="submit" form="inline-edit-product-form" disabled={updateMutation.isPending} className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground glow-ring" style={{ background: "var(--gradient-primary)" }}>
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
+          </button>
+        </>
+      }
+    >
+      <form id="inline-edit-product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="SKU Code" required><input name="code" className={inputCls} defaultValue={product.sku} required /></Field>
+        <Field label="Supplier" required>
+          <select name="supplierId" className={selectCls} defaultValue={suppliers.find((s: any) => s.name === product.brand)?.id || ""} required>
+            <option value="" disabled>Select supplier</option>
+            {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Product Name" required className="sm:col-span-2"><input name="name" className={inputCls} defaultValue={product.name} required /></Field>
+        <Field label="Image URL" className="sm:col-span-2"><input name="imageUrl" className={inputCls} defaultValue={product.imageUrl || ""} /></Field>
+        <Field label="Specification" className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} /></Field>
+        <Field label="Category" required>
+          <select name="categoryId" className={selectCls} defaultValue={categories?.find((c: any) => c.name === product.category)?.id || ""} required>
+            <option value="" disabled>Select category</option>
+            {categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Cost (₫)"><input name="cost" type="number" className={inputCls} defaultValue={product.cost} min={0} /></Field>
+        <Field label="Sell Price (₫)" className="sm:col-span-2"><input name="price" type="number" className={inputCls} defaultValue={product.price} min={0} /></Field>
+      </form>
+    </ModalShell>
+  );
+}
+
+function InlineReactivateButton({ product, onDone, queryClient }: {
+  product: any;
+  onDone: () => void;
+  queryClient: any;
+}) {
+  const mutation = useMutation({
+    mutationFn: () => api.put(`/products/${product?.id || product?.sku}/reactivate`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-stats"] });
+      toast.success("Product reactivated");
+      onDone();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to reactivate product"),
+  });
+
+  return (
+    <button
+      onClick={() => mutation.mutate()}
+      disabled={mutation.isPending}
+      className="h-10 px-5 rounded-lg bg-success text-success-foreground text-sm font-medium hover:bg-success/90"
+    >
+      {mutation.isPending ? "Reactivating..." : "Reactivate"}
+    </button>
+  );
+}
+
+function InlineDeleteButton({ product, onDone, queryClient, mode }: {
+  product: any;
+  onDone: () => void;
+  queryClient: any;
+  mode: "soft" | "hard";
+}) {
+  const mutation = useMutation({
+    mutationFn: () => mode === "hard"
+      ? api.delete(`/products/${product?.id || product?.sku}/hard`)
+      : api.delete(`/products/${product?.id || product?.sku}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-stats"] });
+      toast.success(mode === "hard" ? "Product permanently deleted" : "Product deactivated");
+      onDone();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to delete product"),
+  });
+
+  return (
+    <button
+      onClick={() => mutation.mutate()}
+      disabled={mutation.isPending}
+      className="h-10 px-5 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90"
+    >
+      {mutation.isPending
+        ? (mode === "hard" ? "Deleting..." : "Deactivating...")
+        : (mode === "hard" ? "Permanently Delete" : "Confirm Deactivate")}
+    </button>
   );
 }

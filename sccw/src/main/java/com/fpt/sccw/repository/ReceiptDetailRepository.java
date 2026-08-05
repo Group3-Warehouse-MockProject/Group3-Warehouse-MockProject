@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface ReceiptDetailRepository extends JpaRepository<ReceiptDetail, Long> {
 
+    boolean existsByProductId(Long productId);
+
     @Query(value = "SELECT d FROM ReceiptDetail d " +
             "JOIN FETCH d.receipt r " +
             "JOIN FETCH d.product p " +

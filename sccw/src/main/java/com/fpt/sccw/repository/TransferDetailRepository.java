@@ -10,6 +10,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface TransferDetailRepository extends JpaRepository<TransferDetail, Long> {
 
+    boolean existsByProductId(Long productId);
+
     @Modifying
     @Query("DELETE FROM TransferDetail d WHERE d.transfer.id = :transferId")
     void deleteByTransferId(@Param("transferId") Long transferId);

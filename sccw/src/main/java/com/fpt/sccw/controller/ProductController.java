@@ -31,6 +31,9 @@ public class ProductController {
     private final SupplierRepository supplierRepository;
     private final LocationRepository locationRepository;
     private final InventoryRepository inventoryRepository;
+    private final ReceiptDetailRepository receiptDetailRepository;
+    private final TransferDetailRepository transferDetailRepository;
+    private final InventoryCheckDetailRepository inventoryCheckDetailRepository;
     private final WarehouseRepository warehouseRepository;
     private final ActivityLogService activityLogService;
 
@@ -47,6 +50,7 @@ public class ProductController {
     @Transactional(readOnly = true)
     public ResponseEntity<PageResponse<ProductDTO>> getAllProducts(
             @RequestParam(required = false) Long warehouseIdParam,
+            @RequestParam(defaultValue = "ACTIVE") String lifecycleStatus,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
@@ -69,8 +73,20 @@ public class ProductController {
         }
 
         final Long warehouseId = effectiveWarehouseId;
+        String normalizedLifecycleStatus = lifecycleStatus.trim().toUpperCase();
+        if (!normalizedLifecycleStatus.equals("ACTIVE")
+                && !normalizedLifecycleStatus.equals("DEACTIVE")
+                && !normalizedLifecycleStatus.equals("ALL")) {
+            return ResponseEntity.badRequest().build();
+        }
+
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "name"));
-        Page<Product> productPage = productRepository.findPageActiveWithInventoryAll(pageable);
+        Page<Product> productPage = switch (normalizedLifecycleStatus) {
+            case "ACTIVE" -> productRepository.findPageByDeletedStatusWithInventoryAll(false, pageable);
+            case "DEACTIVE" -> productRepository.findPageByDeletedStatusWithInventoryAll(true, pageable);
+            case "ALL" -> productRepository.findPageWithInventoryAll(pageable);
+            default -> throw new IllegalStateException("Unexpected lifecycle status");
+        };
 
         List<ProductDTO> pageContent = productPage.getContent().stream()
                 .map(product -> toProductDto(product, warehouseId))
@@ -324,6 +340,25 @@ public class ProductController {
     }
 
     @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
+    @PutMapping("/{id}/reactivate")
+    @Transactional
+    public ResponseEntity<?> reactivateProduct(@PathVariable Long id) {
+        Product product = productRepository.findById(id).orElse(null);
+        if (product == null) return ResponseEntity.notFound().build();
+
+        product.setIsDeleted(false);
+        productRepository.save(product);
+
+        User currentUser = resolveUser();
+        if (currentUser != null) {
+            activityLogService.log(currentUser, "REACTIVATE_PRODUCT",
+                    "Reactivated product " + product.getCode() + " - " + product.getName());
+        }
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<?> softDeleteProduct(@PathVariable Long id) {
@@ -349,10 +384,19 @@ public class ProductController {
         Product product = productRepository.findById(id).orElse(null);
         if (product == null) return ResponseEntity.notFound().build();
 
-        // Remove associated inventory records first
-        inventoryRepository.findAllByProductIdAndWarehouseId(product.getId(), null);
-        List<Inventory> inventories = product.getInventories();
-        if (inventories != null && !inventories.isEmpty()) {
+        boolean hasReceiptHistory = receiptDetailRepository.existsByProductId(product.getId());
+        boolean hasTransferHistory = transferDetailRepository.existsByProductId(product.getId());
+        boolean hasInventoryCheckHistory = inventoryCheckDetailRepository.existsByProductId(product.getId());
+        if (hasReceiptHistory || hasTransferHistory || hasInventoryCheckHistory) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(java.util.Map.of(
+                    "message", "Cannot permanently delete product '" + product.getCode()
+                            + "' because it has transaction history. Deactivate the product instead."
+            ));
+        }
+
+        // An unused product may have initial inventory records; remove them first.
+        List<Inventory> inventories = inventoryRepository.findAllByProductId(product.getId());
+        if (!inventories.isEmpty()) {
             inventoryRepository.deleteAll(inventories);
         }
 
