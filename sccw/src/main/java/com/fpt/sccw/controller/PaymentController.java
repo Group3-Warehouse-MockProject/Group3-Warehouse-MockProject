@@ -55,6 +55,7 @@ public class PaymentController {
 
         WarehouseReceipt receipt = receiptRepository.findById(receiptId).orElse(null);
         if (receipt == null) return ResponseEntity.notFound().build();
+        if (!canAccess(user, receipt)) return ResponseEntity.status(403).body("Insufficient permissions");
 
         if (receipt.getType() != Status.TransactionType.OUTBOUND) {
             return ResponseEntity.badRequest().body("Payments can only be recorded for outbound receipts");
