@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState, KeyboardEvent } from "react";
-import axios from "axios";
-
-// URL backend Spring Boot — đổi thành domain thật khi deploy production
-// const API_BASE = "http://localhost:8080";
+import { api } from "@/lib/api";
 
 interface Message {
     role: "user" | "bot";
@@ -105,6 +102,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(true);
+    const [activeSuggestions, setActiveSuggestions] = useState<string[]>(SUGGESTED_QUESTIONS);
     const messageEndRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
     const modalRef = useRef<HTMLDivElement>(null);
@@ -135,25 +133,18 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
         setIsTyping(true);
 
         try {
-            const token = localStorage.getItem("token");
-            const response = await axios.post(
-                `/api/ai/ask`,
-                { question: trimmed },
-                {
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
-                }
-            );
+            const response = await api.post(`/ai/ask`, { question: trimmed });
 
-            // Backend trả về plain string
-            const answer =
-                typeof response.data === "string"
-                    ? response.data
-                    : response.data?.answer ?? "No response.";
+            const data = response.data;
+            const answer = typeof data === "string" ? data : (data?.answer ?? "No response.");
+            const suggestions = Array.isArray(data?.suggestions) && data.suggestions.length > 0
+                ? data.suggestions
+                : [];
 
             setMessages((prev) => [...prev, { role: "bot", text: answer }]);
+            if (suggestions.length > 0) {
+                setActiveSuggestions(suggestions);
+            }
         } catch (error) {
             console.error("Chatbot error:", error);
             setMessages((prev) => [
@@ -165,6 +156,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
             ]);
         } finally {
             setIsTyping(false);
+            setShowSuggestions(true);
         }
     };
 
@@ -348,7 +340,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                     ))}
 
                     {/* Suggested questions */}
-                    {showSuggestions && !isTyping && messages.length <= 1 && (
+                    {showSuggestions && !isTyping && (
                         <div
                             style={{
                                 display: "flex",
@@ -358,7 +350,7 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                                 animation: "fadeIn 0.3s ease",
                             }}
                         >
-                            {SUGGESTED_QUESTIONS.map((q, idx) => (
+                            {activeSuggestions.map((q, idx) => (
                                 <button
                                     key={idx}
                                     onClick={() => handleSuggestionClick(q)}
