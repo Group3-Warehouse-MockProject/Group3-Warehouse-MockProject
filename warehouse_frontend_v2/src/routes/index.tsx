@@ -184,7 +184,7 @@ function Dashboard() {
           <div className="surface-card p-5 lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Recent activity</h3>
-              <button className="text-xs text-primary hover:underline">View all →</button>
+              {/* <button className="text-xs text-primary hover:underline">View all →</button> */}
             </div>
             <div className="space-y-3">
               {scopedMovements.slice(0, 6).map((m: any) => (

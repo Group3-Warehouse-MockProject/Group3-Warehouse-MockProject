@@ -16,15 +16,20 @@ import lombok.*;
 @Builder
 public class Category extends BaseEntity{
     
+    @NotBlank(message = "Category code is required")
+    @Column(name = "category_code", nullable = false, unique = true)
+    private String code;
+
     @NotBlank(message = "Category name is required")
     @Column(name = "category_name", nullable = false, unique = true)
     private String name;
 
+    @Column(name = "category_group")
+    @Builder.Default
+    private String categoryGroup = "Components";
+
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
-    
-    @Column(name = "image_url")
-    private String imageUrl;
 
     @NotNull(message = "Status deleted cannot be null")
     @Column(name = "is_deleted", nullable = false)

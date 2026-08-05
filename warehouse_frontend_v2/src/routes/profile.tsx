@@ -151,6 +151,18 @@ function ProfilePage() {
       setPwdMessage({ type: "error", text: "Password must be at least 8 characters long." });
       return;
     }
+    if (!/[A-Z]/.test(newPassword)) {
+      setPwdMessage({ type: "error", text: "Password must contain at least 1 uppercase letter." });
+      return;
+    }
+    if (!/\d/.test(newPassword)) {
+      setPwdMessage({ type: "error", text: "Password must contain at least 1 digit." });
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?`~]/.test(newPassword)) {
+      setPwdMessage({ type: "error", text: "Password must contain at least 1 special character." });
+      return;
+    }
     changePasswordMutation.mutate();
   };
 

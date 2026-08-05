@@ -47,6 +47,8 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/auth/login",
                     "/api/auth/logout",
+                    "/api/ai/ingest-all",
+                    "/api/ai/ask",
                     "/error"
                 ).permitAll()
                 .requestMatchers("/api/auth/register").hasAnyAuthority("ADMIN", "MANAGER")

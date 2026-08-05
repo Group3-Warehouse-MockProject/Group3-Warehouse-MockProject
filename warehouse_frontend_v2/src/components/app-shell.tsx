@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Package,
@@ -22,35 +22,127 @@ import {
   Moon,
   ArrowRightLeft,
   Activity,
-  MapPin
+  MapPin,
+  Menu,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useApp, roleLabels } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { NotificationModal } from "@/components/notification-modal";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
+interface WarehouseOption {
+  id: string;
+  code: string;
+  city: string;
+  status?: string;
+  capacity?: number;
+  usedCapacity?: number;
+}
 
 interface NavItem {
   to: string;
   label: string;
+  description: string;
+  aliases: string[];
   icon: React.ElementType;
   adminOnly?: boolean;
 }
 
 const nav: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/products", label: "Products", icon: Package },
-  { to: "/categories", label: "Categories", icon: Layers },
-  { to: "/inbound", label: "Inbound", icon: ArrowDownToLine },
-  { to: "/outbound", label: "Outbound", icon: ArrowUpFromLine },
-  { to: "/stocktake", label: "Stocktake", icon: ClipboardCheck },
-  { to: "/transfer", label: "Transfer", icon: ArrowRightLeft },
-  { to: "/suppliers", label: "Suppliers", icon: Truck },
-  { to: "/location", label: "Locations", icon: MapPin },
-  { to: "/staff", label: "Staff", icon: Users },
-  { to: "/tracking", label: "Tracking", icon: Activity, adminOnly: true },
-  { to: "/settings", label: "Settings", icon: Settings },
-  { to: "/feedback", label: "Feedback", icon: MessageSquareText },
+  {
+    to: "/",
+    label: "Dashboard",
+    description: "Warehouse overview",
+    aliases: ["home", "overview"],
+    icon: LayoutDashboard,
+  },
+  {
+    to: "/products",
+    label: "Products",
+    description: "SKU and inventory",
+    aliases: ["sku", "inventory", "stock", "items"],
+    icon: Package,
+  },
+  {
+    to: "/categories",
+    label: "Categories",
+    description: "Product groups",
+    aliases: ["groups", "types"],
+    icon: Layers,
+  },
+  {
+    to: "/inbound",
+    label: "Inbound",
+    description: "Receive stock and receipts",
+    aliases: ["receive", "receiving", "receipt", "import"],
+    icon: ArrowDownToLine,
+  },
+  {
+    to: "/outbound",
+    label: "Outbound",
+    description: "Ship stock and orders",
+    aliases: ["ship", "shipping", "order", "export"],
+    icon: ArrowUpFromLine,
+  },
+  {
+    to: "/stocktake",
+    label: "Stocktake",
+    description: "Inventory checks",
+    aliases: ["check", "count", "audit"],
+    icon: ClipboardCheck,
+  },
+  {
+    to: "/transfer",
+    label: "Transfer",
+    description: "Move stock between warehouses",
+    aliases: ["move", "relocate", "warehouse transfer"],
+    icon: ArrowRightLeft,
+  },
+  {
+    to: "/suppliers",
+    label: "Suppliers",
+    description: "Supplier directory",
+    aliases: ["vendor", "partners"],
+    icon: Truck,
+  },
+  {
+    to: "/location",
+    label: "Locations",
+    description: "Warehouses, racks, and bins",
+    aliases: ["warehouse", "rack", "bin", "storage"],
+    icon: MapPin,
+  },
+  {
+    to: "/staff",
+    label: "Staff",
+    description: "User and team management",
+    aliases: ["users", "team", "employees"],
+    icon: Users,
+  },
+  {
+    to: "/tracking",
+    label: "Tracking",
+    description: "Activity logs",
+    aliases: ["activity", "logs", "audit trail"],
+    icon: Activity,
+    adminOnly: true,
+  },
+  {
+    to: "/settings",
+    label: "Settings",
+    description: "Application preferences",
+    aliases: ["preferences", "configuration"],
+    icon: Settings,
+  },
+  {
+    to: "/feedback",
+    label: "Feedback",
+    description: "Share product feedback",
+    aliases: ["support", "help", "comments"],
+    icon: MessageSquareText,
+  },
 ] as const;
 
 const roleTone: Record<string, string> = {
@@ -62,8 +154,15 @@ const roleTone: Record<string, string> = {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { currentUser, activeWarehouseId, setActiveWarehouseId, canSwitchWarehouse, logout } = useApp();
+  const navigate = useNavigate();
+  const { currentUser, activeWarehouseId, setActiveWarehouseId, canSwitchWarehouse, logout } =
+    useApp();
   const [roleOpen, setRoleOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const searchListId = useId();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -84,10 +183,51 @@ export function AppShell({ children }: { children: ReactNode }) {
     queryFn: async () => {
       const res = await api.get("/warehouses");
       return res.data;
-    }
+    },
   });
 
-  const warehouses = warehousesData || [];
+  const warehouses: WarehouseOption[] = warehousesData || [];
+  const visibleNav = useMemo(
+    () => nav.filter((item) => !item.adminOnly || currentUser?.role === "Admin"),
+    [currentUser?.role],
+  );
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const matches = query
+      ? visibleNav.filter((item) =>
+          [item.label, item.description, item.to, ...item.aliases]
+            .join(" ")
+            .toLowerCase()
+            .includes(query),
+        )
+      : visibleNav.filter((item) => ["/", "/products", "/inbound", "/outbound"].includes(item.to));
+    return matches;
+  }, [searchQuery, visibleNav]);
+
+  const selectPage = (to: string) => {
+    setSearchQuery("");
+    setSearchOpen(false);
+    setActiveSearchIndex(0);
+    setMobileNavOpen(false);
+    navigate({ to });
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      setSearchOpen(false);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSearchIndex((index) => Math.min(index + 1, Math.max(searchResults.length - 1, 0)));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSearchIndex((index) => Math.max(index - 1, 0));
+    } else if (event.key === "Enter" && searchResults[activeSearchIndex]) {
+      event.preventDefault();
+      selectPage(searchResults[activeSearchIndex].to);
+    }
+  };
 
   // Auto redirect to login if no valid session
   if (!currentUser) {
@@ -101,17 +241,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex bg-background">
       <aside className="hidden md:flex w-64 flex-col bg-sidebar border-r border-sidebar-border sticky top-0 h-screen">
         <div className="p-6 flex items-center gap-3">
-          <div className="size-10 rounded-xl grid place-items-center glow-ring" style={{ background: "var(--gradient-primary)" }}>
+          <div
+            className="size-10 rounded-xl grid place-items-center glow-ring"
+            style={{ background: "var(--gradient-primary)" }}
+          >
             <Cpu className="size-5 text-primary-foreground" />
           </div>
           <div>
             <div className="text-sm font-semibold leading-tight">TechStock</div>
-            <div className="text-[11px] text-muted-foreground leading-tight">Computer Warehouse</div>
+            <div className="text-[11px] text-muted-foreground leading-tight">
+              Computer Warehouse
+            </div>
           </div>
         </div>
 
         <div className="px-3 pb-3">
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">Active Warehouse</label>
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">
+            Active Warehouse
+          </label>
           <select
             value={activeWarehouseId ?? "ALL"}
             onChange={(e) => setActiveWarehouseId(e.target.value === "ALL" ? null : e.target.value)}
@@ -120,8 +267,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             {canSwitchWarehouse && <option value="ALL">All warehouses</option>}
             {warehouses
-              .filter((w: any) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
-              .map((w: any) => (
+              .filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
+              .map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.code} — {w.city}
                 </option>
@@ -130,8 +277,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="px-3 py-2 flex-1 space-y-1 overflow-y-auto">
-          {nav.map(({ to, label, icon: Icon, adminOnly }) => {
-            if (adminOnly && currentUser?.role !== "Admin") return null;
+          {visibleNav.map(({ to, label, icon: Icon }) => {
             const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
             return (
               <Link
@@ -154,17 +300,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         {(() => {
           let totalCapacity = 0;
           let totalUsed = 0;
-          
+
           if (activeWarehouseId) {
-            const w = warehouses.find((x: any) => x.id === activeWarehouseId);
+            const w = warehouses.find((x) => x.id === activeWarehouseId);
             if (w) {
               totalCapacity = w.capacity || 0;
               totalUsed = w.usedCapacity || 0;
             }
           } else {
-            warehouses.forEach((w: any) => {
-              totalCapacity += (w.capacity || 0);
-              totalUsed += (w.usedCapacity || 0);
+            warehouses.forEach((w) => {
+              totalCapacity += w.capacity || 0;
+              totalUsed += w.usedCapacity || 0;
             });
           }
 
@@ -175,12 +321,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="text-xs text-muted-foreground">Capacity used</div>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-2xl font-bold text-gradient">{pct}%</span>
-                <span className="text-xs text-muted-foreground">/ {totalCapacity.toLocaleString()} units</span>
+                <span className="text-xs text-muted-foreground">
+                  / {totalCapacity.toLocaleString()} units
+                </span>
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: "var(--gradient-primary)" }} />
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, background: "var(--gradient-primary)" }}
+                />
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground text-right">{totalUsed.toLocaleString()} units used</div>
+              <div className="mt-1 text-[10px] text-muted-foreground text-right">
+                {totalUsed.toLocaleString()} units used
+              </div>
             </div>
           );
         })()}
@@ -188,29 +341,162 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="sticky top-0 z-20 backdrop-blur-xl bg-background/70 border-b border-border">
-          <div className="px-4 md:px-8 h-16 flex items-center gap-4">
-            <div className="relative flex-1 max-w-xl mr-auto">
-              <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <div className="px-4 md:px-8 h-16 flex items-center gap-2 md:gap-4">
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open navigation"
+                className="md:hidden size-10 shrink-0 rounded-lg bg-secondary border border-border grid place-items-center hover:bg-muted transition-colors"
+              >
+                <Menu className="size-5" />
+              </button>
+              <SheetContent side="left" className="p-0 flex flex-col bg-sidebar">
+                <SheetHeader className="p-6 pb-4">
+                  <SheetTitle className="flex items-center gap-3">
+                    <span
+                      className="size-10 rounded-xl grid place-items-center glow-ring"
+                      style={{ background: "var(--gradient-primary)" }}
+                    >
+                      <Cpu className="size-5 text-primary-foreground" />
+                    </span>
+                    <span className="text-left">
+                      <span className="block text-sm">TechStock</span>
+                      <span className="block text-[11px] font-normal text-muted-foreground">
+                        Computer Warehouse
+                      </span>
+                    </span>
+                  </SheetTitle>
+                </SheetHeader>
+                <div className="px-4 pb-3">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">
+                    Active Warehouse
+                  </label>
+                  <select
+                    value={activeWarehouseId ?? "ALL"}
+                    onChange={(e) =>
+                      setActiveWarehouseId(e.target.value === "ALL" ? null : e.target.value)
+                    }
+                    disabled={!canSwitchWarehouse}
+                    className="mt-1 w-full h-9 px-2 rounded-lg bg-input border border-border text-sm disabled:opacity-70"
+                  >
+                    {canSwitchWarehouse && <option value="ALL">All warehouses</option>}
+                    {warehouses
+                      .filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
+                      .map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.code} — {w.city}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <nav className="px-4 py-2 flex-1 space-y-1 overflow-y-auto">
+                  {visibleNav.map(({ to, label, icon: Icon }) => {
+                    const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
+                    return (
+                      <Link
+                        key={to}
+                        to={to}
+                        onClick={() => setMobileNavOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                          active
+                            ? "bg-sidebar-accent text-primary font-medium"
+                            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        }`}
+                      >
+                        <Icon className="size-4" />
+                        {label}
+                        {active && <span className="ml-auto size-1.5 rounded-full bg-primary" />}
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </SheetContent>
+            </Sheet>
+
+            <div className="relative flex-1 min-w-0 max-w-xl mr-auto">
+              <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input
-                placeholder="Search SKU, product, order..."
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setActiveSearchIndex(0);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Find a page..."
+                aria-label="Find a page"
+                aria-expanded={searchOpen}
+                aria-controls={searchListId}
+                aria-activedescendant={
+                  searchResults[activeSearchIndex]
+                    ? `${searchListId}-${activeSearchIndex}`
+                    : undefined
+                }
                 className="w-full h-10 pl-9 pr-3 rounded-lg bg-input border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
               />
+              {searchOpen && (
+                <div
+                  id={searchListId}
+                  role="listbox"
+                  className="absolute top-full mt-2 left-0 right-0 z-50 rounded-xl surface-card shadow-xl p-2 max-h-80 overflow-y-auto"
+                >
+                  <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {searchQuery.trim() ? "Matching pages" : "Quick navigation"}
+                  </div>
+                  {searchResults.length ? (
+                    searchResults.map((item, index) => {
+                      const Icon = item.icon;
+                      const highlighted = index === activeSearchIndex;
+                      return (
+                        <button
+                          key={item.to}
+                          id={`${searchListId}-${index}`}
+                          role="option"
+                          aria-selected={highlighted}
+                          type="button"
+                          onMouseEnter={() => setActiveSearchIndex(index)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectPage(item.to)}
+                          className={`w-full px-2 py-2 rounded-lg flex items-center gap-3 text-left transition-colors ${highlighted ? "bg-secondary" : "hover:bg-secondary"}`}
+                        >
+                          <Icon className="size-4 text-primary shrink-0" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium">{item.label}</span>
+                            <span className="block text-[11px] text-muted-foreground truncate">
+                              {item.description}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-2 py-4 text-sm text-muted-foreground">
+                      No matching pages. Try Products, Inbound, or Settings.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <span className={`hidden lg:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs font-medium ${roleTone[currentUser.role]}`}>
+            <span
+              className={`hidden lg:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs font-medium ${roleTone[currentUser.role]}`}
+            >
               <Shield className="size-3" />
               {roleLabels[currentUser.role]}
             </span>
 
-            <button 
+            <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="size-10 rounded-lg bg-secondary border border-border grid place-items-center hover:bg-muted transition-colors relative">
+              className="size-10 rounded-lg bg-secondary border border-border grid place-items-center hover:bg-muted transition-colors relative"
+            >
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </button>
 
             <NotificationModal />
-
 
             <div className="relative">
               <button
@@ -219,12 +505,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <div className="text-right hidden sm:block">
                   <div className="text-sm font-medium leading-tight">{currentUser.name}</div>
-                  <div className="text-xs text-muted-foreground leading-tight">{currentUser.title}</div>
+                  <div className="text-xs text-muted-foreground leading-tight">
+                    {currentUser.title}
+                  </div>
                 </div>
                 {currentUser.avatarUrl ? (
-                  <img src={currentUser.avatarUrl} alt="Avatar" className="size-10 rounded-full object-cover ring-2 ring-border/50" />
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt="Avatar"
+                    className="size-10 rounded-full object-cover ring-2 ring-border/50"
+                  />
                 ) : (
-                  <div className="size-10 rounded-full grid place-items-center text-sm font-semibold" style={{ background: "var(--gradient-primary)", color: "var(--primary-foreground)" }}>
+                  <div
+                    className="size-10 rounded-full grid place-items-center text-sm font-semibold"
+                    style={{
+                      background: "var(--gradient-primary)",
+                      color: "var(--primary-foreground)",
+                    }}
+                  >
                     {currentUser.initials}
                   </div>
                 )}
@@ -238,7 +536,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                     onClick={() => setRoleOpen(false)}
                     className="w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 hover:bg-secondary"
                   >
-                    <div className="size-8 rounded-full grid place-items-center" style={{ background: "color-mix(in oklab, var(--primary) 15%, transparent)", color: "var(--primary)" }}>
+                    <div
+                      className="size-8 rounded-full grid place-items-center"
+                      style={{
+                        background: "color-mix(in oklab, var(--primary) 15%, transparent)",
+                        color: "var(--primary)",
+                      }}
+                    >
                       <UserCircle className="size-4" />
                     </div>
                     <div className="flex-1 min-w-0">

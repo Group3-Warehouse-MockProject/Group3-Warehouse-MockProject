@@ -260,6 +260,11 @@ public class WarehouseReceiptController {
         Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId()).orElse(null);
         if (warehouse == null) return ResponseEntity.badRequest().body("Warehouse not found");
 
+        if (!"INBOUND".equalsIgnoreCase(request.getType())
+                && !"OUTBOUND".equalsIgnoreCase(request.getType())) {
+            return ResponseEntity.badRequest().body("Type must be INBOUND or OUTBOUND");
+        }
+
         boolean isInbound = "INBOUND".equalsIgnoreCase(request.getType());
         Status.TransactionType txType = isInbound
                 ? Status.TransactionType.INBOUND : Status.TransactionType.OUTBOUND;
@@ -283,8 +288,12 @@ public class WarehouseReceiptController {
 
         Set<ReceiptDetail> details = new java.util.LinkedHashSet<>();
         for (CreateReceiptRequest.LineItemRequest item : request.getItems()) {
-            if (item.getProductCode() == null || item.getProductCode().isBlank()) continue;
-            if (item.getQuantity() == null || item.getQuantity() <= 0) continue;
+            if (item == null || item.getProductCode() == null || item.getProductCode().isBlank()) {
+                return ResponseEntity.badRequest().body("Product code is required");
+            }
+            if (item.getQuantity() == null || item.getQuantity() <= 0) {
+                return ResponseEntity.badRequest().body("Invalid quantity for product: " + item.getProductCode());
+            }
 
             Product product = productRepository.findByCode(item.getProductCode()).orElse(null);
             if (product == null)
@@ -481,7 +490,9 @@ public class WarehouseReceiptController {
             List<ReceiptDetail> newDetails = new ArrayList<>();
 
             for (CreateReceiptRequest.LineItemRequest item : request.getItems()) {
-                if (item.getProductCode() == null || item.getProductCode().isBlank()) continue;
+                if (item == null || item.getProductCode() == null || item.getProductCode().isBlank()) {
+                    return ResponseEntity.badRequest().body("Product code is required");
+                }
                 if (item.getQuantity() == null || item.getQuantity() <= 0) {
                     return ResponseEntity.badRequest().body("Invalid quantity for product: " + item.getProductCode());
                 }
@@ -571,8 +582,10 @@ public class WarehouseReceiptController {
         boolean isInbound = receipt.getType().name().equals("INBOUND");
         Warehouse warehouse = receipt.getWarehouse();
 
-        // Delete associated payments first to avoid FK constraint issues
+        // Delete associated payments and approval history first to avoid orphaned records.
         paymentRepository.deleteByReceiptId(receiptId);
+        approvalHistoryRepository.deleteByDocumentIdAndDocumentType(
+                receiptId, Status.DocumentType.WAREHOUSE_RECEIPT);
 
         // Rollback inventory
         for (ReceiptDetail d : receipt.getDetails()) {

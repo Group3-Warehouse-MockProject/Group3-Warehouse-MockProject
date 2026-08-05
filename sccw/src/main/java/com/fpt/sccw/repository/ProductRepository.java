@@ -68,4 +68,25 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            "WHERE p.isDeleted = false",
            countQuery = "SELECT COUNT(DISTINCT p) FROM Product p WHERE p.isDeleted = false")
     Page<Product> findPageActiveWithInventoryAll(Pageable pageable);
+
+    @Query(value =
+           "SELECT DISTINCT p FROM Product p " +
+           "LEFT JOIN FETCH p.category " +
+           "LEFT JOIN FETCH p.supplier " +
+           "LEFT JOIN FETCH p.inventories inv " +
+           "LEFT JOIN FETCH inv.warehouse " +
+           "LEFT JOIN FETCH inv.location " +
+           "WHERE p.isDeleted = :isDeleted",
+           countQuery = "SELECT COUNT(DISTINCT p) FROM Product p WHERE p.isDeleted = :isDeleted")
+    Page<Product> findPageByDeletedStatusWithInventoryAll(@Param("isDeleted") boolean isDeleted, Pageable pageable);
+
+    @Query(value =
+           "SELECT DISTINCT p FROM Product p " +
+           "LEFT JOIN FETCH p.category " +
+           "LEFT JOIN FETCH p.supplier " +
+           "LEFT JOIN FETCH p.inventories inv " +
+           "LEFT JOIN FETCH inv.warehouse " +
+           "LEFT JOIN FETCH inv.location",
+           countQuery = "SELECT COUNT(DISTINCT p) FROM Product p")
+    Page<Product> findPageWithInventoryAll(Pageable pageable);
 }

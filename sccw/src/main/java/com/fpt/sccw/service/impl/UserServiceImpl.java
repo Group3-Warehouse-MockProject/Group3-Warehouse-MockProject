@@ -270,6 +270,15 @@ public class UserServiceImpl implements UserService {
         if (newPassword == null || newPassword.length() < 8) {
             throw new RuntimeException("New password must be at least 8 characters long.");
         }
+        if (!newPassword.matches(".*[A-Z].*")) {
+            throw new RuntimeException("Password must contain at least 1 uppercase letter.");
+        }
+        if (!newPassword.matches(".*\\d.*")) {
+            throw new RuntimeException("Password must contain at least 1 digit.");
+        }
+        if (!newPassword.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?`~].*")) {
+            throw new RuntimeException("Password must contain at least 1 special character.");
+        }
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }

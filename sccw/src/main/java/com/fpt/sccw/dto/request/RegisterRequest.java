@@ -1,6 +1,7 @@
 package com.fpt.sccw.dto.request;
 
 import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Pattern;
 import lombok.*;
 
 @Data
@@ -18,7 +19,11 @@ public class RegisterRequest {
     private String email;
     
     @NotBlank(message = "Password is required")
-    @Size(min = 6, message = "Password must be at least 6 characters")
+    @Size(min = 8, message = "Password must be at least 8 characters")
+    @Pattern(
+        regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?`~]).*$",
+        message = "Password must contain at least 1 uppercase letter, 1 digit, and 1 special character"
+    )
     private String password;
     
     @NotBlank(message = "Confirm password is required")

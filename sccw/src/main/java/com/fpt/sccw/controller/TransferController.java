@@ -121,7 +121,7 @@ public class TransferController {
         ensureCanAccess(user, transfer.getWarehouse().getId());
 
         List<ApprovalHistoryDTO> history = approvalHistoryRepository
-                .findByTransferIdOrderByCreatedAtAsc(id)
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(id, Status.DocumentType.TRANSFER)
                 .stream()
                 .map(ApprovalHistoryDTO::fromEntity)
                 .toList();
@@ -172,7 +172,6 @@ public class TransferController {
         result.put("internal", all.size() - crossWarehouse);
 
         return ResponseEntity.ok(result);
-    }
     }
 
     @PostMapping
@@ -291,12 +290,13 @@ public class TransferController {
 
         Transfer saved = transferRepository.save(transfer);
         approvalHistoryRepository.save(ApprovalHistory.builder()
-                .transfer(saved)
+                .documentId(saved.getId())
                 .documentType(Status.DocumentType.TRANSFER)
                 .oldStatus(saved.getStatus().name())
                 .newStatus(saved.getStatus().name())
                 .note("Transfer details updated")
-                .approver(user)
+                .approverId(user.getId())
+                .approverName(user.getFullName())
                 .build());
         notifyTransferParticipants(saved, "Transfer updated", "Transfer details were updated before dispatch.", "INFO");
 
@@ -320,7 +320,8 @@ public class TransferController {
                     "message", "Only pending or cancelled transfers can be deleted"));
         }
 
-        approvalHistoryRepository.deleteByTransferId(id);
+        approvalHistoryRepository.deleteByDocumentIdAndDocumentType(
+                id, Status.DocumentType.TRANSFER);
         transferDetailRepository.deleteByTransferId(id);
         transferRepository.delete(transfer);
         return ResponseEntity.noContent().build();
