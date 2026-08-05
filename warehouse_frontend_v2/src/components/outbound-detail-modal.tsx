@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   X, Calendar, User, Warehouse, FileText, Package,
   CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save,
   Truck, Ban, Check, AlertTriangle, Banknote, Wallet, CreditCard,
-  QrCode, ChevronDown, ChevronUp
+  QrCode
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
@@ -71,9 +72,6 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   OTHER: "Other",
 };
 
-// Replace this URL with your actual bank transfer QR image link
-const BANK_TRANSFER_QR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRUeShVJgPUYZ8BLgnFQ1-3NT4kK7J4qTfci9k6kADXRMAek03SePMKQnKF&s=10";
-
 export function OutboundDetailModal({
   allMovements,
   movement,
@@ -83,6 +81,7 @@ export function OutboundDetailModal({
   onDeleted,
 }: Props) {
   const { currentUser } = useApp();
+  const navigate = useNavigate();
   
   // Role checks
   const isAdminOrManager = currentUser?.role === "Admin" || currentUser?.role === "Manager";
@@ -105,11 +104,6 @@ export function OutboundDetailModal({
   // Payment state
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [fetchingPayments, setFetchingPayments] = useState(false);
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [payAmount, setPayAmount] = useState<string>("");
-  const [payMethod, setPayMethod] = useState("CASH");
-  const [payNote, setPayNote] = useState("");
-  const [submittingPayment, setSubmittingPayment] = useState(false);
 
   const statusCfg = STATUS_CONFIG[movement.status] ?? STATUS_CONFIG["PENDING"];
   const StatusIcon = statusCfg.icon;
@@ -192,53 +186,6 @@ export function OutboundDetailModal({
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
-    }
-  }
-
-  async function handleRecordPayment(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    const amountNum = Number(payAmount.replace(/[^\d.]/g, ""));
-    if (!amountNum || amountNum <= 0) {
-      setError("Amount must be greater than 0.");
-      return;
-    }
-    if (amountNum > remainingAmount) {
-      setError("Amount cannot exceed remaining balance.");
-      return;
-    }
-
-    setSubmittingPayment(true);
-    try {
-      await api.post(`/receipts/${movement.receiptId}/payments`, {
-        amount: amountNum,
-        paymentMethod: payMethod,
-        note: payNote || null,
-      });
-
-      const pRes = await api.get<PaymentRecord[]>(`/receipts/${movement.receiptId}/payments`);
-      setPayments(pRes.data);
-
-      // The payment endpoint updates one receipt; reload only that receipt's page
-      // rather than loading every outbound movement into the browser.
-      const mRes = await api.get<{ content: ReceiptMovement[] }>("/receipts", {
-        params: { type: "OUTBOUND", page: 0, size: 100 },
-      });
-      const updatedLines = (mRes.data?.content ?? []).filter(
-        (m: ReceiptMovement) => m.receiptId === movement.receiptId,
-      );
-      if (updatedLines.length) onUpdated(updatedLines);
-
-      setShowPaymentForm(false);
-      setPayAmount("");
-      setPayMethod("CASH");
-      setPayNote("");
-    } catch (err: any) {
-      const data = err.response?.data;
-      setError(typeof data === "string" ? data : "Failed to record payment.");
-    } finally {
-      setSubmittingPayment(false);
     }
   }
 
@@ -407,101 +354,21 @@ export function OutboundDetailModal({
               </p>
             )}
 
-            {/* Record payment button / form */}
+            {/* Record payment now opens a dedicated workspace */}
             {canPayNow && remainingAmount > 0 && (
-              <div className="space-y-3">
-                {!showPaymentForm ? (
-                  <button
-                    onClick={() => {
-                      setShowPaymentForm(true);
-                      setPayAmount(String(remainingAmount));
-                      setPayMethod("CASH");
-                      setPayNote("");
-                      setError(null);
-                    }}
-                    className="h-9 px-4 rounded-lg text-sm font-medium border border-primary text-primary hover:bg-primary/10 flex items-center gap-2 transition-colors"
-                  >
-                    <Banknote className="size-4" /> Record payment
-                  </button>
-                ) : (
-                  <form onSubmit={handleRecordPayment} className="p-3 rounded-lg border border-border bg-background/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Record payment</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowPaymentForm(false)}
-                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
-                      >
-                        <ChevronUp className="size-3" /> Hide
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs text-muted-foreground block mb-1">Amount (VND)</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={remainingAmount}
-                          value={payAmount}
-                          onChange={(e) => setPayAmount(e.target.value)}
-                          className="input h-9 w-full"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground block mb-1">Method</label>
-                        <select
-                          value={payMethod}
-                          onChange={(e) => setPayMethod(e.target.value)}
-                          className="input h-9 w-full"
-                        >
-                          <option value="CASH">Cash</option>
-                          <option value="BANK_TRANSFER">Bank Transfer</option>
-                          <option value="CARD">Card</option>
-                          <option value="OTHER">Other</option>
-                        </select>
-                      </div>
-                    </div>
-                    {payMethod === "BANK_TRANSFER" && (
-                      <div className="p-3 rounded-lg border border-dashed border-border bg-secondary/20">
-                        <div className="text-xs text-muted-foreground mb-2">Scan the QR code below to transfer</div>
-                        <img
-                          src={BANK_TRANSFER_QR_URL}
-                          alt="Bank transfer QR"
-                          className="w-40 h-40 rounded-lg border border-border object-contain bg-white"
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Note</label>
-                      <textarea
-                        value={payNote}
-                        onChange={(e) => setPayNote(e.target.value)}
-                        rows={2}
-                        className="input w-full min-h-[60px] py-2"
-                        placeholder="Optional note…"
-                      />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowPaymentForm(false)}
-                        className="h-8 px-3 rounded-md text-xs border border-border hover:bg-secondary"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={submittingPayment}
-                        className="h-8 px-3 rounded-md text-xs bg-primary text-primary-foreground font-medium flex items-center gap-1"
-                      >
-                        {submittingPayment && <Loader2 className="size-3 animate-spin" />}
-                        Save payment
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navigate({
+                    to: "/outbound-payment/$receiptId",
+                    params: { receiptId: String(movement.receiptId) },
+                  });
+                }}
+                className="h-9 px-4 rounded-lg text-sm font-medium border border-primary text-primary hover:bg-primary/10 flex items-center gap-2 transition-colors w-fit"
+              >
+                <Banknote className="size-4" /> Record payment
+              </button>
             )}
           </div>
 

@@ -135,6 +135,35 @@ public class WarehouseReceiptController {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // GET /api/receipts/{receiptId}
+    // ─────────────────────────────────────────────────────────────────────────
+    @GetMapping("/{receiptId}")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getReceipt(@PathVariable Long receiptId) {
+        User user = resolveUser();
+        if (user == null) return ResponseEntity.status(401).build();
+
+        WarehouseReceipt receipt = receiptRepository.findById(receiptId).orElse(null);
+        if (receipt == null) return ResponseEntity.notFound().build();
+        if (!canAccessReceipt(user, receipt)) {
+            return ResponseEntity.status(403).body("Insufficient permissions");
+        }
+        if (receipt.getType() != Status.TransactionType.OUTBOUND) {
+            return ResponseEntity.badRequest().body("Payment details are only available for outbound receipts");
+        }
+
+        boolean isInbound = receipt.getType() == Status.TransactionType.INBOUND;
+        List<MovementDTO> result = receipt.getDetails().stream()
+                .map(detail -> buildReceiptMovement(
+                        receipt,
+                        detail,
+                        isInbound,
+                        resolvePartner(receipt, detail, isInbound)))
+                .toList();
+        return ResponseEntity.ok(result);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // GET /api/receipts/stats
     // ─────────────────────────────────────────────────────────────────────────
     @GetMapping("/stats")
@@ -612,6 +641,14 @@ public class WarehouseReceiptController {
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private boolean canAccessReceipt(User user, WarehouseReceipt receipt) {
+        String roleName = user.getRole().getRoleName().name();
+        if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) return true;
+        return user.getWarehouse() != null
+                && receipt.getWarehouse() != null
+                && user.getWarehouse().getId().equals(receipt.getWarehouse().getId());
+    }
 
     private String resolvePartner(WarehouseReceipt r, ReceiptDetail d, boolean isInbound) {
         if (r.getPartner() != null && !r.getPartner().isBlank()) return r.getPartner();
