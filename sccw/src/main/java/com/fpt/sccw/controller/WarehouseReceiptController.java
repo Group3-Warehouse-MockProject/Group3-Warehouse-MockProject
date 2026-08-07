@@ -573,7 +573,7 @@ public class WarehouseReceiptController {
 
         String roleName = user.getRole().getRoleName().name();
         if (!roleName.equals("ADMIN") && !roleName.equals("MANAGER")) {
-            return ResponseEntity.status(403).body("Insufficient permissions — Admin or Manager required");
+            return ResponseEntity.status(403).body("Insufficient permissions to perform this action.");
         }
 
         WarehouseReceipt receipt = receiptRepository.findById(receiptId).orElse(null);

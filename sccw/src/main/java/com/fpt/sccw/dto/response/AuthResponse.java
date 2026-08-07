@@ -14,6 +14,10 @@ public class AuthResponse {
     private UserDTO user;
     private String message;
     private boolean success;
+    @com.fasterxml.jackson.annotation.JsonProperty("isFirstLogin")
+    private boolean isFirstLogin;
+    @com.fasterxml.jackson.annotation.JsonProperty("needsPolicyAcceptance")
+    private boolean needsPolicyAcceptance;
 
     @Data
     @Builder

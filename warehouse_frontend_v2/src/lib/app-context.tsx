@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, useEffect, type ReactNode } from "react";
 import { type AppUser, type Role } from "@/types";
-import { api, parseJwt } from "@/lib/api";
+import { api, parseJwt, getToken, removeToken } from "@/lib/api";
 
 interface AppContextValue {
   currentUser: AppUser | null;
@@ -24,8 +24,7 @@ export const roleLabels: Record<Role, string> = {
 };
 
 function getUserFromToken(): AppUser | null {
-  if (typeof window === "undefined") return null;
-  const token = localStorage.getItem("token");
+  const token = getToken();
   if (!token) return null;
   const payload = parseJwt(token);
   if (!payload) return null;
@@ -99,7 +98,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       canSwitchWarehouse,
       logout: () => {
         if (typeof window !== "undefined") {
-          localStorage.removeItem("token");
+          removeToken();
           setCurrentUser(null);
           window.location.href = "/login";
         }

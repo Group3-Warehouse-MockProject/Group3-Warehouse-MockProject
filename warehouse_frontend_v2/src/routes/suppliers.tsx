@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, getToken } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { useApp } from "@/lib/app-context";
 import {
@@ -37,7 +37,7 @@ const PAGE_SIZE = 10;
 // const API_URL = "http://localhost:8080/api/suppliers";
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

@@ -28,6 +28,12 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final RoleRepository roleRepository;
     private final WarehouseRepository warehouseRepository;
+    private final EmailService emailService;
+    private final PolicyAcceptanceRepository policyAcceptanceRepository;
+    private final ActivityLogService activityLogService;
+    
+    @org.springframework.beans.factory.annotation.Value("${app.policy.version:1.0}")
+    private String currentPolicyVersion;
 
     @Override
     public AuthResponse login(LoginRequest loginRequest) {
@@ -68,13 +74,22 @@ public class UserServiceImpl implements UserService {
                     .build();
         }
 
+        // Check policy acceptance
+        boolean needsPolicyAcceptance = false;
+        Optional<PolicyAcceptance> latestAcceptance = policyAcceptanceRepository.findFirstByUserIdOrderByAcceptedAtDesc(user.getId());
+        if (latestAcceptance.isEmpty() || !latestAcceptance.get().getPolicyVersion().equals(currentPolicyVersion)) {
+            needsPolicyAcceptance = true;
+        }
+
         // Generate JWT token
         String token = jwtTokenProvider.generateToken(
                 user.getId(),
                 user.getEmail(),
                 user.getUsername(),
                 user.getRole().getRoleName().name(),
-                user.getWarehouse() != null ? user.getWarehouse().getId() : null
+                user.getWarehouse() != null ? user.getWarehouse().getId() : null,
+                user.getIsFirstLogin(),
+                needsPolicyAcceptance
         );
 
         log.info("Login successful for user: {}", user.getEmail());
@@ -83,6 +98,8 @@ public class UserServiceImpl implements UserService {
                 .success(true)
                 .token(token)
                 .user(AuthResponse.UserDTO.fromEntity(user))
+                .isFirstLogin(user.getIsFirstLogin())
+                .needsPolicyAcceptance(needsPolicyAcceptance)
                 .message("Login successful")
                 .build();
     }
@@ -90,16 +107,6 @@ public class UserServiceImpl implements UserService {
     @Override
     public AuthResponse register(RegisterRequest registerRequest) {
         log.info("Attempting registration for user: {}", registerRequest.getEmail());
-        
-        // Check if passwords match
-        if (!registerRequest.getPassword().equals(registerRequest.getConfirmPassword())) {
-            log.warn("Registration failed: Passwords don't match");
-            return AuthResponse.builder()
-                    .success(false)
-                    .message("Passwords don't match")
-                    .build();
-        }
-        
 
         // Check if email already exists
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
@@ -138,20 +145,27 @@ public class UserServiceImpl implements UserService {
                   .orElseThrow(() -> new RuntimeException("Warehouse not found"));
         }
 
+        // Generate random temporary password
+        String tempPassword = generateTempPassword();
+
         User newUser = User.builder()
                 .username(registerRequest.getUsername())
                 .email(registerRequest.getEmail())
-                .password(passwordEncoder.encode(registerRequest.getPassword()))
+                .password(passwordEncoder.encode(tempPassword))
                 .fullName(registerRequest.getFullName())
                 .phone(registerRequest.getPhone())
                 .department(registerRequest.getDepartment())
                 .role(role)
                 .warehouse(warehouse)
                 .isDeleted(false)
+                .isFirstLogin(true)
                 .build();
 
         // Save user to database
         User savedUser = userRepository.save(newUser);
+
+        // Send temporary password via email
+        emailService.sendTemporaryPassword(savedUser.getEmail(), savedUser.getUsername(), tempPassword);
 
         // Generate JWT token
         String token = jwtTokenProvider.generateToken(
@@ -159,7 +173,9 @@ public class UserServiceImpl implements UserService {
                 savedUser.getEmail(),
                 savedUser.getUsername(),
                 savedUser.getRole().getRoleName().name(),
-                savedUser.getWarehouse() != null ? savedUser.getWarehouse().getId() : null
+                savedUser.getWarehouse() != null ? savedUser.getWarehouse().getId() : null,
+                true,
+                true
         );
 
         log.info("Registration successful for user: {}", savedUser.getEmail());
@@ -168,6 +184,8 @@ public class UserServiceImpl implements UserService {
                     .success(true)
                     .token(token)
                     .user(AuthResponse.UserDTO.fromEntity(savedUser))
+                    .isFirstLogin(true)
+                    .needsPolicyAcceptance(true)
                     .message("Registration successful")
                     .build();
     }
@@ -304,5 +322,76 @@ public class UserServiceImpl implements UserService {
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             throw new RuntimeException("Cannot permanently delete this user because they are linked to existing records (receipts, transfers, etc). Please keep them as Deactive.");
         }
+    }
+
+    @Override
+    public AuthResponse completeFirstTimeSetup(Long userId, FirstTimeSetupRequest request, String ipAddress) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.getIsFirstLogin()) {
+            if (request.getCurrentPassword() == null || request.getCurrentPassword().isEmpty() || 
+                request.getNewPassword() == null || request.getNewPassword().isEmpty() || 
+                request.getConfirmNewPassword() == null || request.getConfirmNewPassword().isEmpty()) {
+                throw new RuntimeException("Passwords are required");
+            }
+            if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+                throw new RuntimeException("Current password is incorrect");
+            }
+
+            if (!request.getNewPassword().equals(request.getConfirmNewPassword())) {
+                throw new RuntimeException("New passwords do not match");
+            }
+            
+            user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+            user.setIsFirstLogin(false);
+            userRepository.save(user);
+        }
+
+        if (!request.isAcceptPolicy()) {
+            throw new RuntimeException("You must accept the policy");
+        }
+
+        PolicyAcceptance acceptance = PolicyAcceptance.builder()
+                .user(user)
+                .acceptedAt(java.time.LocalDateTime.now())
+                .policyVersion(currentPolicyVersion)
+                .ipAddress(ipAddress)
+                .build();
+        policyAcceptanceRepository.save(acceptance);
+
+        activityLogService.log(user, "FIRST_TIME_SETUP", "Completed first time setup");
+
+        String token = jwtTokenProvider.generateToken(
+                user.getId(),
+                user.getEmail(),
+                user.getUsername(),
+                user.getRole().getRoleName().name(),
+                user.getWarehouse() != null ? user.getWarehouse().getId() : null,
+                false,
+                false
+        );
+
+        return AuthResponse.builder()
+                .success(true)
+                .token(token)
+                .user(AuthResponse.UserDTO.fromEntity(user))
+                .message("Setup completed successfully")
+                .build();
+    }
+
+    private String generateTempPassword() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+        StringBuilder sb = new StringBuilder();
+        Random random = new Random();
+        // Ensure at least one upper, one lower, one digit, one special
+        sb.append("ABCDEFGHIJKLMNOPQRSTUVWXYZ".charAt(random.nextInt(26)));
+        sb.append("abcdefghijklmnopqrstuvwxyz".charAt(random.nextInt(26)));
+        sb.append("0123456789".charAt(random.nextInt(10)));
+        sb.append("!@#$%^&*".charAt(random.nextInt(8)));
+        for (int i = 4; i < 8; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 }

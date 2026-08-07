@@ -4,7 +4,6 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
-  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -136,8 +135,6 @@ import { Toaster } from "@/components/ui/sonner";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const currentPath = useRouterState({ select: (s) => s.location.pathname });
-  const isLoginPage = currentPath === "/login";
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -145,8 +142,8 @@ function RootComponent() {
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
         <Toaster position="top-right" />
-        {/* Chatbot nổi góc dưới phải, hiện trên toàn bộ trang (trừ login) */}
-        {!isLoginPage && <ChatBotButton />}
+        {/* Chatbot nổi góc dưới phải, hiện trên toàn bộ trang (tự ẩn nếu chưa đăng nhập) */}
+        <ChatBotButton />
       </AppProvider>
     </QueryClientProvider>
   );
