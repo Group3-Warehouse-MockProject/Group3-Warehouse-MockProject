@@ -28,12 +28,14 @@ public class JwtTokenProvider {
      * @param warehouseId user warehouse ID
      * @return JWT token
      */
-    public String generateToken(Long userId, String email, String username, String role, Long warehouseId) {
+    public String generateToken(Long userId, String email, String username, String role, Long warehouseId, boolean isFirstLogin, boolean needsPolicyAcceptance) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
         claims.put("role", role);
         claims.put("warehouseId", warehouseId);
+        claims.put("isFirstLogin", isFirstLogin);
+        claims.put("needsPolicyAcceptance", needsPolicyAcceptance);
 
         return createToken(claims, email);
     }
@@ -117,6 +119,18 @@ public class JwtTokenProvider {
     public String getRoleFromToken(String token) {
         Claims claims = getAllClaimsFromToken(token);
         return (String) claims.get("role");
+    }
+
+    public boolean getIsFirstLoginFromToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        Boolean val = (Boolean) claims.get("isFirstLogin");
+        return val != null ? val : false;
+    }
+
+    public boolean getNeedsPolicyAcceptanceFromToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        Boolean val = (Boolean) claims.get("needsPolicyAcceptance");
+        return val != null ? val : false;
     }
     
 }

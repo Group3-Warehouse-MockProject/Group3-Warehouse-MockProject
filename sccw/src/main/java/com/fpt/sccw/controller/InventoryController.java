@@ -167,7 +167,7 @@ public class InventoryController {
         String roleName = user.getRole().getRoleName().name();
 
         if (!roleName.equals("ADMIN") && !roleName.equals("MANAGER") && !roleName.equals("WAREHOUSE_MANAGER")) {
-            return ResponseEntity.status(403).body("Insufficient permissions. Admin, Manager, or Warehouse Manager required.");
+            return ResponseEntity.status(403).body("Insufficient permissions to perform this action.");
         }
 
         Long threshold = null;

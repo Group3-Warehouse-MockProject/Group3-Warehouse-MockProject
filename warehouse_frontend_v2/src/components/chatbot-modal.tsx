@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, KeyboardEvent } from "react";
 import { api } from "@/lib/api";
+import { useApp } from "@/lib/app-context";
 
 interface Message {
     role: "user" | "bot";
@@ -508,9 +509,14 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
 
 // Nút mở chatbot (nổi góc dưới phải màn hình)
 export function ChatBotButton() {
+    const { currentUser } = useApp();
     const [isOpen, setIsOpen] = useState(false);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const { pos, dragProps, hasMoved } = useDraggable(buttonRef);
+
+    if (!currentUser) {
+        return null;
+    }
 
     const handleClick = () => {
         if (hasMoved.current) {

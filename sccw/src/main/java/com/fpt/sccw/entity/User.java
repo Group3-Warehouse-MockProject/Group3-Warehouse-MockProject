@@ -47,6 +47,10 @@ public class User extends BaseEntity{
     @Builder.Default
     private Boolean isDeleted = false;
 
+    @Column(name = "is_first_login", nullable = false)
+    @Builder.Default
+    private Boolean isFirstLogin = true;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;

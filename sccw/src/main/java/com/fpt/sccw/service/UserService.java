@@ -2,6 +2,7 @@ package com.fpt.sccw.service;
 
 import com.fpt.sccw.dto.request.LoginRequest;
 import com.fpt.sccw.dto.request.RegisterRequest;
+import com.fpt.sccw.dto.request.FirstTimeSetupRequest;
 import com.fpt.sccw.dto.response.AuthResponse;
 import com.fpt.sccw.entity.*;
 
@@ -20,6 +21,15 @@ public interface UserService {
      * @return authentication response with token and user info
      */
     AuthResponse register(RegisterRequest registerRequest);
+
+    /**
+     * Complete first time setup
+     * @param userId user ID
+     * @param request setup data
+     * @param ipAddress client IP
+     * @return authentication response
+     */
+    AuthResponse completeFirstTimeSetup(Long userId, FirstTimeSetupRequest request, String ipAddress);
 
     /**
      * Logout user
