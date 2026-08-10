@@ -36,6 +36,8 @@ public class TransferDTO {
     private String createdBy;
     private Long assignedById;
     private String assignedBy;
+    private Long sourceLocationId;
+    private Long destinationLocationId;
     private Long totalQuantity;
     private List<TransferLineDTO> lines;
 
@@ -62,6 +64,8 @@ public class TransferDTO {
                 .createdBy(safeUserName(transfer.getCreatedByUser(), transfer.getLegacyUser()))
                 .assignedById(transfer.getAssignedByUser() != null ? transfer.getAssignedByUser().getId() : null)
                 .assignedBy(safeUserName(transfer.getAssignedByUser()))
+                .sourceLocationId(transfer.getSourceLocation() != null ? transfer.getSourceLocation().getId() : null)
+                .destinationLocationId(transfer.getDestinationLocation() != null ? transfer.getDestinationLocation().getId() : null)
                 .totalQuantity(total)
                 .lines(lineDTOs)
                 .build();
