@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fpt.sccw.dto.AiResponseDto;
+import com.fpt.sccw.dto.response.AiResponseDto;
 
 
 import org.springframework.ai.chat.client.ChatClient;
