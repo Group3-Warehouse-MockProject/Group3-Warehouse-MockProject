@@ -1,17 +1,96 @@
 import { useEffect, useRef, useState, KeyboardEvent } from "react";
-import axios from "axios";
-
-// URL backend Spring Boot — đổi thành domain thật khi deploy production
-const API_BASE = "http://localhost:8080";
+import { api } from "@/lib/api";
+import { useApp } from "@/lib/app-context";
 
 interface Message {
     role: "user" | "bot";
     text: string;
 }
 
+const SUGGESTED_QUESTIONS = [
+    "📦 How many products are currently in stock?",
+    "📉 Which products are running low on stock?",
+    "🏭 Show me the inventory for each warehouse",
+    "💰 What are the most expensive products?",
+    "🔍 List all RAM products and their quantities",
+];
+
 interface ChatBotModalProps {
     isOpen: boolean;
     onClose: () => void;
+}
+
+function useDraggable(containerRef: React.RefObject<HTMLElement | null>) {
+    const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+    const hasMoved = useRef(false);
+    const dragState = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0, isDragging: false });
+
+    const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+        e.preventDefault();
+        const target = e.target as HTMLElement;
+        const closestBtn = target.closest("button");
+        if ((closestBtn && closestBtn !== containerRef.current) || target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+
+        const container = containerRef.current;
+        if (!container) return;
+
+        const rect = container.getBoundingClientRect();
+        dragState.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            initialX: rect.left,
+            initialY: rect.top,
+            isDragging: true
+        };
+        hasMoved.current = false;
+        
+        try {
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch (err) {}
+    };
+
+    const onPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+        if (!dragState.current.isDragging) return;
+        e.preventDefault();
+        
+        const { startX, startY, initialX, initialY } = dragState.current;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            hasMoved.current = true;
+        }
+        
+        const container = containerRef.current;
+        if (!container) return;
+        
+        let newX = initialX + dx;
+        let newY = initialY + dy;
+        
+        newX = Math.max(0, Math.min(newX, window.innerWidth - container.offsetWidth));
+        newY = Math.max(0, Math.min(newY, window.innerHeight - container.offsetHeight));
+
+        setPos({ x: newX, y: newY });
+    };
+
+    const endDrag = (e: React.PointerEvent<HTMLElement>) => {
+        if (!dragState.current.isDragging) return;
+        dragState.current.isDragging = false;
+        try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch (err) {}
+    };
+
+    return {
+        pos,
+        dragProps: {
+            onPointerDown,
+            onPointerMove,
+            onPointerUp: endDrag,
+            onPointerCancel: endDrag,
+        },
+        hasMoved,
+    };
 }
 
 export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
@@ -23,8 +102,12 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
     ]);
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(true);
+    const [activeSuggestions, setActiveSuggestions] = useState<string[]>(SUGGESTED_QUESTIONS);
     const messageEndRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const { pos, dragProps } = useDraggable(modalRef);
 
     useEffect(() => {
         messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -36,35 +119,33 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
         }
     }, [isOpen]);
 
-    const sendMessage = async () => {
-        const trimmed = input.trim();
+    const handleSuggestionClick = (question: string) => {
+        sendMessageDirect(question);
+    };
+
+    const sendMessageDirect = async (text: string) => {
+        const trimmed = text.trim();
         if (!trimmed || isTyping) return;
 
         const userMessage: Message = { role: "user", text: trimmed };
         setMessages((prev) => [...prev, userMessage]);
         setInput("");
+        setShowSuggestions(false);
         setIsTyping(true);
 
         try {
-            const token = localStorage.getItem("token");
-            const response = await axios.post(
-                `${API_BASE}/api/ai/ask`,
-                { question: trimmed },
-                {
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
-                }
-            );
+            const response = await api.post(`/ai/ask`, { question: trimmed });
 
-            // Backend trả về plain string
-            const answer =
-                typeof response.data === "string"
-                    ? response.data
-                    : response.data?.answer ?? "No response.";
+            const data = response.data;
+            const answer = typeof data === "string" ? data : (data?.answer ?? "No response.");
+            const suggestions = Array.isArray(data?.suggestions) && data.suggestions.length > 0
+                ? data.suggestions
+                : [];
 
             setMessages((prev) => [...prev, { role: "bot", text: answer }]);
+            if (suggestions.length > 0) {
+                setActiveSuggestions(suggestions);
+            }
         } catch (error) {
             console.error("Chatbot error:", error);
             setMessages((prev) => [
@@ -76,7 +157,12 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
             ]);
         } finally {
             setIsTyping(false);
+            setShowSuggestions(true);
         }
+    };
+
+    const sendMessage = async () => {
+        await sendMessageDirect(input);
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -105,12 +191,13 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
 
             {/* Modal */}
             <div
+                ref={modalRef}
+                className="chatbot-modal"
                 style={{
                     position: "fixed",
-                    bottom: "24px",
-                    right: "24px",
-                    width: "380px",
-                    height: "540px",
+                    ...(pos ? { left: pos.x, top: pos.y } : { bottom: "24px", right: "24px" }),
+                    width: "420px",
+                    height: "600px",
                     background: "var(--card)",
                     border: "1px solid var(--border)",
                     borderRadius: "1.25rem",
@@ -124,7 +211,11 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
             >
                 {/* Header */}
                 <div
+                    {...dragProps}
                     style={{
+                        cursor: "move",
+                        touchAction: "none",
+                        userSelect: "none",
                         display: "flex",
                         alignItems: "center",
                         gap: "10px",
@@ -138,8 +229,8 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                     {/* Avatar */}
                     <div
                         style={{
-                            width: "36px",
-                            height: "36px",
+                            width: "40px",
+                            height: "40px",
                             borderRadius: "50%",
                             background:
                                 "linear-gradient(135deg, var(--primary), var(--accent))",
@@ -150,10 +241,11 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                             boxShadow: "0 0 12px oklch(0.78 0.16 195 / 0.4)",
                         }}
                     >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(0.15 0.03 250)" strokeWidth="2">
-                            <path d="M12 2a10 10 0 1 1 0 20A10 10 0 0 1 12 2z" />
-                            <path d="M8 12h.01M12 12h.01M16 12h.01" strokeLinecap="round" strokeWidth="2.5" />
-                        </svg>
+                        <img
+                            src="/chatbot-logo.png"
+                            alt="TechStock AI logo"
+                            style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+                        />
                     </div>
 
                     <div style={{ flex: 1 }}>
@@ -247,6 +339,53 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                             </div>
                         </div>
                     ))}
+
+                    {/* Suggested questions */}
+                    {showSuggestions && !isTyping && (
+                        <div
+                            style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "8px",
+                                padding: "4px 0",
+                                animation: "fadeIn 0.3s ease",
+                            }}
+                        >
+                            {activeSuggestions.map((q, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => handleSuggestionClick(q)}
+                                    style={{
+                                        padding: "8px 14px",
+                                        borderRadius: "20px",
+                                        border: "1px solid var(--border)",
+                                        background: "var(--secondary)",
+                                        color: "var(--foreground)",
+                                        fontSize: "12px",
+                                        cursor: "pointer",
+                                        transition: "all 0.2s ease",
+                                        lineHeight: "1.4",
+                                        textAlign: "left",
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = "linear-gradient(135deg, oklch(0.78 0.16 195 / 0.15), oklch(0.72 0.18 155 / 0.1))";
+                                        e.currentTarget.style.borderColor = "var(--primary)";
+                                        e.currentTarget.style.transform = "translateY(-1px)";
+                                        e.currentTarget.style.boxShadow = "0 2px 8px oklch(0.78 0.16 195 / 0.2)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = "var(--secondary)";
+                                        e.currentTarget.style.borderColor = "var(--border)";
+                                        e.currentTarget.style.transform = "translateY(0)";
+                                        e.currentTarget.style.boxShadow = "none";
+                                    }}
+                                >
+                                    {q}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
 
                     {/* Typing indicator */}
                     {isTyping && (
@@ -363,7 +502,108 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                 </div>
             </div>
 
+
+        </>
+    );
+}
+
+// Nút mở chatbot (nổi góc dưới phải màn hình)
+export function ChatBotButton() {
+    const { currentUser } = useApp();
+    const [isOpen, setIsOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const { pos, dragProps, hasMoved } = useDraggable(buttonRef);
+
+    if (!currentUser) {
+        return null;
+    }
+
+    const handleClick = () => {
+        if (hasMoved.current) {
+            hasMoved.current = false;
+            return;
+        }
+        setIsOpen((prev) => !prev);
+    };
+
+    return (
+        <>
+            <ChatBotModal isOpen={isOpen} onClose={() => setIsOpen(false)} />
+
+            <button
+                ref={buttonRef}
+                {...dragProps}
+                id="chatbot-open-btn"
+                className="chatbot-open-button"
+                onClick={handleClick}
+                title="TechStock AI Assistant"
+                style={{
+                    position: "fixed",
+                    ...(pos ? { left: pos.x, top: pos.y } : { bottom: "24px", right: "24px" }),
+                    width: "84px",
+                    height: "84px",
+                    borderRadius: 0,
+                    touchAction: "none",
+                    userSelect: "none",
+                    background: "transparent",
+                    border: "none",
+                    overflow: "visible",
+                    cursor: "pointer",
+                    display: isOpen ? "none" : "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "none",
+                    zIndex: 998,
+                    transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "scale(1.1)";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                }}
+            >
+                <img
+                    src="/chatbot-logo.png"
+                    alt="Open TechStock AI assistant"
+                    style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                />
+            </button>
+
             <style>{`
+                .chatbot-modal {
+                    max-width: calc(100vw - 24px);
+                    max-height: calc(100dvh - 24px);
+                }
+
+                .chatbot-open-button {
+                    max-width: 18vw;
+                    max-height: 18vw;
+                }
+
+                @media (max-width: 640px) {
+                    .chatbot-modal {
+                        left: 12px !important;
+                        right: 12px !important;
+                        bottom: 12px !important;
+                        width: auto !important;
+                        height: min(600px, calc(100dvh - 24px)) !important;
+                        max-width: none;
+                        max-height: none;
+                        border-radius: 16px;
+                    }
+
+                    .chatbot-open-button {
+                        left: auto !important;
+                        right: 12px !important;
+                        bottom: 12px !important;
+                        width: 68px !important;
+                        height: 68px !important;
+                        max-width: none;
+                        max-height: none;
+                    }
+                }
+
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(4px); }
                     to   { opacity: 1; transform: translateY(0); }
@@ -376,51 +616,21 @@ export function ChatBotModal({ isOpen, onClose }: ChatBotModalProps) {
                     0%, 60%, 100% { transform: translateY(0); }
                     30%           { transform: translateY(-6px); }
                 }
+                @keyframes twinkle {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.7; transform: scale(0.85); }
+                }
+                .sparkle-1, .sparkle-2 {
+                    transform-origin: center;
+                    transform-box: fill-box;
+                }
+                .sparkle-1 {
+                    animation: twinkle 2s ease-in-out infinite;
+                }
+                .sparkle-2 {
+                    animation: twinkle 2.5s ease-in-out infinite 0.5s;
+                }
             `}</style>
-        </>
-    );
-}
-
-// Nút mở chatbot (nổi góc dưới phải màn hình)
-export function ChatBotButton() {
-    const [isOpen, setIsOpen] = useState(false);
-
-    return (
-        <>
-            <ChatBotModal isOpen={isOpen} onClose={() => setIsOpen(false)} />
-
-            <button
-                id="chatbot-open-btn"
-                onClick={() => setIsOpen((prev) => !prev)}
-                title="TechStock AI Assistant"
-                style={{
-                    position: "fixed",
-                    bottom: "24px",
-                    right: "24px",
-                    width: "54px",
-                    height: "54px",
-                    borderRadius: "50%",
-                    background: "linear-gradient(135deg, var(--primary), var(--accent))",
-                    border: "none",
-                    cursor: "pointer",
-                    display: isOpen ? "none" : "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    boxShadow: "var(--shadow-glow), 0 4px 20px oklch(0 0 0 / 0.4)",
-                    zIndex: 998,
-                    transition: "transform 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "scale(1.1)";
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "scale(1)";
-                }}
-            >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="oklch(0.15 0.03 250)" strokeWidth="2">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-            </button>
         </>
     );
 }

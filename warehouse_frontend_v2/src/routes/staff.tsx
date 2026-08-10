@@ -30,8 +30,6 @@ function StaffPage() {
   const [filterStatus, setFilterStatus] = useState("Active"); // Default to Active
   const queryClient = useQueryClient();
 
-  if (!currentUser) return null;
-
   const limit = 15;
   const [page, setPage] = useState(1);
 
@@ -98,6 +96,8 @@ function StaffPage() {
   const totalPages = pageData?.totalPages || 1;
   const safePage = Math.min(page, totalPages);
   const paginatedList = list;
+
+  if (!currentUser) return null;
 
   const scopeLabel =
     currentUser.role === "Warehouse_Manager" || currentUser.role === "Staff"
@@ -649,10 +649,6 @@ function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWareh
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [accept, setAccept] = useState(false);
-  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [role, setRole] = useState("Staff");
@@ -660,17 +656,12 @@ function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWareh
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !userName || !email || !password) return setError("Please fill in all required fields.");
-    if (password.length < 8) return setError("Password must be at least 8 characters.");
-    if (password !== confirm) return setError("Passwords do not match.");
-    if (!accept) return setError("You must accept the terms to continue.");
+    if (!fullName || !userName || !email) return setError("Please fill in all required fields.");
     setError(null);
     try {
       const res = await api.post("/auth/register", {
         username: userName,
         email: email,
-        password: password,
-        confirmPassword: confirm,
         fullName: fullName,
         phone: phone,
         department: department,
@@ -750,40 +741,7 @@ function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWareh
               <div />
             )}
 
-            <div className="relative">
-              <Input
-                label="Password *"
-                type={showPw ? "text" : "password"}
-                value={password}
-                onChange={setPassword}
-                placeholder="At least 8 characters"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPw((v) => !v)}
-                className="absolute right-2 top-8 size-7 grid place-items-center rounded-md hover:bg-secondary text-muted-foreground"
-              >
-                {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </div>
-            <Input
-              label="Confirm password *"
-              type={showPw ? "text" : "password"}
-              value={confirm}
-              onChange={setConfirm}
-              placeholder="Repeat password"
-            />
           </div>
-
-          <label className="flex items-start gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={accept}
-              onChange={(e) => setAccept(e.target.checked)}
-              className="mt-0.5 size-4 rounded border-border"
-            />
-            I confirm this person has been authorized to access TechStock and agrees to the internal policies.
-          </label>
 
           {error && (
             <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">

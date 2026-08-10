@@ -17,10 +17,6 @@ function RegisterPage() {
   const [department, setDepartment] = useState("");
   const [role, setRole] = useState("Staff");
   const [warehouseId, setWarehouseId] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [accept, setAccept] = useState(false);
-  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
 
@@ -32,17 +28,13 @@ function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !email || !password) return setError("Please fill in all required fields.");
-    if (password.length < 8) return setError("Password must be at least 8 characters.");
-    if (password !== confirm) return setError("Passwords do not match.");
-    if (!accept) return setError("You must accept the terms to continue.");
+    if (!fullName || !email) return setError("Please fill in all required fields.");
+    
     setError(null);
     try {
       const res = await api.post("/auth/register", {
         username: userName,
         email: email,
-        password: password,
-        confirmPassword: confirm,
         fullName: fullName,
         phone: phone,
         department: department,
@@ -71,9 +63,9 @@ function RegisterPage() {
             </div>
           </div>
 
-          <h2 className="text-3xl font-bold">Create your account</h2>
+          <h2 className="text-3xl font-bold">Create employee account</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Request access to TechStock. An admin will confirm your role.
+            Create a new account. A temporary password will be emailed to them.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -163,47 +155,6 @@ function RegisterPage() {
                 <div />
               )}
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Password" icon={<Lock className="size-4" />}>
-                <input
-                  type={showPw ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input pl-9 pr-10"
-                  placeholder="At least 8 characters"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 size-7 grid place-items-center rounded-md hover:bg-secondary text-muted-foreground"
-                  aria-label="Toggle password visibility"
-                >
-                  {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </Field>
-              <Field label="Confirm password" icon={<Lock className="size-4" />}>
-                <input
-                  type={showPw ? "text" : "password"}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  className="input pl-9"
-                  placeholder="Repeat password"
-                  required
-                />
-              </Field>
-            </div>
-
-            <label className="flex items-start gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={accept}
-                onChange={(e) => setAccept(e.target.checked)}
-                className="mt-0.5 size-4 rounded border-border"
-              />
-              I agree to the TechStock <a href="#" className="text-primary hover:underline">Terms of Service</a> and <a href="#" className="text-primary hover:underline">Privacy Policy</a>.
-            </label>
 
             {error && (
               <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">

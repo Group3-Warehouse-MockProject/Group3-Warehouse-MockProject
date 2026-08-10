@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ProductDTO {
+    private Long id;
     private String sku;
     private String name;
     private String category;
@@ -22,6 +23,7 @@ public class ProductDTO {
     private String imageUrl;
     private String locationStatus;
     private String warehouseStatus;
+    private Boolean isDeleted;
 
     public static ProductDTO fromEntity(Product product, Inventory inventory) {
         Long stock = 0L;
@@ -41,13 +43,13 @@ public class ProductDTO {
                 whStatus = inventory.getWarehouse().getStatus();
             }
             if (inventory.getLocation() != null) {
-                location = inventory.getLocation().getZoneCode() + "-" + 
-                           inventory.getLocation().getRackCode() + "-" + 
+                location = inventory.getLocation().getRackCode() + "-" + 
                            inventory.getLocation().getBinCode();
                 locStatus = inventory.getLocation().getStatus();
             }
         }
         return ProductDTO.builder()
+                .id(product.getId())
                 .sku(product.getCode())
                 .name(product.getName())
                 .category(product.getCategory() != null ? product.getCategory().getName() : "")
@@ -61,6 +63,7 @@ public class ProductDTO {
                 .imageUrl(product.getImageUrl())
                 .locationStatus(locStatus)
                 .warehouseStatus(whStatus)
+                .isDeleted(product.getIsDeleted())
                 .build();
     }
 }

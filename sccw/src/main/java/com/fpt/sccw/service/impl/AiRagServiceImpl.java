@@ -8,6 +8,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fpt.sccw.dto.AiResponseDto;
+
+
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -35,6 +40,7 @@ public class AiRagServiceImpl implements AiRagService {
     private final EmbeddingModel embeddingModel;
     private final InventoryRepository inventoryRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     // -----------------------------------------------------------------------
     // Ingest
@@ -130,7 +136,7 @@ public class AiRagServiceImpl implements AiRagService {
      *   5. Truyền context vào Gemini và trả về câu trả lời
      */
     @Override
-    public String askWarehouse(String question) {
+    public AiResponseDto askWarehouse(String question) {
         log.info("AI question: {}", question);
 
         // 1. Embed câu hỏi thành vector
@@ -142,7 +148,10 @@ public class AiRagServiceImpl implements AiRagService {
         );
 
         if (rows.isEmpty()) {
-            return "The warehouse data has not been synced to the AI system yet. Please contact your administrator to perform the data sync.";
+            return AiResponseDto.builder()
+                    .answer("The warehouse data has not been synced to the AI system yet. Please contact your administrator to perform the data sync.")
+                    .suggestions(List.of())
+                    .build();
         }
 
         // 3. Tính cosine similarity — lấy tất cả bản ghi có score >= 0.5,
@@ -172,25 +181,57 @@ public class AiRagServiceImpl implements AiRagService {
                 .collect(Collectors.toList());
 
         if (topContents.isEmpty()) {
-            return "I couldn't find any information matching your question in the current warehouse data. Could you try asking in a different way?";
+            return AiResponseDto.builder()
+                    .answer("I couldn't find any information matching your question in the current warehouse data. Could you try asking in a different way?")
+                    .suggestions(List.of())
+                    .build();
         }
 
         String context = String.join("\n---\n", topContents);
         log.info("Found {} relevant context snippets for question.", topContents.size());
 
-        // 4. Gọi Gemini với context
-        return chatClient.prompt()  
+        // 4. Gọi Gemini với context và yêu cầu JSON
+        String rawResponse = chatClient.prompt()  
                 .system("""
                         You are the AI assistant for the TechStock warehouse management system.
                         Please answer the user's question BASED ON the warehouse information below.
                         Answer in English, concisely and accurately.
                         If the information is not sufficient, please state it clearly.
+                        
+                        IMPORTANT: You MUST return the response strictly in JSON format matching this structure exactly:
+                        {
+                            "answer": "Your detailed answer here",
+                            "suggestions": ["Follow-up question 1?", "Follow-up question 2?", "Follow-up question 3?"]
+                        }
+                        Do NOT wrap the JSON in Markdown backticks like ```json ... ```. 
+                        Generate exactly 3 relevant follow-up questions in the suggestions array based on the user's question and your answer.
 
                         Warehouse information:
                         """ + context)
                 .user(question)
                 .call()
                 .content();
+                
+        // 5. Parse JSON
+        try {
+            // Loại bỏ markdown backticks nếu AI cố tình trả về
+            if (rawResponse.startsWith("```json")) {
+                rawResponse = rawResponse.substring(7);
+            }
+            if (rawResponse.startsWith("```")) {
+                rawResponse = rawResponse.substring(3);
+            }
+            if (rawResponse.endsWith("```")) {
+                rawResponse = rawResponse.substring(0, rawResponse.length() - 3);
+            }
+            return objectMapper.readValue(rawResponse.trim(), AiResponseDto.class);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse AI response as JSON: {}", rawResponse, e);
+            return AiResponseDto.builder()
+                    .answer(rawResponse) // Trả về raw text nếu lỗi parse
+                    .suggestions(List.of("📦 How many products are currently in stock?", "🏭 Show me the inventory for each warehouse"))
+                    .build();
+        }
     }
 
     // -----------------------------------------------------------------------

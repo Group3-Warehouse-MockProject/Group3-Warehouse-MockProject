@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.fpt.sccw.service.AiRagService;
+import com.fpt.sccw.dto.AiResponseDto;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,12 +27,12 @@ public class AiController {
      * Body: { "question": "Kho Hà Nội còn bao nhiêu RAM?" }
      */
     @PostMapping("/ask")
-    public ResponseEntity<String> askWarehouse(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> askWarehouse(@RequestBody Map<String, String> request) {
         String question = request.get("question");
         if (question == null || question.isBlank()) {
             return ResponseEntity.badRequest().body("Thiếu trường 'question'.");
         }
-        String answer = aiRagService.askWarehouse(question);
+        AiResponseDto answer = aiRagService.askWarehouse(question);
         return ResponseEntity.ok(answer);
     }
 

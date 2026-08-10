@@ -29,9 +29,26 @@ function LoginPage() {
       const { api } = await import("@/lib/api");
       const res = await api.post("/auth/login", { emailOrUsername: email, password });
       if (res.data.success) {
-        localStorage.setItem("token", res.data.token);
-        // Force context to re-evaluate or reload window
-        window.location.href = "/";
+        if (res.data.isFirstLogin || res.data.needsPolicyAcceptance) {
+          sessionStorage.setItem("setup_token", res.data.token);
+          sessionStorage.setItem("setup_isFirstLogin", String(res.data.isFirstLogin));
+          sessionStorage.setItem("setup_needsPolicyAcceptance", String(res.data.needsPolicyAcceptance));
+          sessionStorage.setItem("setup_remember", String(remember));
+          window.location.href = "/first-time-setup";
+        } else {
+          // "Keep me signed in" → localStorage (persists); unchecked → sessionStorage (tab-only)
+          if (remember) {
+            localStorage.setItem("token", res.data.token);
+            sessionStorage.removeItem("token");
+          } else {
+            sessionStorage.setItem("token", res.data.token);
+            localStorage.removeItem("token");
+          }
+          // Force context to re-evaluate or reload window
+          window.location.href = "/";
+        }
+      } else {
+        setError(res.data.message || "Login failed. Please try again.");
       }
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials. Please try again.");

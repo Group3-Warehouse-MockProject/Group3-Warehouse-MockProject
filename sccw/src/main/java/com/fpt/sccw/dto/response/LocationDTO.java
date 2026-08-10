@@ -19,7 +19,6 @@ import java.util.List;
 @AllArgsConstructor
 public class LocationDTO {
     private Long id;
-    private String zoneCode;
     private String rackCode;
     private String binCode;
     private String status;
@@ -103,7 +102,6 @@ public class LocationDTO {
 
         return LocationDTO.builder()
                 .id(location.getId())
-                .zoneCode(location.getZoneCode())
                 .rackCode(location.getRackCode())
                 .binCode(location.getBinCode())
                 .status(location.getStatus())

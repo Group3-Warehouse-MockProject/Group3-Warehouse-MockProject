@@ -9,13 +9,24 @@ export const api = axios.create({
   },
 });
 
+/** Read token from whichever storage holds it (localStorage = persistent, sessionStorage = tab-only). */
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token") || sessionStorage.getItem("token");
+}
+
+/** Clear token from both storages. */
+export function removeToken(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("token");
+  sessionStorage.removeItem("token");
+}
+
 // Thêm token vào mọi request
 api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
@@ -25,7 +36,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("token");
+      removeToken();
       window.location.href = "/login";
     }
     return Promise.reject(error);

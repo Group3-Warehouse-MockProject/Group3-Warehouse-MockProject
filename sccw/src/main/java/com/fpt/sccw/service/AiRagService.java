@@ -1,9 +1,11 @@
 package com.fpt.sccw.service;
 
+import com.fpt.sccw.dto.AiResponseDto;
+
 public interface AiRagService {
 
     /** Trả lời câu hỏi về kho hàng dựa trên dữ liệu trong Vector Store */
-    String askWarehouse(String question);
+    AiResponseDto askWarehouse(String question);
 
     /** Nạp một sản phẩm vào Vector Store bằng productId + description thủ công */
     void ingestProduct(String productId, String description);

@@ -68,6 +68,21 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/first-time-setup")
+    public ResponseEntity<AuthResponse> firstTimeSetup(@Valid @RequestBody com.fpt.sccw.dto.request.FirstTimeSetupRequest request, HttpServletRequest httpRequest) {
+        log.info("POST /api/auth/first-time-setup");
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String email = auth.getName();
+        User user = userService.getUserByEmail(email);
+        String ipAddress = IpUtils.getClientIp(httpRequest);
+        
+        AuthResponse authResponse = userService.completeFirstTimeSetup(user.getId(), request, ipAddress);
+        return ResponseEntity.ok(authResponse);
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<AuthResponse> logout(@RequestHeader(value = "Authorization", required = false) String token) {
         log.info("POST /api/auth/logout - User logout attempt");

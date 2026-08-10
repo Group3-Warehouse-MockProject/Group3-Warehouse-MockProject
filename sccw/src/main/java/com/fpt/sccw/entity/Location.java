@@ -4,16 +4,15 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "locations")
+@Table(name = "locations", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_location_warehouse_rack_bin", columnNames = {"warehouse_id", "rack_code", "bin_code"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class Location extends BaseEntity {
-    
-    @Column(name = "zone_code")
-    private String zoneCode;
 
     @Column(name = "rack_code")
     private String rackCode;

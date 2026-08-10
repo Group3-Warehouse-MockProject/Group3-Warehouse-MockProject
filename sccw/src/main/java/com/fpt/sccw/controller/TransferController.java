@@ -357,9 +357,13 @@ public class TransferController {
             return ResponseEntity.ok(TransferDTO.fromEntity(transfer));
         }
 
-        if (nextStatus == Status.TransactionStatus.COMPLETED
-                && isCrossWarehouse(transfer.getTransferType())) {
-            applyCrossWarehouseInventory(transfer);
+        if (nextStatus == Status.TransactionStatus.DELIVERING && isCrossWarehouse(transfer.getTransferType())) {
+            deductSourceInventory(transfer);
+        } else if (nextStatus == Status.TransactionStatus.COMPLETED && isCrossWarehouse(transfer.getTransferType())) {
+            if (transfer.getStatus() != Status.TransactionStatus.DELIVERING) {
+                deductSourceInventory(transfer);
+            }
+            addDestinationInventory(transfer);
         } else if (nextStatus == Status.TransactionStatus.COMPLETED) {
             applyInternalMovementLocation(transfer);
         }
@@ -835,67 +839,60 @@ public class TransferController {
         return String.join(" | ", parts);
     }
 
-    private void applyCrossWarehouseInventory(
-            Transfer transfer
-    ) {
-        Warehouse destination =
-                transfer.getWarehouseDestination();
-
-        if (destination == null) {
-            throw new RuntimeException(
-                    "Destination warehouse is required to complete cross-warehouse transfer"
+    private void deductSourceInventory(Transfer transfer) {
+        for (TransferDetail detail : transfer.getDetails()) {
+            List<Inventory> sources = inventoryRepository.findAllByProductIdAndWarehouseId(
+                    detail.getProduct().getId(),
+                    transfer.getWarehouse().getId()
             );
+
+            if (sources.isEmpty()) {
+                throw new RuntimeException("Source inventory not found for " + detail.getProduct().getCode());
+            }
+
+            long totalAvailable = sources.stream().mapToLong(i -> i.getQuantity() != null ? i.getQuantity() : 0L).sum();
+            if (totalAvailable < detail.getQuantity()) {
+                throw new RuntimeException("Not enough stock for " + detail.getProduct().getCode()
+                        + " (Required: " + detail.getQuantity() + ", Available: " + totalAvailable + ")");
+            }
+
+            long remaining = detail.getQuantity();
+            for (Inventory source : sources) {
+                if (remaining <= 0) break;
+                long available = source.getQuantity() != null ? source.getQuantity() : 0L;
+                long deduct = Math.min(available, remaining);
+                source.setQuantity(available - deduct);
+                remaining -= deduct;
+                inventoryRepository.save(source);
+            }
+        }
+    }
+
+    private void addDestinationInventory(Transfer transfer) {
+        Warehouse destination = transfer.getWarehouseDestination();
+        if (destination == null) {
+            throw new RuntimeException("Destination warehouse is required to complete cross-warehouse transfer");
         }
 
         for (TransferDetail detail : transfer.getDetails()) {
-            Inventory source =
-                    inventoryRepository
-                            .findByWarehouseIdAndProductId(
-                                    transfer.getWarehouse().getId(),
-                                    detail.getProduct().getId()
-                            )
-                            .orElseThrow(() ->
-                                    new RuntimeException(
-                                            "Source inventory not found for "
-                                                    + detail.getProduct()
-                                                            .getCode()
-                                    )
-                            );
+            List<Inventory> dests = inventoryRepository.findAllByProductIdAndWarehouseId(
+                    detail.getProduct().getId(),
+                    destination.getId()
+            );
 
-            if (source.getQuantity() < detail.getQuantity()) {
-                throw new RuntimeException(
-                        "Not enough stock for "
-                                + detail.getProduct().getCode()
-                );
+            Inventory dest;
+            if (dests.isEmpty()) {
+                dest = Inventory.builder()
+                        .warehouse(destination)
+                        .product(detail.getProduct())
+                        .quantity(detail.getQuantity())
+                        .lowStockThreshold(10L)
+                        .outOfStockWarningDays(3L)
+                        .build();
+            } else {
+                dest = dests.get(0);
+                dest.setQuantity(dest.getQuantity() + detail.getQuantity());
             }
-
-            Inventory dest =
-                    inventoryRepository
-                            .findByWarehouseIdAndProductId(
-                                    destination.getId(),
-                                    detail.getProduct().getId()
-                            )
-                            .orElseGet(() ->
-                                    Inventory.builder()
-                                            .warehouse(destination)
-                                            .product(detail.getProduct())
-                                            .quantity(0L)
-                                            .lowStockThreshold(
-                                                    source.getLowStockThreshold()
-                                            )
-                                            .location(null)
-                                            .build()
-                            );
-
-            source.setQuantity(
-                    source.getQuantity() - detail.getQuantity()
-            );
-
-            dest.setQuantity(
-                    dest.getQuantity() + detail.getQuantity()
-            );
-
-            inventoryRepository.save(source);
             inventoryRepository.save(dest);
         }
     }

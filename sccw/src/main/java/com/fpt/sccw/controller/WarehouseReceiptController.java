@@ -135,6 +135,35 @@ public class WarehouseReceiptController {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // GET /api/receipts/{receiptId}
+    // ─────────────────────────────────────────────────────────────────────────
+    @GetMapping("/{receiptId}")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getReceipt(@PathVariable Long receiptId) {
+        User user = resolveUser();
+        if (user == null) return ResponseEntity.status(401).build();
+
+        WarehouseReceipt receipt = receiptRepository.findById(receiptId).orElse(null);
+        if (receipt == null) return ResponseEntity.notFound().build();
+        if (!canAccessReceipt(user, receipt)) {
+            return ResponseEntity.status(403).body("Insufficient permissions");
+        }
+        if (receipt.getType() != Status.TransactionType.OUTBOUND) {
+            return ResponseEntity.badRequest().body("Payment details are only available for outbound receipts");
+        }
+
+        boolean isInbound = receipt.getType() == Status.TransactionType.INBOUND;
+        List<MovementDTO> result = receipt.getDetails().stream()
+                .map(detail -> buildReceiptMovement(
+                        receipt,
+                        detail,
+                        isInbound,
+                        resolvePartner(receipt, detail, isInbound)))
+                .toList();
+        return ResponseEntity.ok(result);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // GET /api/receipts/stats
     // ─────────────────────────────────────────────────────────────────────────
     @GetMapping("/stats")
@@ -260,6 +289,11 @@ public class WarehouseReceiptController {
         Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId()).orElse(null);
         if (warehouse == null) return ResponseEntity.badRequest().body("Warehouse not found");
 
+        if (!"INBOUND".equalsIgnoreCase(request.getType())
+                && !"OUTBOUND".equalsIgnoreCase(request.getType())) {
+            return ResponseEntity.badRequest().body("Type must be INBOUND or OUTBOUND");
+        }
+
         boolean isInbound = "INBOUND".equalsIgnoreCase(request.getType());
         Status.TransactionType txType = isInbound
                 ? Status.TransactionType.INBOUND : Status.TransactionType.OUTBOUND;
@@ -283,8 +317,12 @@ public class WarehouseReceiptController {
 
         Set<ReceiptDetail> details = new java.util.LinkedHashSet<>();
         for (CreateReceiptRequest.LineItemRequest item : request.getItems()) {
-            if (item.getProductCode() == null || item.getProductCode().isBlank()) continue;
-            if (item.getQuantity() == null || item.getQuantity() <= 0) continue;
+            if (item == null || item.getProductCode() == null || item.getProductCode().isBlank()) {
+                return ResponseEntity.badRequest().body("Product code is required");
+            }
+            if (item.getQuantity() == null || item.getQuantity() <= 0) {
+                return ResponseEntity.badRequest().body("Invalid quantity for product: " + item.getProductCode());
+            }
 
             Product product = productRepository.findByCode(item.getProductCode()).orElse(null);
             if (product == null)
@@ -407,13 +445,13 @@ public class WarehouseReceiptController {
                         Warehouse warehouse = receipt.getWarehouse();
                         // Verify inventory for all items
                         for (ReceiptDetail d : receipt.getDetails()) {
-                            Inventory inv = inventoryRepository
-                                    .findByProductIdAndWarehouseId(d.getProduct().getId(), warehouse.getId())
-                                    .orElse(null);
-                            if (inv == null || inv.getQuantity() < d.getQuantity()) {
+                            List<Inventory> invList = inventoryRepository
+                                    .findAllByProductIdAndWarehouseId(d.getProduct().getId(), warehouse.getId());
+                            long totalAvailable = invList.stream().mapToLong(i -> i.getQuantity() != null ? i.getQuantity() : 0L).sum();
+                            if (invList.isEmpty() || totalAvailable < d.getQuantity()) {
                                 receipt.setStatus(Status.ReceiptStatus.CANCELLED);
                                 receiptRepository.save(receipt);
-                                return ResponseEntity.badRequest().body("Insufficient inventory for product: " + d.getProduct().getCode() + " (Required: " + d.getQuantity() + "). Outbound request cancelled.");
+                                return ResponseEntity.badRequest().body("Insufficient inventory for product: " + d.getProduct().getCode() + " (Required: " + d.getQuantity() + ", Available: " + totalAvailable + "). Outbound request cancelled.");
                             }
                         }
                         // Subtract inventory
@@ -481,7 +519,9 @@ public class WarehouseReceiptController {
             List<ReceiptDetail> newDetails = new ArrayList<>();
 
             for (CreateReceiptRequest.LineItemRequest item : request.getItems()) {
-                if (item.getProductCode() == null || item.getProductCode().isBlank()) continue;
+                if (item == null || item.getProductCode() == null || item.getProductCode().isBlank()) {
+                    return ResponseEntity.badRequest().body("Product code is required");
+                }
                 if (item.getQuantity() == null || item.getQuantity() <= 0) {
                     return ResponseEntity.badRequest().body("Invalid quantity for product: " + item.getProductCode());
                 }
@@ -562,7 +602,7 @@ public class WarehouseReceiptController {
 
         String roleName = user.getRole().getRoleName().name();
         if (!roleName.equals("ADMIN") && !roleName.equals("MANAGER")) {
-            return ResponseEntity.status(403).body("Insufficient permissions — Admin or Manager required");
+            return ResponseEntity.status(403).body("Insufficient permissions to perform this action.");
         }
 
         WarehouseReceipt receipt = receiptRepository.findById(receiptId).orElse(null);
@@ -571,8 +611,10 @@ public class WarehouseReceiptController {
         boolean isInbound = receipt.getType().name().equals("INBOUND");
         Warehouse warehouse = receipt.getWarehouse();
 
-        // Delete associated payments first to avoid FK constraint issues
+        // Delete associated payments and approval history first to avoid orphaned records.
         paymentRepository.deleteByReceiptId(receiptId);
+        approvalHistoryRepository.deleteByDocumentIdAndDocumentType(
+                receiptId, Status.DocumentType.WAREHOUSE_RECEIPT);
 
         // Rollback inventory
         for (ReceiptDetail d : receipt.getDetails()) {
@@ -599,6 +641,14 @@ public class WarehouseReceiptController {
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private boolean canAccessReceipt(User user, WarehouseReceipt receipt) {
+        String roleName = user.getRole().getRoleName().name();
+        if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) return true;
+        return user.getWarehouse() != null
+                && receipt.getWarehouse() != null
+                && user.getWarehouse().getId().equals(receipt.getWarehouse().getId());
+    }
 
     private String resolvePartner(WarehouseReceipt r, ReceiptDetail d, boolean isInbound) {
         if (r.getPartner() != null && !r.getPartner().isBlank()) return r.getPartner();
@@ -645,24 +695,43 @@ public class WarehouseReceiptController {
     }
 
     private void adjustInventory(Product product, Warehouse warehouse, Long qty, boolean add) {
-        Inventory inv = inventoryRepository
-                .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
-                .orElse(null);
+        List<Inventory> invList = inventoryRepository
+                .findAllByProductIdAndWarehouseId(product.getId(), warehouse.getId());
 
-        if (inv != null) {
-            long newQty = add
-                    ? inv.getQuantity() + qty
-                    : Math.max(0, inv.getQuantity() - qty);
-            inv.setQuantity(newQty);
-            inventoryRepository.save(inv);
-        } else if (add) {
-            inventoryRepository.save(Inventory.builder()
-                    .product(product)
-                    .warehouse(warehouse)
-                    .quantity(qty)
-                    .lowStockThreshold(10L)
-                    .outOfStockWarningDays(3L)
-                    .build());
+        if (add) {
+            // For adding: use existing record or create new
+            Inventory inv = invList.isEmpty() ? null : invList.get(0);
+            if (inv != null) {
+                inv.setQuantity(inv.getQuantity() + qty);
+                inventoryRepository.save(inv);
+            } else {
+                inventoryRepository.save(Inventory.builder()
+                        .product(product)
+                        .warehouse(warehouse)
+                        .quantity(qty)
+                        .lowStockThreshold(10L)
+                        .outOfStockWarningDays(3L)
+                        .build());
+            }
+        } else {
+            // For deducting: aggregate across all locations
+            if (invList.isEmpty()) {
+                throw new IllegalArgumentException("No inventory record found for product: " + product.getCode());
+            }
+            long totalAvailable = invList.stream().mapToLong(i -> i.getQuantity() != null ? i.getQuantity() : 0L).sum();
+            if (totalAvailable < qty) {
+                throw new IllegalArgumentException("Insufficient inventory for product: " + product.getCode()
+                        + " (Required: " + qty + ", Available: " + totalAvailable + ")");
+            }
+            long remaining = qty;
+            for (Inventory inv : invList) {
+                if (remaining <= 0) break;
+                long available = inv.getQuantity() != null ? inv.getQuantity() : 0L;
+                long deduct = Math.min(available, remaining);
+                inv.setQuantity(available - deduct);
+                remaining -= deduct;
+                inventoryRepository.save(inv);
+            }
         }
     }
 

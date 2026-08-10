@@ -47,7 +47,8 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/auth/login",
                     "/api/auth/logout",
-                    "/api/ai/**",                    
+                    "/api/ai/ingest-all",
+                    "/api/ai/ask",
                     "/error"
                 ).permitAll()
                 .requestMatchers("/api/auth/register").hasAnyAuthority("ADMIN", "MANAGER")
@@ -67,7 +68,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        configuration.setAllowedOriginPatterns(List.of(
+            "http://localhost:*",
+            "https://techstock-fe.onrender.com"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization"));

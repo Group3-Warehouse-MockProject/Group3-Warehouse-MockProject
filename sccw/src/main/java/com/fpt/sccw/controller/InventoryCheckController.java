@@ -114,6 +114,10 @@ public class InventoryCheckController {
                 assignedUser = userRepository.findById(request.getAssignedUserId()).orElse(null);
             }
 
+            if (request.getProductIds() == null || request.getProductIds().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "At least one product is required"));
+            }
+
             List<InventoryCheckDetail> detailsList = new ArrayList<>();
 
             InventoryCheck check = InventoryCheck.builder()
@@ -125,33 +129,36 @@ public class InventoryCheckController {
                     .details(detailsList)
                     .build();
 
-            if (request.getProductIds() != null && !request.getProductIds().isEmpty()) {
-                List<Inventory> invList = inventoryRepository.findByWarehouseId(warehouse.getId());
+            List<Inventory> invList = inventoryRepository.findByWarehouseId(warehouse.getId());
 
-                for (Long productId : request.getProductIds()) {
-                    if (productId == null) continue;
-                    Product product = productRepository.findById(productId).orElse(null);
-                    if (product == null) continue;
-
-                    Long systemQty = 0L;
-                    if (invList != null) {
-                        systemQty = invList.stream()
-                                .filter(inv -> inv != null && inv.getProduct() != null && inv.getProduct().getId().equals(productId))
-                                .mapToLong(Inventory::getQuantity)
-                                .findFirst()
-                                .orElse(0L);
-                    }
-
-                    InventoryCheckDetail detail = InventoryCheckDetail.builder()
-                            .inventoryCheck(check)
-                            .product(product)
-                            .systemQuantity(systemQty)
-                            .actualQuantity(0L)
-                            .difference(0L)
-                            .build();
-
-                    detailsList.add(detail);
+            for (Long productId : request.getProductIds()) {
+                if (productId == null) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Product ID is required"));
                 }
+
+                Product product = productRepository.findById(productId).orElse(null);
+                if (product == null) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Product not found: " + productId));
+                }
+
+                Long systemQty = 0L;
+                if (invList != null) {
+                    systemQty = invList.stream()
+                            .filter(inv -> inv != null && inv.getProduct() != null && inv.getProduct().getId().equals(productId))
+                            .mapToLong(Inventory::getQuantity)
+                            .findFirst()
+                            .orElse(0L);
+                }
+
+                InventoryCheckDetail detail = InventoryCheckDetail.builder()
+                        .inventoryCheck(check)
+                        .product(product)
+                        .systemQuantity(systemQty)
+                        .actualQuantity(0L)
+                        .difference(0L)
+                        .build();
+
+                detailsList.add(detail);
             }
 
             InventoryCheck saved = inventoryCheckRepository.save(check);
@@ -213,18 +220,29 @@ public class InventoryCheckController {
             }
         }
 
-        // Cập nhật số đếm thực tế cho từng dòng sản phẩm
-        // Frontend gửi d.id = InventoryCheckDetail.id (không phải Product.id)
+        if (detailRequests == null || detailRequests.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // Frontend sends d.id = InventoryCheckDetail.id (not Product.id).
+        // System quantity is a server-owned snapshot captured when the check is created.
         for (InventoryCheckRequest.DetailRequest req : detailRequests) {
-            check.getDetails().stream()
+            if (req == null || req.getProductId() == null || req.getActualQuantity() == null
+                    || req.getActualQuantity() < 0) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            InventoryCheckDetail detail = check.getDetails().stream()
                     .filter(d -> d.getId().equals(req.getProductId()))
                     .findFirst()
-                    .ifPresent(d -> {
-                        d.setActualQuantity(req.getActualQuantity());
-                        d.setSystemQuantity(req.getSystemQuantity());
-                        d.setRemark(req.getRemark());
-                        // @PrePersist/@PreUpdate sẽ tự tính difference
-                    });
+                    .orElse(null);
+            if (detail == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            detail.setActualQuantity(req.getActualQuantity());
+            detail.setRemark(req.getRemark());
+            // @PrePersist/@PreUpdate automatically calculates the difference.
         }
 
         // Tự động chuyển sang IN_PROGRESS khi bắt đầu đếm
@@ -284,6 +302,7 @@ public class InventoryCheckController {
 
         // Chỉ WAREHOUSE_MANAGER mới được đóng phiếu (COMPLETED)
         String newStatus = body.get("status");
+        if (newStatus == null || newStatus.isBlank()) return ResponseEntity.badRequest().build();
         if ("COMPLETED".equals(newStatus) && !role.equals("WAREHOUSE_MANAGER")) {
             return ResponseEntity.status(403).build();
         }
@@ -292,6 +311,13 @@ public class InventoryCheckController {
                 .orElseThrow(() -> new RuntimeException("Stocktake not found: " + id));
 
         String oldStatusStr = check.getStatus().name();
+        if ("COMPLETED".equals(newStatus)) {
+            if (check.getDetails() == null || check.getDetails().isEmpty()
+                    || check.getDetails().stream().anyMatch(d -> d.getActualQuantity() == null
+                    || d.getActualQuantity() < 0)) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
         try {
             check.setStatus(Status.InventoryCheckStatus.valueOf(newStatus));
         } catch (IllegalArgumentException e) {
@@ -301,6 +327,31 @@ public class InventoryCheckController {
         InventoryCheck saved = inventoryCheckRepository.save(check);
 
         if (!oldStatusStr.equals(newStatus)) {
+            if ("COMPLETED".equals(newStatus)) {
+                Warehouse warehouse = saved.getWarehouse();
+                if (warehouse != null && saved.getDetails() != null) {
+                    for (InventoryCheckDetail detail : saved.getDetails()) {
+                        if (detail.getProduct() == null) continue;
+                        Product product = detail.getProduct();
+                        Inventory inv = inventoryRepository
+                                .findByWarehouseIdAndProductId(warehouse.getId(), product.getId())
+                                .orElse(null);
+                        if (inv != null) {
+                            inv.setQuantity(detail.getActualQuantity() != null ? detail.getActualQuantity() : 0L);
+                            inventoryRepository.save(inv);
+                        } else {
+                            inventoryRepository.save(Inventory.builder()
+                                    .product(product)
+                                    .warehouse(warehouse)
+                                    .quantity(detail.getActualQuantity() != null ? detail.getActualQuantity() : 0L)
+                                    .lowStockThreshold(10L)
+                                    .outOfStockWarningDays(3L)
+                                    .build());
+                        }
+                    }
+                }
+            }
+
             ApprovalHistory history = ApprovalHistory.builder()
                     .documentId(saved.getId())
                     .documentType(Status.DocumentType.INVENTORY_CHECK)
@@ -313,31 +364,6 @@ public class InventoryCheckController {
             approvalHistoryRepository.save(history);
 
             if ("COMPLETED".equals(newStatus)) {
-                // Tự động cập nhật lại số lượng tồn kho thực tế vào bảng inventories / product khi chốt phiếu COMPLETED
-                if (saved.getDetails() != null && saved.getWarehouse() != null) {
-                    Long warehouseId = saved.getWarehouse().getId();
-                    for (InventoryCheckDetail d : saved.getDetails()) {
-                        if (d.getProduct() != null && d.getActualQuantity() != null) {
-                            Long productId = d.getProduct().getId();
-                            Long actualQty = d.getActualQuantity();
-                            
-                            Inventory inv = inventoryRepository.findByWarehouseIdAndProductId(warehouseId, productId)
-                                    .orElse(null);
-                            if (inv != null) {
-                                inv.setQuantity(actualQty);
-                                inventoryRepository.save(inv);
-                            } else {
-                                Inventory newInv = Inventory.builder()
-                                        .warehouse(saved.getWarehouse())
-                                        .product(d.getProduct())
-                                        .quantity(actualQty)
-                                        .build();
-                                inventoryRepository.save(newInv);
-                            }
-                        }
-                    }
-                }
-
                 if (saved.getAssignedUser() != null) {
                     NotificationEventDTO event = NotificationEventDTO.builder()
                             .id(java.util.UUID.randomUUID().toString())

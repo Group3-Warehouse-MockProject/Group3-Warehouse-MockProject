@@ -28,8 +28,7 @@ public class InventoryDTO {
     public static InventoryDTO fromEntity(Inventory inventory) {
         String loc = "N/A";
         if (inventory.getLocation() != null) {
-            loc = inventory.getLocation().getZoneCode() + "-" + 
-                  inventory.getLocation().getRackCode() + "-" + 
+            loc = inventory.getLocation().getRackCode() + "-" + 
                   inventory.getLocation().getBinCode();
         }
         

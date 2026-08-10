@@ -142,7 +142,7 @@ function RootComponent() {
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
         <Toaster position="top-right" />
-        {/* Chatbot nổi góc dưới phải, hiện trên toàn bộ trang */}
+        {/* Chatbot nổi góc dưới phải, hiện trên toàn bộ trang (tự ẩn nếu chưa đăng nhập) */}
         <ChatBotButton />
       </AppProvider>
     </QueryClientProvider>
