@@ -16,6 +16,8 @@ public class TransferRequest {
     private Long sourceWarehouseId;
     private Long destinationWarehouseId;
     private Long assignedById;
+    private Long sourceLocationId;
+    private Long destinationLocationId;
     private String sourceLocation;
     private String destinationLocation;
     private String remark;

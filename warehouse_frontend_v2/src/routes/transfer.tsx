@@ -36,6 +36,8 @@ type Transfer = {
   createdBy: string;
   assignedById?: number | null;
   assignedBy?: string;
+  sourceLocationId?: number | null;
+  destinationLocationId?: number | null;
   totalQuantity: number;
   lines: TransferLine[];
 };
@@ -48,6 +50,11 @@ type ApprovalHistory = {
   approverName?: string | null;
   createdAt?: string | null;
 };
+
+function formatLocation(location?: { zoneCode?: string; rackCode?: string; binCode?: string }) {
+  if (!location) return "";
+  return [location.zoneCode, location.rackCode, location.binCode].filter(Boolean).join(" - ");
+}
 
 const statusTone: Record<Transfer["status"], string> = {
   Pending: "bg-warning/15 text-warning",
@@ -425,8 +432,8 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
   const [sourceWarehouse, setSourceWarehouse] = useState<string>(activeWarehouseId ?? "");
   const [destWarehouse, setDestWarehouse] = useState<string>("");
   const [assignedById, setAssignedById] = useState<string>("");
-  const [sourceZone, setSourceZone] = useState<string>("");
-  const [destZone, setDestZone] = useState<string>("");
+  const [sourceLocationId, setSourceLocationId] = useState<string>("");
+  const [destinationLocationId, setDestinationLocationId] = useState<string>("");
   const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<{ sku: string; qty: number }[]>([]);
 
@@ -440,6 +447,12 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
     queryKey: ["users"],
     queryFn: async () => (await api.get("/users")).data,
     enabled: open,
+  });
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations", sourceWarehouse, "transfer-selector"],
+    queryFn: async () => (await api.get("/locations", { params: { warehouseId: sourceWarehouse } })).data,
+    enabled: open && Boolean(sourceWarehouse),
   });
 
   const { data: products = [] } = useQuery({
@@ -464,15 +477,13 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
   useEffect(() => {
     if (!open) return;
     if (transfer) {
-      const sourceLocation = transfer.remark?.split(" | ").find((part) => part.startsWith("From: "))?.slice(6) ?? "";
-      const destinationLocation = transfer.remark?.split(" | ").find((part) => part.startsWith("To: "))?.slice(4) ?? "";
       const note = transfer.remark?.split(" | ").filter((part) => !part.startsWith("From: ") && !part.startsWith("To: ")).join(" | ") ?? "";
       setType(transfer.type === "Cross-Warehouse" ? "cross" : "internal");
       setSourceWarehouse(String(transfer.sourceWarehouseId));
       setDestWarehouse(transfer.destinationWarehouseId ? String(transfer.destinationWarehouseId) : "");
       setAssignedById(transfer.assignedById ? String(transfer.assignedById) : "");
-      setSourceZone(sourceLocation);
-      setDestZone(destinationLocation);
+      setSourceLocationId(transfer.sourceLocationId ? String(transfer.sourceLocationId) : "");
+      setDestinationLocationId(transfer.destinationLocationId ? String(transfer.destinationLocationId) : "");
       setRemark(note);
       setLines(transfer.lines.map((line) => ({ sku: line.sku, qty: line.quantity })));
       return;
@@ -491,7 +502,8 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
       const cleanLines = lines.filter((line) => line.sku && line.qty > 0);
       if (!sourceWarehouse) throw new Error("Select a source warehouse.");
       if (type === "cross" && !destWarehouse) throw new Error("Select a destination warehouse.");
-      if (type === "internal" && (!sourceZone || !destZone)) throw new Error("Enter source and destination locations.");
+      if (type === "internal" && (!sourceLocationId || !destinationLocationId)) throw new Error("Select source and destination locations.");
+      if (type === "internal" && sourceLocationId === destinationLocationId) throw new Error("Destination location must differ from source location.");
       if (cleanLines.length === 0) throw new Error("Add at least one product.");
 
       const payload = {
@@ -499,8 +511,10 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
         sourceWarehouseId: Number(sourceWarehouse),
         destinationWarehouseId: type === "cross" ? Number(destWarehouse) : null,
         assignedById: assignedById ? Number(assignedById) : null,
-        sourceLocation: type === "internal" ? sourceZone : null,
-        destinationLocation: type === "internal" ? destZone : null,
+        sourceLocationId: type === "internal" ? Number(sourceLocationId) : null,
+        destinationLocationId: type === "internal" ? Number(destinationLocationId) : null,
+        sourceLocation: type === "internal" ? formatLocation(locations.find((location: any) => String(location.id) === sourceLocationId)) : null,
+        destinationLocation: type === "internal" ? formatLocation(locations.find((location: any) => String(location.id) === destinationLocationId)) : null,
         remark,
         lines: cleanLines.map((line) => ({ sku: line.sku, quantity: Number(line.qty) })),
       };
@@ -551,8 +565,8 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
     setType("cross");
     setDestWarehouse("");
     setAssignedById("");
-    setSourceZone("");
-    setDestZone("");
+    setSourceLocationId("");
+    setDestinationLocationId("");
     setRemark("");
     setLines([]);
     onClose();
@@ -605,16 +619,22 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
         ) : (
           <>
             <Field label="Warehouse" required className="sm:col-span-2">
-              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setAssignedById(""); setLines([]); }}>
+              <select className={selectCls} value={sourceWarehouse} disabled={!canSwitchWarehouse} onChange={(e) => { setSourceWarehouse(e.target.value); setSourceLocationId(""); setDestinationLocationId(""); setAssignedById(""); setLines([]); }}>
                 <option value="" disabled>Select warehouse</option>
                 {activeWarehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
               </select>
             </Field>
             <Field label="Source Location" required>
-              <input className={inputCls} placeholder="e.g. Zone A - Rack 1 - Bin 2" value={sourceZone} onChange={(e) => setSourceZone(e.target.value)} />
+              <select className={selectCls} value={sourceLocationId} onChange={(e) => setSourceLocationId(e.target.value)} disabled={!sourceWarehouse}>
+                <option value="" disabled>Select source location</option>
+                {locations.filter((location: any) => location.effectiveStatus === "ACTIVE").map((location: any) => <option key={location.id} value={location.id}>{formatLocation(location)}</option>)}
+              </select>
             </Field>
             <Field label="Destination Location" required>
-              <input className={inputCls} placeholder="e.g. Zone B - Rack 3 - Bin 1" value={destZone} onChange={(e) => setDestZone(e.target.value)} />
+              <select className={selectCls} value={destinationLocationId} onChange={(e) => setDestinationLocationId(e.target.value)} disabled={!sourceWarehouse}>
+                <option value="" disabled>Select destination location</option>
+                {locations.filter((location: any) => location.effectiveStatus === "ACTIVE" && String(location.id) !== sourceLocationId).map((location: any) => <option key={location.id} value={location.id}>{formatLocation(location)}</option>)}
+              </select>
             </Field>
           </>
         )}

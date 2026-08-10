@@ -121,7 +121,8 @@ public class TransferController {
         ensureCanAccess(user, transfer.getWarehouse().getId());
 
         List<ApprovalHistoryDTO> history = approvalHistoryRepository
-                .findByTransferIdOrderByCreatedAtAsc(id)
+                .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(
+                        id, Status.DocumentType.TRANSFER)
                 .stream()
                 .map(ApprovalHistoryDTO::fromEntity)
                 .toList();
@@ -137,42 +138,39 @@ public class TransferController {
         User user = currentUser();
         String roleName = user.getRole().getRoleName().name();
 
-        List<Transfer> all;
-        if (roleName.equals("ADMIN") || roleName.equals("MANAGER")) {
-            all = warehouseIdParam == null
+        List<Transfer> transfers;
+        if ("ADMIN".equals(roleName) || "MANAGER".equals(roleName)) {
+            transfers = warehouseIdParam == null
                     ? transferRepository.findAll()
                     : transferRepository.findByWarehouseIdOrWarehouseDestinationId(
                             warehouseIdParam, warehouseIdParam);
         } else {
-            Long warehouseId = user.getWarehouse() != null
-                    ? user.getWarehouse().getId()
-                    : null;
-            all = warehouseId == null
+            Long warehouseId = user.getWarehouse() == null
+                    ? null : user.getWarehouse().getId();
+            transfers = warehouseId == null
                     ? Collections.emptyList()
                     : transferRepository.findByWarehouseIdOrWarehouseDestinationId(
                             warehouseId, warehouseId);
         }
 
-        long pending = all.stream()
-                .filter(t -> t.getStatus() == Status.TransactionStatus.PENDING)
+        long pending = transfers.stream()
+                .filter(transfer -> transfer.getStatus() == Status.TransactionStatus.PENDING)
                 .count();
-        long inTransit = all.stream()
-                .filter(t -> t.getStatus() == Status.TransactionStatus.DELIVERING
-                        || t.getStatus() == Status.TransactionStatus.DELIVERED)
+        long inTransit = transfers.stream()
+                .filter(transfer -> transfer.getStatus() == Status.TransactionStatus.DELIVERING
+                        || transfer.getStatus() == Status.TransactionStatus.DELIVERED)
                 .count();
-        long crossWarehouse = all.stream()
-                .filter(t -> isCrossWarehouse(t.getTransferType()))
+        long crossWarehouse = transfers.stream()
+                .filter(transfer -> isCrossWarehouse(transfer.getTransferType()))
                 .count();
 
         Map<String, Long> result = new HashMap<>();
-        result.put("total", (long) all.size());
+        result.put("total", (long) transfers.size());
         result.put("pending", pending);
         result.put("inTransit", inTransit);
         result.put("crossWarehouse", crossWarehouse);
-        result.put("internal", all.size() - crossWarehouse);
-
+        result.put("internal", transfers.size() - crossWarehouse);
         return ResponseEntity.ok(result);
-    }
     }
 
     @PostMapping
@@ -213,6 +211,7 @@ public class TransferController {
                 source,
                 destination
         );
+        Location[] internalLocations = resolveInternalLocations(request, source, transferType);
 
         Transfer transfer = Transfer.builder()
                 .transferType(transferType)
@@ -223,6 +222,8 @@ public class TransferController {
                 .createdByUser(user)
                 .legacyUser(user)
                 .assignedByUser(assignee)
+                .sourceLocation(internalLocations[0])
+                .destinationLocation(internalLocations[1])
                 .details(new LinkedHashSet<>())
                 .build();
 
@@ -280,23 +281,27 @@ public class TransferController {
         }
 
         User assignee = resolveAssignee(request.getAssignedById(), source, destination);
+        Location[] internalLocations = resolveInternalLocations(request, source, transferType);
         transferDetailRepository.deleteByTransferId(transfer.getId());
         transfer.getDetails().clear();
         transfer.setTransferType(transferType);
         transfer.setWarehouse(source);
         transfer.setWarehouseDestination(destination);
         transfer.setAssignedByUser(assignee);
+        transfer.setSourceLocation(internalLocations[0]);
+        transfer.setDestinationLocation(internalLocations[1]);
         transfer.setRemark(buildRemark(request));
         addTransferDetails(transfer, source, request.getLines());
 
         Transfer saved = transferRepository.save(transfer);
         approvalHistoryRepository.save(ApprovalHistory.builder()
-                .transfer(saved)
+                .documentId(saved.getId())
                 .documentType(Status.DocumentType.TRANSFER)
                 .oldStatus(saved.getStatus().name())
                 .newStatus(saved.getStatus().name())
                 .note("Transfer details updated")
-                .approver(user)
+                .approverId(user.getId())
+                .approverName(user.getFullName())
                 .build());
         notifyTransferParticipants(saved, "Transfer updated", "Transfer details were updated before dispatch.", "INFO");
 
@@ -320,7 +325,8 @@ public class TransferController {
                     "message", "Only pending or cancelled transfers can be deleted"));
         }
 
-        approvalHistoryRepository.deleteByTransferId(id);
+        approvalHistoryRepository.deleteByDocumentIdAndDocumentType(
+                id, Status.DocumentType.TRANSFER);
         transferDetailRepository.deleteByTransferId(id);
         transferRepository.delete(transfer);
         return ResponseEntity.noContent().build();
@@ -435,6 +441,43 @@ public class TransferController {
         }
 
         ensureCanAccess(user, request.getSourceWarehouseId());
+    }
+
+    private Location[] resolveInternalLocations(
+            TransferRequest request,
+            Warehouse source,
+            Status.TransferType transferType
+    ) {
+        if (isCrossWarehouse(transferType)) {
+            return new Location[] { null, null };
+        }
+
+        if (request.getSourceLocationId() == null || request.getDestinationLocationId() == null) {
+            throw new RuntimeException("Source and destination locations are required for internal movement");
+        }
+
+        Location sourceLocation = locationRepository.findById(request.getSourceLocationId())
+                .orElseThrow(() -> new RuntimeException("Source location not found"));
+        Location destinationLocation = locationRepository.findById(request.getDestinationLocationId())
+                .orElseThrow(() -> new RuntimeException("Destination location not found"));
+
+        validateLocationForWarehouse(sourceLocation, source, "Source");
+        validateLocationForWarehouse(destinationLocation, source, "Destination");
+
+        if (sourceLocation.getId().equals(destinationLocation.getId())) {
+            throw new RuntimeException("Destination location must differ from source location");
+        }
+
+        return new Location[] { sourceLocation, destinationLocation };
+    }
+
+    private void validateLocationForWarehouse(Location location, Warehouse warehouse, String label) {
+        if (location.getWarehouse() == null || !warehouse.getId().equals(location.getWarehouse().getId())) {
+            throw new RuntimeException(label + " location must belong to the source warehouse");
+        }
+        if (!"ACTIVE".equalsIgnoreCase(location.getStatus())) {
+            throw new RuntimeException(label + " location is inactive");
+        }
     }
 
     private void ensureCanAccess(
@@ -860,49 +903,13 @@ public class TransferController {
     private void applyInternalMovementLocation(
             Transfer transfer
     ) {
-        String destinationText =
-                extractRemarkPart(
-                        transfer.getRemark(),
-                        "To: "
-                );
-
-        if (destinationText == null
-                || destinationText.isBlank()) {
+        Location destination = transfer.getDestinationLocation();
+        if (destination == null) {
             throw new RuntimeException(
                     "Destination location is required to complete internal movement"
             );
         }
-
-        String[] parts = destinationText.split(
-                "\\s*-\\s*",
-                3
-        );
-
-        String zone = parts[0].trim();
-        String rack = parts.length > 1
-                ? parts[1].trim()
-                : "";
-        String bin = parts.length > 2
-                ? parts[2].trim()
-                : "";
-
-        Location destination =
-                locationRepository
-                        .findFirstByZoneCodeIgnoreCaseAndRackCodeIgnoreCaseAndBinCodeIgnoreCase(
-                                zone,
-                                rack,
-                                bin
-                        )
-                        .orElseGet(() ->
-                                locationRepository.save(
-                                        Location.builder()
-                                                .zoneCode(zone)
-                                                .rackCode(rack)
-                                                .binCode(bin)
-                                                .status("ACTIVE")
-                                                .build()
-                                )
-                        );
+        validateLocationForWarehouse(destination, transfer.getWarehouse(), "Destination");
 
         for (TransferDetail detail : transfer.getDetails()) {
             Inventory inventory =
