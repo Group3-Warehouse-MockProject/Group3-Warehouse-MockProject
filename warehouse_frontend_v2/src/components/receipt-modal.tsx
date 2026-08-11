@@ -237,7 +237,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
       await api.post("/receipts", {
         warehouseId: Number(warehouseId),
         type: isInbound ? "INBOUND" : "OUTBOUND",
-        partner: partner || null,
+        supplierId: isInbound && partner ? Number(partner) : null,
         paymentTerm: isInbound ? null : paymentTerm,
         assignedUserId: assignedUserId !== "" ? Number(assignedUserId) : null,
         remark: [
@@ -351,7 +351,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     >
                       <option value="">Select supplier…</option>
                       {suppliers.map((s) => (
-                        <option key={s.id} value={s.name}>
+                        <option key={s.id} value={s.id}>
                           {s.name}
                         </option>
                       ))}
