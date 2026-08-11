@@ -4,6 +4,7 @@ import com.fpt.sccw.entity.Supplier;
 import com.fpt.sccw.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -65,6 +66,7 @@ public class SupplierController {
 
     // Tạo mới nhà cung cấp (Đã bổ sung nhận đủ rating và onTimeDelivery từ Entity)
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER')")
     public ResponseEntity<SupplierDTO> createSupplier(@RequestBody Supplier supplier) {
         Supplier savedSupplier = supplierRepository.save(supplier);
         return ResponseEntity.ok(SupplierDTO.fromEntity(savedSupplier));

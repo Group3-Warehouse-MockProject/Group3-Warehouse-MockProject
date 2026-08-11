@@ -36,6 +36,17 @@ export const Route = createFileRoute("/suppliers")({
 const PAGE_SIZE = 10;
 // const API_URL = "http://localhost:8080/api/suppliers";
 
+type SupplierForm = {
+  name: string;
+  country: string;
+  phone: string;
+  email: string;
+  address: string;
+  status: string;
+  onTimeDelivery: string;
+  qualityPassRate: string;
+};
+
 const getAuthHeaders = () => {
   const token = getToken();
   return {
@@ -53,6 +64,8 @@ const calculateRating = (onTime: any, quality: any) => {
 
 function SuppliersPage() {
   const queryClient = useQueryClient();
+  const { currentUser } = useApp();
+  const canAddSupplier = currentUser?.role === "Admin" || currentUser?.role === "Manager";
   const [deletedIds, setDeletedIds] = useState<number[]>([]);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -229,14 +242,14 @@ function SuppliersPage() {
               Partners distributing components (Auto-Rating Mode)
             </p>
           </div>
-          <button
+          {canAddSupplier && <button
             onClick={() => setOpenAdd(true)}
             className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring"
             style={{ background: "var(--gradient-primary)" }}
           >
             <Plus className="size-4" />
             Add supplier
-          </button>
+          </button>}
         </div>
 
         {/* Các ô KPI hiển thị tổng hợp toàn bộ số liệu */}
@@ -738,7 +751,7 @@ function AddSupplierModal({
   onClose: () => void;
   onSave: () => void;
 }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<SupplierForm>({
     name: "",
     country: "",
     phone: "",
@@ -748,6 +761,7 @@ function AddSupplierModal({
     onTimeDelivery: "95",
     qualityPassRate: "98",
   });
+  const [errors, setErrors] = useState<Partial<Record<keyof SupplierForm, string>>>({});
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -759,15 +773,42 @@ function AddSupplierModal({
 
   const computedRating = calculateRating(form.onTimeDelivery, form.qualityPassRate);
 
+  const updateForm = (field: keyof SupplierForm, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setErrors((current) => ({ ...current, [field]: undefined }));
+  };
+
+  const validateForm = () => {
+    const nextErrors: Partial<Record<keyof SupplierForm, string>> = {};
+    const name = form.name.trim();
+    const country = form.country.trim();
+    const phone = form.phone.trim();
+    const email = form.email.trim();
+    const address = form.address.trim();
+    const onTimeDelivery = Number(form.onTimeDelivery);
+    const qualityPassRate = Number(form.qualityPassRate);
+
+    if (name.length < 2 || name.length > 100) nextErrors.name = "Supplier name must be 2–100 characters.";
+    if (country.length < 2 || country.length > 100) nextErrors.country = "Enter a valid country name.";
+    if (!/^\+?[0-9][0-9\s().-]{6,19}$/.test(phone)) nextErrors.phone = "Enter a valid phone number.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 100) nextErrors.email = "Enter a valid email address.";
+    if (address.length < 5) nextErrors.address = "Address must be at least 5 characters.";
+    if (!form.onTimeDelivery.trim() || !Number.isInteger(onTimeDelivery) || onTimeDelivery < 0 || onTimeDelivery > 100) nextErrors.onTimeDelivery = "Enter a whole number from 0 to 100.";
+    if (!form.qualityPassRate.trim() || !Number.isInteger(qualityPassRate) || qualityPassRate < 0 || qualityPassRate > 100) nextErrors.qualityPassRate = "Enter a whole number from 0 to 100.";
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
   const createMutation = useMutation({
     mutationFn: () =>
       api.post("/suppliers", {
-        name: form.name,
-        email: form.email,
-        phoneNumber: form.phone,
-        address: form.address,
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phoneNumber: form.phone.trim(),
+        address: form.address.trim(),
         status: form.status,
-        country: form.country,
+        country: form.country.trim(),
         rating: computedRating,
         onTimeDelivery: parseInt(form.onTimeDelivery) || 95,
       }),
@@ -783,6 +824,7 @@ function AddSupplierModal({
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
     setConfirmModal({
       isOpen: true,
       title: "Confirm Supplier Creation",
@@ -819,39 +861,45 @@ function AddSupplierModal({
         </>
       }
     >
-      <form id="add-supplier-form" onSubmit={onSubmit}>
+      <form id="add-supplier-form" onSubmit={onSubmit} noValidate>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Supplier Name" className="sm:col-span-2" required>
             <input
               className={inputCls}
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => updateForm("name", e.target.value)}
               required
             />
+            {errors.name && <p className="mt-1 text-xs text-destructive">{errors.name}</p>}
           </Field>
           <Field label="Country" required>
             <input
               className={inputCls}
               value={form.country}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
+              onChange={(e) => updateForm("country", e.target.value)}
               required
             />
+            {errors.country && <p className="mt-1 text-xs text-destructive">{errors.country}</p>}
           </Field>
           <Field label="Phone" required>
             <input
+              type="tel"
               className={inputCls}
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => updateForm("phone", e.target.value)}
               required
             />
+            {errors.phone && <p className="mt-1 text-xs text-destructive">{errors.phone}</p>}
           </Field>
           <Field label="Email" required>
             <input
+              type="email"
               className={inputCls}
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => updateForm("email", e.target.value)}
               required
             />
+            {errors.email && <p className="mt-1 text-xs text-destructive">{errors.email}</p>}
           </Field>
           <Field label="On-Time Delivery (%)" required>
             <input
@@ -860,9 +908,10 @@ function AddSupplierModal({
               max="100"
               className={inputCls}
               value={form.onTimeDelivery}
-              onChange={(e) => setForm({ ...form, onTimeDelivery: e.target.value })}
+              onChange={(e) => updateForm("onTimeDelivery", e.target.value)}
               required
             />
+            {errors.onTimeDelivery && <p className="mt-1 text-xs text-destructive">{errors.onTimeDelivery}</p>}
           </Field>
           <Field label="Quality Pass Rate (%)" required>
             <input
@@ -871,9 +920,10 @@ function AddSupplierModal({
               max="100"
               className={inputCls}
               value={form.qualityPassRate}
-              onChange={(e) => setForm({ ...form, qualityPassRate: e.target.value })}
+              onChange={(e) => updateForm("qualityPassRate", e.target.value)}
               required
             />
+            {errors.qualityPassRate && <p className="mt-1 text-xs text-destructive">{errors.qualityPassRate}</p>}
           </Field>
 
           <div className="sm:col-span-2 p-3 bg-primary/5 border border-primary/20 rounded-xl flex items-center justify-between">
@@ -890,9 +940,10 @@ function AddSupplierModal({
             <textarea
               className={textareaCls}
               value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              onChange={(e) => updateForm("address", e.target.value)}
               required
             />
+            {errors.address && <p className="mt-1 text-xs text-destructive">{errors.address}</p>}
           </Field>
         </div>
       </form>
