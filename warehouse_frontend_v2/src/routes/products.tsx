@@ -94,7 +94,7 @@ function ProductsPage() {
   const { data: categories } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
-      const res = await api.get("/categories", { params: { page: 0, size: 1000 } });
+      const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } });
       return res.data?.content ?? [];
     }
   });
@@ -920,7 +920,7 @@ function EditProductModal({ product, onClose, onSave, saving }: {
 }) {
   const { data: categories } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000 } }); return res.data?.content ?? []; }
+    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
   });
   const { data: suppliers = [] } = useQuery({
     queryKey: ["suppliers", "reference"],
@@ -1294,7 +1294,7 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
 }) {
   const { data: categories } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000 } }); return res.data?.content ?? []; }
+    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
   });
   const { data: suppliers = [] } = useQuery({
     queryKey: ["suppliers", "reference"],
