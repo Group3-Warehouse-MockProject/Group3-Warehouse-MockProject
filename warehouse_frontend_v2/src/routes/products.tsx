@@ -993,6 +993,9 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [selectedWarehouse, setSelectedWarehouse] = useState("");
+  const activeSuppliers = suppliers.filter(
+    (supplier: any) => String(supplier.status || "").toUpperCase() === "ACTIVE",
+  );
   const [selectedLocationId, setSelectedLocationId] = useState("");
   const [initialStock, setInitialStock] = useState("0");
 
@@ -1091,7 +1094,7 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
         <Field label="Supplier" required>
           <select name="supplierId" className={selectCls} defaultValue="" required>
             <option value="" disabled>Select supplier</option>
-            {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {activeSuppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <Field label="Product name" required className="sm:col-span-2"><input name="name" className={inputCls} placeholder="Intel Core i7-14700K" required /></Field>

@@ -191,6 +191,17 @@ public class InventoryController {
             warehouseId = Long.valueOf(request.get("warehouseId").toString());
         }
 
+        if ("WAREHOUSE_MANAGER".equals(roleName)) {
+            Long assignedWhId = user.getWarehouse() != null ? user.getWarehouse().getId() : null;
+            if (assignedWhId == null) {
+                return ResponseEntity.status(403).body("Warehouse Manager is not assigned to any warehouse");
+            }
+            if (warehouseId != null && !assignedWhId.equals(warehouseId)) {
+                return ResponseEntity.status(403).body("Warehouse Managers can only update thresholds for their assigned warehouse");
+            }
+            warehouseId = assignedWhId;
+        }
+
         List<Inventory> itemsToUpdate;
         if (warehouseId != null) {
             itemsToUpdate = inventoryRepository.findByWarehouseIdEager(warehouseId);

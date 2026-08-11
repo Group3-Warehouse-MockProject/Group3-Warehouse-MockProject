@@ -10,7 +10,8 @@ import {
   MapPin, Plus, Search, Pencil, Trash2,
   ChevronRight, ChevronDown, Layers, LayoutGrid,
   Package, PackageOpen, X, Warehouse as WarehouseIcon, AlertTriangle,
-  Eye, CheckCircle2, DollarSign, Tag, Info, Building2, Power, RefreshCw
+  Eye, CheckCircle2, DollarSign, Tag, Info, Building2, Power, RefreshCw,
+  Filter, RotateCcw
 } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
 import { toast } from "sonner";
@@ -62,9 +63,17 @@ function Spinner() {
    MAIN LOCATION PAGE (Warehouse -> Rack -> Bin -> Product)
 ══════════════════════════════════════════════════════════ */
 function LocationPage() {
-  const { activeWarehouseId } = useApp();
+  const { activeWarehouseId, currentUser } = useApp();
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
+
+  const canManageLocation = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
+
+  // Additional Filter states
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string>("ALL");
+  const [selectedRack, setSelectedRack] = useState<string>("ALL");
+  const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
+  const [selectedOccupancy, setSelectedOccupancy] = useState<string>("ALL");
 
   const [openAddModal, setOpenAddModal] = useState(false);
   const [prefilledAdd, setPrefilledAdd] = useState<{ warehouseId?: string; rackCode?: string }>({});
@@ -128,36 +137,94 @@ function LocationPage() {
     return whMap;
   }, [locations, warehouses]);
 
-  // Apply Warehouse & Search query filters
-  const filteredWhIds = useMemo(() => {
-    let ids = Object.keys(wmsTree);
-
-    // Global Header warehouse filter
-    if (activeWarehouseId) {
-      ids = ids.filter((id) => id === String(activeWarehouseId));
-    }
-
-    if (!q) return ids;
-    const ql = q.toLowerCase();
-
-    return ids.filter((id) => {
-      const { warehouse, racks } = wmsTree[id];
-      if (warehouse.name?.toLowerCase().includes(ql) || warehouse.warehouseName?.toLowerCase().includes(ql) || warehouse.code?.toLowerCase().includes(ql)) {
-        return true;
+  // Compute available racks for Rack dropdown filter
+  const availableRacks = useMemo(() => {
+    const rackSet = new Set<string>();
+    locations.forEach((loc: any) => {
+      if (loc.rackCode) {
+        if (selectedWarehouse !== "ALL" && String(loc.warehouseId) !== selectedWarehouse) return;
+        rackSet.add(String(loc.rackCode).toUpperCase());
       }
-
-      return Object.keys(racks).some((rCode) => {
-        if (rCode.toLowerCase().includes(ql)) return true;
-        return racks[rCode].some((bin) =>
-          String(bin.binCode ?? "").toLowerCase().includes(ql) ||
-          `${bin.rackCode}-${bin.binCode}`.toLowerCase().includes(ql) ||
-          bin.items?.some((item: any) =>
-            item.productName?.toLowerCase().includes(ql) || item.productSku?.toLowerCase().includes(ql)
-          )
-        );
-      });
     });
-  }, [wmsTree, activeWarehouseId, q]);
+    return Array.from(rackSet).sort();
+  }, [locations, selectedWarehouse]);
+
+  // Apply Warehouse, Rack, Status, Occupancy & Search query filters
+  const filteredWmsTree = useMemo(() => {
+    const result: Record<string, { warehouse: any; racks: Record<string, any[]> }> = {};
+
+    Object.keys(wmsTree).forEach((wId) => {
+      // 1. Global Header warehouse filter
+      if (activeWarehouseId && wId !== String(activeWarehouseId)) return;
+
+      // 2. Dropdown Warehouse filter
+      if (selectedWarehouse !== "ALL" && wId !== selectedWarehouse) return;
+
+      const { warehouse, racks } = wmsTree[wId];
+      const filteredRacks: Record<string, any[]> = {};
+
+      Object.keys(racks).forEach((rCode) => {
+        // 3. Dropdown Rack filter
+        if (selectedRack !== "ALL" && rCode.toUpperCase() !== selectedRack.toUpperCase()) return;
+
+        const bins = racks[rCode].filter((bin: any) => {
+          // 4. Dropdown Status filter
+          const effStatus = (bin.effectiveStatus || bin.status || "ACTIVE").toUpperCase();
+          if (selectedStatus !== "ALL" && effStatus !== selectedStatus.toUpperCase()) return false;
+
+          // 5. Dropdown Occupancy filter
+          const qty = bin.currentQuantity || (bin.items?.reduce((acc: number, i: any) => acc + (i.quantity || 0), 0) || 0);
+          const cap = bin.maxCapacity || 0;
+
+          if (selectedOccupancy === "EMPTY" && qty > 0) return false;
+          if (selectedOccupancy === "OCCUPIED" && qty === 0) return false;
+          if (selectedOccupancy === "FULL") {
+            const isFull = (cap > 0 && qty >= cap * 0.8) || (cap === 0 && qty > 0);
+            if (!isFull) return false;
+          }
+
+          // 6. Search Query q
+          if (q) {
+            const ql = q.toLowerCase();
+            const whMatch = warehouse.name?.toLowerCase().includes(ql) || warehouse.warehouseName?.toLowerCase().includes(ql) || warehouse.code?.toLowerCase().includes(ql);
+            const rackMatch = rCode.toLowerCase().includes(ql);
+            const binMatch = String(bin.binCode ?? "").toLowerCase().includes(ql) || `${bin.rackCode}-${bin.binCode}`.toLowerCase().includes(ql);
+            const prodMatch = bin.items?.some((item: any) =>
+              item.productName?.toLowerCase().includes(ql) || item.productSku?.toLowerCase().includes(ql)
+            );
+            if (!whMatch && !rackMatch && !binMatch && !prodMatch) return false;
+          }
+
+          return true;
+        });
+
+        if (bins.length > 0) {
+          filteredRacks[rCode] = bins;
+        }
+      });
+
+      if (Object.keys(filteredRacks).length > 0) {
+        result[wId] = {
+          warehouse,
+          racks: filteredRacks,
+        };
+      }
+    });
+
+    return result;
+  }, [wmsTree, activeWarehouseId, selectedWarehouse, selectedRack, selectedStatus, selectedOccupancy, q]);
+
+  const filteredWhIds = useMemo(() => Object.keys(filteredWmsTree), [filteredWmsTree]);
+
+  const hasActiveFilters = selectedWarehouse !== "ALL" || selectedRack !== "ALL" || selectedStatus !== "ALL" || selectedOccupancy !== "ALL" || Boolean(q);
+
+  const clearAllFilters = () => {
+    setSelectedWarehouse("ALL");
+    setSelectedRack("ALL");
+    setSelectedStatus("ALL");
+    setSelectedOccupancy("ALL");
+    setQ("");
+  };
 
   // Metrics
   const totalLocations = locations.length;
@@ -212,7 +279,55 @@ function LocationPage() {
   }>({ isOpen: false, title: "", message: "", isPending: false, onConfirm: () => { } });
   const closeModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
 
+  /* Mutate delete rack */
+  const deleteRackMutation = useMutation({
+    mutationFn: ({ warehouseId, rackCode }: { warehouseId?: any; rackCode: string }) =>
+      api.delete("/locations/racks", {
+        params: { warehouseId, rackCode },
+      }),
+    onSuccess: (res: any) => {
+      invalidate();
+      toast.success(res?.data?.message || "Rack and empty bins deleted successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data || "Failed to delete rack");
+    },
+  });
+
+  const handleDeleteRack = async (warehouse: any, rackCode: string, bins: any[]) => {
+    const hasOccupied = bins.some((b: any) => {
+      const qty = b.currentQuantity || (b.items?.reduce((acc: number, i: any) => acc + (i.quantity || 0), 0) || 0);
+      return qty > 0;
+    });
+
+    if (hasOccupied) {
+      toast.error(`Cannot delete Rack ${rackCode}: Contains bins with active inventory stock`);
+      return;
+    }
+
+    const wId = warehouse?.id !== "default" ? warehouse?.id : undefined;
+
+    setConfirmModal({
+      isOpen: true,
+      title: `Delete Rack ${rackCode}`,
+      message: `Are you sure you want to delete Rack ${rackCode} and all its ${bins.length} empty bin(s)?`,
+      isPending: false,
+      onConfirm: () => {
+        closeModal();
+        deleteRackMutation.mutateAsync({ warehouseId: wId, rackCode });
+      },
+    });
+  };
+
   const handleDeleteBin = async (loc: any) => {
+    const hasItems = loc.items && loc.items.length > 0;
+    const totalQty = loc.currentQuantity || (hasItems ? loc.items.reduce((a: number, i: any) => a + (i.quantity || 0), 0) : 0);
+
+    if (totalQty > 0) {
+      toast.error(`Cannot delete Bin ${loc.rackCode}-${loc.binCode}: Contains ${totalQty} items in stock`);
+      return;
+    }
+
     setConfirmModal({
       isOpen: true,
       title: `Delete Bin ${loc.rackCode}-${loc.binCode}`,
@@ -222,7 +337,7 @@ function LocationPage() {
         closeModal();
         deleteMutation.mutateAsync(loc.id);
       },
-    })
+    });
   };
 
   return (
@@ -236,17 +351,19 @@ function LocationPage() {
               Standard location hierarchy: <strong className="text-foreground">Warehouse → Rack → Bin</strong>
             </p>
           </div>
-          <button
-            onClick={() => {
-              setPrefilledAdd({});
-              setOpenAddModal(true);
-            }}
-            className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring"
-            style={{ background: "var(--gradient-primary)" }}
-          >
-            <Plus className="size-4" />
-            Add Location
-          </button>
+          {canManageLocation && (
+            <button
+              onClick={() => {
+                setPrefilledAdd({});
+                setOpenAddModal(true);
+              }}
+              className="h-10 px-4 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring"
+              style={{ background: "var(--gradient-primary)" }}
+            >
+              <Plus className="size-4" />
+              Add Location
+            </button>
+          )}
         </div>
 
         {/* 4 KPI Cards */}
@@ -257,25 +374,155 @@ function LocationPage() {
           <Kpi icon={Package} label="Occupied Bins" value={occupiedBins} tone="primary" />
         </div>
 
-        {/* Search */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="relative w-full sm:w-96">
-            <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search Warehouse, Rack, Bin, Product…"
-              className={`w-full h-10 pl-9 pr-8 rounded-lg bg-input border text-sm ${q ? "border-emerald-500 ring-1 ring-emerald-500/20" : "border-border"}`}
-            />
-            {q && (
-              <button onClick={() => setQ("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X className="size-4" />
-              </button>
-            )}
+        {/* Filter Toolbar */}
+        <div className="surface-card p-4 rounded-xl border space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Filter className="size-4 text-primary" />
+              <span>Filter Locations</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {activeWarehouseId && (
+                <div className="text-xs text-muted-foreground bg-primary/10 border border-primary/20 text-primary px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                  <Info className="size-3.5" /> Header Warehouse Active
+                </div>
+              )}
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="h-8 px-3 text-xs font-medium text-destructive hover:bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-1.5 transition-colors"
+                >
+                  <RotateCcw className="size-3.5" />
+                  Reset Filters
+                </button>
+              )}
+            </div>
           </div>
-          {activeWarehouseId && (
-            <div className="text-xs text-muted-foreground bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-lg flex items-center gap-2">
-              <Info className="size-3.5" /> Filtered by active header warehouse
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            {/* Search Input */}
+            <div className="relative md:col-span-1">
+              <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search Keyword..."
+                className={`w-full h-9 pl-9 pr-8 rounded-lg bg-input border text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 ${q ? "border-primary ring-1 ring-primary/20" : "border-border"}`}
+              />
+              {q && (
+                <button onClick={() => setQ("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Warehouse Filter */}
+            <div>
+              <select
+                value={selectedWarehouse}
+                onChange={(e) => {
+                  setSelectedWarehouse(e.target.value);
+                  setSelectedRack("ALL");
+                }}
+                className={`w-full h-9 px-3 rounded-lg bg-input border text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 ${selectedWarehouse !== "ALL" ? "border-primary text-primary font-semibold" : "border-border text-foreground"}`}
+              >
+                <option value="ALL">🏢 All Warehouses</option>
+                {warehouses.map((w: any) => (
+                  <option key={w.id} value={String(w.id)}>
+                    {w.warehouseName || w.name || `Warehouse ${w.code}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Rack Filter */}
+            <div>
+              <select
+                value={selectedRack}
+                onChange={(e) => setSelectedRack(e.target.value)}
+                className={`w-full h-9 px-3 rounded-lg bg-input border text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 ${selectedRack !== "ALL" ? "border-primary text-primary font-semibold" : "border-border text-foreground"}`}
+              >
+                <option value="ALL">📚 All Racks</option>
+                {availableRacks.map((rCode) => (
+                  <option key={rCode} value={rCode}>
+                    Rack {rCode}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className={`w-full h-9 px-3 rounded-lg bg-input border text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 ${selectedStatus !== "ALL" ? "border-primary text-primary font-semibold" : "border-border text-foreground"}`}
+              >
+                <option value="ALL">⚡ All Statuses</option>
+                <option value="ACTIVE">🟢 Active Only</option>
+                <option value="INACTIVE">🔴 Inactive Only</option>
+              </select>
+            </div>
+
+            {/* Occupancy Filter */}
+            <div>
+              <select
+                value={selectedOccupancy}
+                onChange={(e) => setSelectedOccupancy(e.target.value)}
+                className={`w-full h-9 px-3 rounded-lg bg-input border text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 ${selectedOccupancy !== "ALL" ? "border-primary text-primary font-semibold" : "border-border text-foreground"}`}
+              >
+                <option value="ALL">📦 All Occupancies</option>
+                <option value="EMPTY">⚪ Empty Bins (0%)</option>
+                <option value="OCCUPIED">🔵 Occupied Bins (&gt;0%)</option>
+                <option value="FULL">🔴 Full / Near Full (&ge;80%)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Active Filter Badges */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40 text-xs">
+              <span className="text-muted-foreground font-medium">Active Filters:</span>
+              {selectedWarehouse !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium">
+                  Warehouse: {warehouses.find((w: any) => String(w.id) === selectedWarehouse)?.warehouseName || selectedWarehouse}
+                  <button onClick={() => setSelectedWarehouse("ALL")} className="hover:text-destructive">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedRack !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 font-medium">
+                  Rack: {selectedRack}
+                  <button onClick={() => setSelectedRack("ALL")} className="hover:text-destructive">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedStatus !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-medium">
+                  Status: {selectedStatus}
+                  <button onClick={() => setSelectedStatus("ALL")} className="hover:text-destructive">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedOccupancy !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 font-medium">
+                  Occupancy: {selectedOccupancy === "EMPTY" ? "Empty (0%)" : selectedOccupancy === "OCCUPIED" ? "Occupied (>0%)" : "Full (>=80%)"}
+                  <button onClick={() => setSelectedOccupancy("ALL")} className="hover:text-destructive">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {q && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 font-medium">
+                  Keyword: "{q}"
+                  <button onClick={() => setQ("")} className="hover:text-destructive">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -290,15 +537,16 @@ function LocationPage() {
             <div className="p-14 text-center text-muted-foreground">
               <Building2 className="size-12 mx-auto mb-3 opacity-20" />
               <div className="font-medium text-base">No locations found</div>
-              <div className="text-xs mt-1">Click "Add Location" to create a new location</div>
+              <div className="text-xs mt-1">Try resetting filters or clicking "Add Location"</div>
             </div>
           ) : (
             <div className="divide-y divide-border/60">
               {filteredWhIds.map((whId) => (
                 <WarehouseNode
                   key={whId}
-                  warehouse={wmsTree[whId].warehouse}
-                  racksMap={wmsTree[whId].racks}
+                  warehouse={filteredWmsTree[whId].warehouse}
+                  racksMap={filteredWmsTree[whId].racks}
+                  canManageLocation={canManageLocation}
                   onAddBin={(rackCode) => {
                     setPrefilledAdd({ warehouseId: whId, rackCode });
                     setOpenAddModal(true);
@@ -308,6 +556,9 @@ function LocationPage() {
                   }}
                   onToggleRackStatus={(rackCode) => {
                     toggleRackStatusMutation.mutate({ warehouseId: whId !== "default" ? Number(whId) : undefined, rackCode });
+                  }}
+                  onDeleteRack={(rackCode, bins) => {
+                    handleDeleteRack(filteredWmsTree[whId].warehouse, rackCode, bins);
                   }}
                   onViewBin={(bin) => setViewingBin(bin)}
                   onEditBin={(bin) => setEditingLocation(bin)}
@@ -458,9 +709,11 @@ function PaginationControls({
 function WarehouseNode({
   warehouse,
   racksMap,
+  canManageLocation,
   onAddBin,
   onViewRackDetails,
   onToggleRackStatus,
+  onDeleteRack,
   onViewBin,
   onEditBin,
   onDeleteBin,
@@ -468,9 +721,11 @@ function WarehouseNode({
 }: {
   warehouse: any;
   racksMap: Record<string, any[]>;
+  canManageLocation?: boolean;
   onAddBin: (rackCode: string) => void;
   onViewRackDetails: (warehouse: any, rackCode: string, bins: any[]) => void;
   onToggleRackStatus: (rackCode: string) => void;
+  onDeleteRack: (rackCode: string, bins: any[]) => void;
   onViewBin: (bin: any) => void;
   onEditBin: (loc: any) => void;
   onDeleteBin: (loc: any) => void;
@@ -536,9 +791,11 @@ function WarehouseNode({
                 rackCode={rackCode}
                 bins={racksMap[rackCode]}
                 warehouse={warehouse}
+                canManageLocation={canManageLocation}
                 onAddBin={() => onAddBin(rackCode)}
                 onViewRackDetails={() => onViewRackDetails(warehouse, rackCode, racksMap[rackCode])}
                 onToggleRackStatus={() => onToggleRackStatus(rackCode)}
+                onDeleteRack={() => onDeleteRack(rackCode, racksMap[rackCode])}
                 onViewBin={onViewBin}
                 onEditBin={onEditBin}
                 onDeleteBin={onDeleteBin}
@@ -559,9 +816,11 @@ function RackNode({
   rackCode,
   bins,
   warehouse,
+  canManageLocation,
   onAddBin,
   onViewRackDetails,
   onToggleRackStatus,
+  onDeleteRack,
   onViewBin,
   onEditBin,
   onDeleteBin,
@@ -570,9 +829,11 @@ function RackNode({
   rackCode: string;
   bins: any[];
   warehouse: any;
+  canManageLocation?: boolean;
   onAddBin: () => void;
   onViewRackDetails: () => void;
   onToggleRackStatus: () => void;
+  onDeleteRack: () => void;
   onViewBin: (bin: any) => void;
   onEditBin: (loc: any) => void;
   onDeleteBin: (loc: any) => void;
@@ -591,6 +852,11 @@ function RackNode({
   // Check if all bins in rack are inactive
   const isRackInactive = bins.length > 0 && bins.every((b) => String(b.status || "ACTIVE").toUpperCase() === "INACTIVE");
   const isWhInactive = String(warehouse?.status || "ACTIVE").toUpperCase() === "INACTIVE";
+
+  const isRackEmpty = bins.length === 0 || bins.every((b) => {
+    const qty = b.currentQuantity || (b.items?.reduce((acc: number, i: any) => acc + (i.quantity || 0), 0) || 0);
+    return qty === 0;
+  });
 
   return (
     <div>
@@ -626,13 +892,29 @@ function RackNode({
             <Eye className="size-3.5" /> Detail
           </button>
 
-          <button
-            onClick={onToggleRackStatus}
-            title={isRackInactive ? "Reactivate Rack" : "Deactivate all bins in Rack"}
-            className={`h-7 px-2 rounded text-xs font-medium border flex items-center gap-1 transition-colors ${isRackInactive ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500" : "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"}`}
-          >
-            <Power className="size-3.5" /> {isRackInactive ? "Activate Rack" : "Deactivate Rack"}
-          </button>
+          {canManageLocation && (
+            <>
+              <button
+                onClick={onToggleRackStatus}
+                title={isRackInactive ? "Reactivate Rack" : "Deactivate all bins in Rack"}
+                className={`h-7 px-2 rounded text-xs font-medium border flex items-center gap-1 transition-colors ${isRackInactive ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500" : "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"}`}
+              >
+                <Power className="size-3.5" /> {isRackInactive ? "Activate Rack" : "Deactivate Rack"}
+              </button>
+
+              <button
+                onClick={onDeleteRack}
+                disabled={!isRackEmpty}
+                title={isRackEmpty ? "Delete empty Rack" : "Cannot delete Rack containing bins with active stock"}
+                className={`h-7 px-2 rounded text-xs font-medium border flex items-center gap-1 transition-colors ${isRackEmpty
+                  ? "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
+                  : "bg-muted/20 border-border text-muted-foreground opacity-50 cursor-not-allowed"
+                }`}
+              >
+                <Trash2 className="size-3.5" /> Delete Rack
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -645,6 +927,7 @@ function RackNode({
                 key={bin.id}
                 bin={bin}
                 warehouse={warehouse}
+                canManageLocation={canManageLocation}
                 onViewBin={onViewBin}
                 onEditBin={onEditBin}
                 onDeleteBin={onDeleteBin}
@@ -671,6 +954,7 @@ function RackNode({
 function BinNode({
   bin,
   warehouse,
+  canManageLocation,
   onViewBin,
   onEditBin,
   onDeleteBin,
@@ -678,6 +962,7 @@ function BinNode({
 }: {
   bin: any;
   warehouse: any;
+  canManageLocation?: boolean;
   onViewBin: (bin: any) => void;
   onEditBin: (loc: any) => void;
   onDeleteBin: (loc: any) => void;
@@ -697,8 +982,6 @@ function BinNode({
       <div className="w-20 shrink-0 font-mono text-xs font-bold text-foreground">
         Bin {bin.binCode}
       </div>
-
-
 
       {/* Stored products summary */}
       <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -746,6 +1029,21 @@ function BinNode({
           <Eye className="size-3.5" />
           <span>Detail</span>
         </button>
+
+        {canManageLocation && (
+          <button
+            onClick={() => onDeleteBin(bin)}
+            disabled={totalQty > 0}
+            title={totalQty === 0 ? "Delete Bin" : `Cannot delete Bin containing ${totalQty} item(s) in stock`}
+            className={`h-7 px-2 rounded font-medium text-xs border flex items-center gap-1 transition-colors ${totalQty === 0
+              ? "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
+              : "bg-muted/20 border-border text-muted-foreground opacity-50 cursor-not-allowed"
+            }`}
+          >
+            <Trash2 className="size-3.5" />
+            <span>Delete</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -883,13 +1181,15 @@ function RackDetailsModal({
                           <Eye className="size-3" /> Detail
                         </button>
 
-                        <button
-                          onClick={() => onToggleBinStatus(b.id)}
-                          className={`p-1 rounded ${bActive ? "hover:bg-destructive/10 text-muted-foreground hover:text-destructive" : "text-emerald-500 hover:bg-emerald-500/10"}`}
-                          title={bActive ? "Deactivate Bin" : "Activate Bin"}
-                        >
-                          <Power className="size-3.5" />
-                        </button>
+                        {canManageLocation && (
+                          <button
+                            onClick={() => onToggleBinStatus(b.id)}
+                            className={`p-1 rounded ${bActive ? "hover:bg-destructive/10 text-muted-foreground hover:text-destructive" : "text-emerald-500 hover:bg-emerald-500/10"}`}
+                            title={bActive ? "Deactivate Bin" : "Activate Bin"}
+                          >
+                            <Power className="size-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -930,6 +1230,8 @@ function BinDetailsModal({
   onDeleteBin: (bin: any) => void;
   onToggleBinStatus: (binId: number) => void;
 }) {
+  const { currentUser } = useApp();
+  const canManageLocation = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
   const [page, setPage] = useState(1);
   const pageSize = 5;
 
@@ -948,40 +1250,42 @@ function BinDetailsModal({
       icon={<LayoutGrid className="size-5 text-primary" />}
       footer={
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                onClose();
-                onEditBin(bin);
-              }}
-              className="h-9 px-3 rounded-lg border border-border bg-secondary hover:bg-secondary/80 font-medium text-xs flex items-center gap-1.5 transition-colors"
-            >
-              <Pencil className="size-3.5" /> Edit
-            </button>
+          {canManageLocation ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  onClose();
+                  onEditBin(bin);
+                }}
+                className="h-9 px-3 rounded-lg border border-border bg-secondary hover:bg-secondary/80 font-medium text-xs flex items-center gap-1.5 transition-colors"
+              >
+                <Pencil className="size-3.5" /> Edit
+              </button>
 
-            <button
-              onClick={() => {
-                onToggleBinStatus(bin.id);
-                onClose();
-              }}
-              className={`h-9 px-3 rounded-lg font-medium text-xs border flex items-center gap-1.5 transition-colors ${binActive
-                ? "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
-                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20"
-                }`}
-            >
-              <Power className="size-3.5" /> {binActive ? "Deactivate Bin" : "Activate Bin"}
-            </button>
+              <button
+                onClick={() => {
+                  onToggleBinStatus(bin.id);
+                  onClose();
+                }}
+                className={`h-9 px-3 rounded-lg font-medium text-xs border flex items-center gap-1.5 transition-colors ${binActive
+                  ? "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
+                  : "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20"
+                  }`}
+              >
+                <Power className="size-3.5" /> {binActive ? "Deactivate Bin" : "Activate Bin"}
+              </button>
 
-            <button
-              onClick={() => {
-                onClose();
-                onDeleteBin(bin);
-              }}
-              className="h-9 px-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20 font-medium text-xs flex items-center gap-1.5 transition-colors"
-            >
-              <Trash2 className="size-3.5" /> Delete
-            </button>
-          </div>
+              <button
+                onClick={() => {
+                  onClose();
+                  onDeleteBin(bin);
+                }}
+                className="h-9 px-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20 font-medium text-xs flex items-center gap-1.5 transition-colors"
+              >
+                <Trash2 className="size-3.5" /> Delete
+              </button>
+            </div>
+          ) : <div />}
 
           <button onClick={onClose} className="h-9 px-5 bg-primary text-white rounded-lg font-medium text-xs">
             Close
@@ -1209,10 +1513,13 @@ function LocationFormModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { currentUser } = useApp();
   const isEdit = !!location;
+  const isWhManager = currentUser?.role === "Warehouse_Manager";
+  const assignedWhId = isWhManager && currentUser?.warehouseId ? String(currentUser.warehouseId) : null;
 
   const [form, setForm] = useState({
-    warehouseId: location?.warehouseId || initialValues?.warehouseId || (warehouses[0] ? String(warehouses[0].id) : ""),
+    warehouseId: location?.warehouseId || initialValues?.warehouseId || assignedWhId || (warehouses[0] ? String(warehouses[0].id) : ""),
     rackCode: location?.rackCode || initialValues?.rackCode || "",
     binCode: location?.binCode || "",
     status: location?.status || "ACTIVE",
@@ -1278,10 +1585,11 @@ function LocationFormModal({
       }
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Select Warehouse *" hint="Select the warehouse for this location" className="sm:col-span-2">
+        <Field label="Select Warehouse *" hint={assignedWhId ? "Locked to your assigned warehouse" : "Select the warehouse for this location"} className="sm:col-span-2">
           <select
             className={inputCls}
             value={form.warehouseId}
+            disabled={!!assignedWhId}
             onChange={(e) => set("warehouseId", e.target.value)}
           >
             <option value="">-- Select Warehouse --</option>
@@ -1293,19 +1601,19 @@ function LocationFormModal({
           </select>
         </Field>
 
-        <Field label="Rack Code *" hint="e.g. R01, RACK-A">
+        <Field label="Rack Code *" hint="e.g. 01, 02">
           <input
             className={inputCls}
-            placeholder="R01"
+            placeholder="01"
             value={form.rackCode}
             onChange={(e) => set("rackCode", e.target.value)}
           />
         </Field>
 
-        <Field label="Bin Code *" hint="e.g. B01, BIN-01">
+        <Field label="Bin Code *" hint="e.g. 01, 02">
           <input
             className={inputCls}
-            placeholder="B01"
+            placeholder="01"
             value={form.binCode}
             onChange={(e) => set("binCode", e.target.value)}
           />

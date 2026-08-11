@@ -356,7 +356,12 @@ public class TransferController {
             return ResponseEntity.ok(TransferDTO.fromEntity(transfer));
         }
 
-        if (nextStatus == Status.TransactionStatus.DELIVERING && isCrossWarehouse(transfer.getTransferType())) {
+        if (nextStatus == Status.TransactionStatus.CANCELLED
+                && isCrossWarehouse(transfer.getTransferType())
+                && (transfer.getStatus() == Status.TransactionStatus.DELIVERING
+                        || transfer.getStatus() == Status.TransactionStatus.DELIVERED)) {
+            restoreSourceInventory(transfer);
+        } else if (nextStatus == Status.TransactionStatus.DELIVERING && isCrossWarehouse(transfer.getTransferType())) {
             deductSourceInventory(transfer);
         } else if (nextStatus == Status.TransactionStatus.COMPLETED && isCrossWarehouse(transfer.getTransferType())) {
             if (transfer.getStatus() != Status.TransactionStatus.DELIVERING) {
@@ -799,18 +804,10 @@ public class TransferController {
         Long assigneeWarehouseId =
                 assignee.getWarehouse().getId();
 
-        boolean involved =
-                source.getId().equals(assigneeWarehouseId)
-                        || (
-                                destination != null
-                                        && destination.getId().equals(
-                                                assigneeWarehouseId
-                                        )
-                        );
-
-        if (!involved) {
+        Warehouse receivingWarehouse = destination != null ? destination : source;
+        if (!receivingWarehouse.getId().equals(assigneeWarehouseId)) {
             throw new RuntimeException(
-                    "Assigned manager must belong to the source or destination warehouse"
+                    "Assigned manager must belong to the receiving warehouse"
             );
         }
 
@@ -893,6 +890,31 @@ public class TransferController {
                 dest.setQuantity(dest.getQuantity() + detail.getQuantity());
             }
             inventoryRepository.save(dest);
+        }
+    }
+
+    private void restoreSourceInventory(Transfer transfer) {
+        for (TransferDetail detail : transfer.getDetails()) {
+            List<Inventory> sources = inventoryRepository.findAllByProductIdAndWarehouseId(
+                    detail.getProduct().getId(),
+                    transfer.getWarehouse().getId()
+            );
+
+            Inventory source;
+            if (sources.isEmpty()) {
+                source = Inventory.builder()
+                        .warehouse(transfer.getWarehouse())
+                        .product(detail.getProduct())
+                        .quantity(detail.getQuantity())
+                        .lowStockThreshold(10L)
+                        .outOfStockWarningDays(3L)
+                        .build();
+            } else {
+                source = sources.get(0);
+                long currentQuantity = source.getQuantity() == null ? 0L : source.getQuantity();
+                source.setQuantity(currentQuantity + detail.getQuantity());
+            }
+            inventoryRepository.save(source);
         }
     }
 
