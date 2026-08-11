@@ -73,8 +73,15 @@ function SettingsPage() {
     }
   }, [inventoryData]);
 
+  const canManage = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+  const canEditThresholds = currentUser?.role === "Admin" || currentUser?.role === "Manager" || currentUser?.role === "Warehouse_Manager";
+  const isWhManager = currentUser?.role === "Warehouse_Manager";
+
   const warehouses = warehousesData ?? [];
   const filteredWarehouses = warehouses.filter((w) => {
+    if ((currentUser?.role === "Warehouse_Manager" || currentUser?.role === "Staff") && currentUser?.warehouseId) {
+      if (String(w.id) !== String(currentUser.warehouseId)) return false;
+    }
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
@@ -90,8 +97,6 @@ function SettingsPage() {
   const totalUsed = warehouses.reduce((s, w) => s + (w.usedCapacity ?? 0), 0);
   const utilization = totalCap > 0 ? Math.round((totalUsed / totalCap) * 100) : 0;
 
-  const canManage = currentUser?.role === "Admin" || currentUser?.role === "Manager";
-
   const queryClient = useQueryClient();
 
   const toggleStatusMutation = useMutation({
@@ -106,7 +111,7 @@ function SettingsPage() {
   const batchThresholdMutation = useMutation({
     mutationFn: async (payload: { threshold: number; warningDays: number }) => {
       await api.patch("/inventory/batch-threshold", {
-        warehouseId: activeWarehouseId || null,
+        warehouseId: activeWarehouseId || currentUser?.warehouseId || null,
         lowStockThreshold: payload.threshold,
         outOfStockWarningDays: payload.warningDays
       });
@@ -261,27 +266,48 @@ function SettingsPage() {
 
         {/* Alert thresholds */}
         <div className="surface-card p-6 space-y-4">
-          <h2 className="font-semibold">Alert thresholds</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Alert thresholds</h2>
+            {isWhManager && (
+              <span className="text-[11px] px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">
+                Scope: Your Assigned Warehouse
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-muted-foreground">Default low-stock threshold</label>
-              <input value={defaultThreshold} onChange={e => setDefaultThreshold(e.target.value)} type="number" className="mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm" />
+              <input
+                value={defaultThreshold}
+                onChange={e => setDefaultThreshold(e.target.value)}
+                type="number"
+                readOnly={!canEditThresholds}
+                className={`mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm ${!canEditThresholds ? "opacity-60 cursor-not-allowed" : ""}`}
+              />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Out-of-stock warning (days)</label>
-              <input value={outOfStockWarningDays} onChange={e => setOutOfStockWarningDays(e.target.value)} type="number" className="mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm" />
+              <input
+                value={outOfStockWarningDays}
+                onChange={e => setOutOfStockWarningDays(e.target.value)}
+                type="number"
+                readOnly={!canEditThresholds}
+                className={`mt-1 w-full h-10 px-3 rounded-lg bg-input border border-border text-sm ${!canEditThresholds ? "opacity-60 cursor-not-allowed" : ""}`}
+              />
             </div>
           </div>
-          <div className="flex justify-end pt-2">
-            <button
-              onClick={() => batchThresholdMutation.mutate({ threshold: Number(defaultThreshold), warningDays: Number(outOfStockWarningDays) })}
-              disabled={batchThresholdMutation.isPending}
-              className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium flex items-center gap-2 hover:opacity-90 disabled:opacity-60 transition-opacity"
-            >
-              {batchThresholdMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              Save changes
-            </button>
-          </div>
+          {canEditThresholds && (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => batchThresholdMutation.mutate({ threshold: Number(defaultThreshold), warningDays: Number(outOfStockWarningDays) })}
+                disabled={batchThresholdMutation.isPending}
+                className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium flex items-center gap-2 hover:opacity-90 disabled:opacity-60 transition-opacity"
+              >
+                {batchThresholdMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                Save changes
+              </button>
+            </div>
+          )}
         </div>
 
         {/* System info */}

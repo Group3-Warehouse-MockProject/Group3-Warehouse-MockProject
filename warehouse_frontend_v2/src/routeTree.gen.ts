@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TransferRouteImport } from './routes/transfer'
 import { Route as TrackingRouteImport } from './routes/tracking'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SuppliersRouteImport } from './routes/suppliers'
 import { Route as StocktakeRouteImport } from './routes/stocktake'
 import { Route as StaffRouteImport } from './routes/staff'
@@ -18,13 +19,16 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ProductsRouteImport } from './routes/products'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OutboundRouteImport } from './routes/outbound'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LocationRouteImport } from './routes/location'
 import { Route as InboundRouteImport } from './routes/inbound'
+import { Route as FirstTimeSetupRouteImport } from './routes/first-time-setup'
 import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OutboundPaymentReceiptIdRouteImport } from './routes/outbound-payment/$receiptId'
 
 const TransferRoute = TransferRouteImport.update({
   id: '/transfer',
@@ -34,6 +38,11 @@ const TransferRoute = TransferRouteImport.update({
 const TrackingRoute = TrackingRouteImport.update({
   id: '/tracking',
   path: '/tracking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SuppliersRoute = SuppliersRouteImport.update({
@@ -71,6 +80,11 @@ const ProductsRoute = ProductsRouteImport.update({
   path: '/products',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OutboundRoute = OutboundRouteImport.update({
   id: '/outbound',
   path: '/outbound',
@@ -91,6 +105,11 @@ const InboundRoute = InboundRouteImport.update({
   path: '/inbound',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FirstTimeSetupRoute = FirstTimeSetupRouteImport.update({
+  id: '/first-time-setup',
+  path: '/first-time-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FeedbackRoute = FeedbackRouteImport.update({
   id: '/feedback',
   path: '/feedback',
@@ -106,15 +125,23 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OutboundPaymentReceiptIdRoute =
+  OutboundPaymentReceiptIdRouteImport.update({
+    id: '/outbound-payment/$receiptId',
+    path: '/outbound-payment/$receiptId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/categories': typeof CategoriesRoute
   '/feedback': typeof FeedbackRoute
+  '/first-time-setup': typeof FirstTimeSetupRoute
   '/inbound': typeof InboundRoute
   '/location': typeof LocationRoute
   '/login': typeof LoginRoute
   '/outbound': typeof OutboundRoute
+  '/privacy': typeof PrivacyRoute
   '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
@@ -122,17 +149,21 @@ export interface FileRoutesByFullPath {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/terms': typeof TermsRoute
   '/tracking': typeof TrackingRoute
   '/transfer': typeof TransferRoute
+  '/outbound-payment/$receiptId': typeof OutboundPaymentReceiptIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/categories': typeof CategoriesRoute
   '/feedback': typeof FeedbackRoute
+  '/first-time-setup': typeof FirstTimeSetupRoute
   '/inbound': typeof InboundRoute
   '/location': typeof LocationRoute
   '/login': typeof LoginRoute
   '/outbound': typeof OutboundRoute
+  '/privacy': typeof PrivacyRoute
   '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
@@ -140,18 +171,22 @@ export interface FileRoutesByTo {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/terms': typeof TermsRoute
   '/tracking': typeof TrackingRoute
   '/transfer': typeof TransferRoute
+  '/outbound-payment/$receiptId': typeof OutboundPaymentReceiptIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/categories': typeof CategoriesRoute
   '/feedback': typeof FeedbackRoute
+  '/first-time-setup': typeof FirstTimeSetupRoute
   '/inbound': typeof InboundRoute
   '/location': typeof LocationRoute
   '/login': typeof LoginRoute
   '/outbound': typeof OutboundRoute
+  '/privacy': typeof PrivacyRoute
   '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
@@ -159,8 +194,10 @@ export interface FileRoutesById {
   '/staff': typeof StaffRoute
   '/stocktake': typeof StocktakeRoute
   '/suppliers': typeof SuppliersRoute
+  '/terms': typeof TermsRoute
   '/tracking': typeof TrackingRoute
   '/transfer': typeof TransferRoute
+  '/outbound-payment/$receiptId': typeof OutboundPaymentReceiptIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -168,10 +205,12 @@ export interface FileRouteTypes {
     | '/'
     | '/categories'
     | '/feedback'
+    | '/first-time-setup'
     | '/inbound'
     | '/location'
     | '/login'
     | '/outbound'
+    | '/privacy'
     | '/products'
     | '/profile'
     | '/register'
@@ -179,17 +218,21 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/terms'
     | '/tracking'
     | '/transfer'
+    | '/outbound-payment/$receiptId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/categories'
     | '/feedback'
+    | '/first-time-setup'
     | '/inbound'
     | '/location'
     | '/login'
     | '/outbound'
+    | '/privacy'
     | '/products'
     | '/profile'
     | '/register'
@@ -197,17 +240,21 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/terms'
     | '/tracking'
     | '/transfer'
+    | '/outbound-payment/$receiptId'
   id:
     | '__root__'
     | '/'
     | '/categories'
     | '/feedback'
+    | '/first-time-setup'
     | '/inbound'
     | '/location'
     | '/login'
     | '/outbound'
+    | '/privacy'
     | '/products'
     | '/profile'
     | '/register'
@@ -215,18 +262,22 @@ export interface FileRouteTypes {
     | '/staff'
     | '/stocktake'
     | '/suppliers'
+    | '/terms'
     | '/tracking'
     | '/transfer'
+    | '/outbound-payment/$receiptId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CategoriesRoute: typeof CategoriesRoute
   FeedbackRoute: typeof FeedbackRoute
+  FirstTimeSetupRoute: typeof FirstTimeSetupRoute
   InboundRoute: typeof InboundRoute
   LocationRoute: typeof LocationRoute
   LoginRoute: typeof LoginRoute
   OutboundRoute: typeof OutboundRoute
+  PrivacyRoute: typeof PrivacyRoute
   ProductsRoute: typeof ProductsRoute
   ProfileRoute: typeof ProfileRoute
   RegisterRoute: typeof RegisterRoute
@@ -234,8 +285,10 @@ export interface RootRouteChildren {
   StaffRoute: typeof StaffRoute
   StocktakeRoute: typeof StocktakeRoute
   SuppliersRoute: typeof SuppliersRoute
+  TermsRoute: typeof TermsRoute
   TrackingRoute: typeof TrackingRoute
   TransferRoute: typeof TransferRoute
+  OutboundPaymentReceiptIdRoute: typeof OutboundPaymentReceiptIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -252,6 +305,13 @@ declare module '@tanstack/react-router' {
       path: '/tracking'
       fullPath: '/tracking'
       preLoaderRoute: typeof TrackingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/suppliers': {
@@ -303,6 +363,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/outbound': {
       id: '/outbound'
       path: '/outbound'
@@ -331,6 +398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InboundRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/first-time-setup': {
+      id: '/first-time-setup'
+      path: '/first-time-setup'
+      fullPath: '/first-time-setup'
+      preLoaderRoute: typeof FirstTimeSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/feedback': {
       id: '/feedback'
       path: '/feedback'
@@ -352,6 +426,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/outbound-payment/$receiptId': {
+      id: '/outbound-payment/$receiptId'
+      path: '/outbound-payment/$receiptId'
+      fullPath: '/outbound-payment/$receiptId'
+      preLoaderRoute: typeof OutboundPaymentReceiptIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -359,10 +440,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CategoriesRoute: CategoriesRoute,
   FeedbackRoute: FeedbackRoute,
+  FirstTimeSetupRoute: FirstTimeSetupRoute,
   InboundRoute: InboundRoute,
   LocationRoute: LocationRoute,
   LoginRoute: LoginRoute,
   OutboundRoute: OutboundRoute,
+  PrivacyRoute: PrivacyRoute,
   ProductsRoute: ProductsRoute,
   ProfileRoute: ProfileRoute,
   RegisterRoute: RegisterRoute,
@@ -370,8 +453,10 @@ const rootRouteChildren: RootRouteChildren = {
   StaffRoute: StaffRoute,
   StocktakeRoute: StocktakeRoute,
   SuppliersRoute: SuppliersRoute,
+  TermsRoute: TermsRoute,
   TrackingRoute: TrackingRoute,
   TransferRoute: TransferRoute,
+  OutboundPaymentReceiptIdRoute: OutboundPaymentReceiptIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
