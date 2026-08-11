@@ -250,6 +250,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         })),
       });
 
+      toast.success(`${isInbound ? "Inbound" : "Outbound"} receipt created successfully`);
       reset();
       onClose();
       onSaved?.();
@@ -262,6 +263,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
           ? String((data as { message: string }).message)
           : "Failed to save receipt. Please try again.";
       setSubmitError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
