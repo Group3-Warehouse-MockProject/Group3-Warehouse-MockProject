@@ -39,7 +39,8 @@ public class Status{
         PENDING,
         IN_PROGRESS,
         COMPLETED,
-        CANCELLED
+        CANCELLED,
+        RETURNED
     }
 
     public enum DocumentType {
