@@ -2,6 +2,7 @@ package com.fpt.sccw.controller;
 
 import com.fpt.sccw.dto.response.LocationDTO;
 import com.fpt.sccw.entity.Location;
+import com.fpt.sccw.entity.Status;
 import com.fpt.sccw.entity.Warehouse;
 import com.fpt.sccw.repository.InventoryRepository;
 import com.fpt.sccw.repository.LocationRepository;
@@ -92,7 +93,7 @@ public class LocationController {
         Location location = Location.builder()
                 .rackCode(rackCode.trim().toUpperCase())
                 .binCode(binCode.trim().toUpperCase())
-                .status(status != null ? status.trim().toUpperCase() : "ACTIVE")
+                .status(status != null ? parseStatus(status) : Status.LocationStatus.ACTIVE)
                 .maxCapacity(maxCapacity)
                 .warehouse(warehouse)
                 .build();
@@ -144,7 +145,7 @@ public class LocationController {
 
         if (rackCode  != null) location.setRackCode(targetRack);
         if (binCode   != null) location.setBinCode(targetBin);
-        if (status    != null) location.setStatus(status.trim().toUpperCase());
+        if (status    != null) location.setStatus(parseStatus(status));
 
         Location saved = locationRepository.save(location);
         return ResponseEntity.ok(LocationDTO.fromEntity(saved));
@@ -157,7 +158,8 @@ public class LocationController {
         Location location = locationRepository.findById(id).orElse(null);
         if (location == null) return ResponseEntity.notFound().build();
 
-        String newStatus = "INACTIVE".equalsIgnoreCase(location.getStatus()) ? "ACTIVE" : "INACTIVE";
+        Status.LocationStatus newStatus = location.getStatus() == Status.LocationStatus.INACTIVE
+                ? Status.LocationStatus.ACTIVE : Status.LocationStatus.INACTIVE;
         location.setStatus(newStatus);
         Location saved = locationRepository.save(location);
         return ResponseEntity.ok(LocationDTO.fromEntity(saved));
@@ -182,14 +184,14 @@ public class LocationController {
 
         String newStatus = targetStatus;
         if (newStatus == null || newStatus.isBlank()) {
-            String currentStatus = locations.get(0).getStatus();
-            newStatus = "INACTIVE".equalsIgnoreCase(currentStatus) ? "ACTIVE" : "INACTIVE";
+            Status.LocationStatus currentStatus = locations.get(0).getStatus();
+            newStatus = currentStatus == Status.LocationStatus.INACTIVE ? "ACTIVE" : "INACTIVE";
         } else {
             newStatus = newStatus.toUpperCase();
         }
 
         for (Location loc : locations) {
-            loc.setStatus(newStatus);
+            loc.setStatus(parseStatus(newStatus));
             locationRepository.save(loc);
         }
 
@@ -224,6 +226,14 @@ public class LocationController {
 
         locationRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("message", "Location deleted successfully"));
+    }
+
+    private Status.LocationStatus parseStatus(String value) {
+        try {
+            return Status.LocationStatus.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
+        }
     }
 
     // ── helpers ──

@@ -28,12 +28,12 @@ public class ReceiptDetail extends BaseEntity{
     private BigDecimal price;
 
     @NotNull(message = "Product is required")
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
     @NotNull(message = "Receipt is required")
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "receipt_id", nullable = false)
     private WarehouseReceipt receipt;
 

@@ -18,11 +18,11 @@ public class TransferDetail extends BaseEntity{
     @Column(name = "quantity", nullable = false)
     private Long quantity;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "transfer_id", nullable = false)
     private Transfer transfer;
     

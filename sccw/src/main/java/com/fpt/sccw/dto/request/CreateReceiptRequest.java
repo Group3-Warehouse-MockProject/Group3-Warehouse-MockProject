@@ -21,8 +21,8 @@ public class CreateReceiptRequest {
     /** Optional remark / note */
     private String remark;
 
-    /** Partner name (supplier for inbound, customer for outbound) */
-    private String partner;
+    /** Supplier for inbound receipts (optional for backward compatibility). */
+    private Long supplierId;
 
     /** Payment term for outbound receipts (PREPAID, COD, DEBT). Default COD. */
     private String paymentTerm;

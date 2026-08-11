@@ -187,12 +187,14 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         throw new Error("No valid data to import. Please fill in your own data.");
       }
 
-      // Pre-fetch warehouses and users to resolve IDs
-      const [whRes, usersRes] = await Promise.all([
+      // Pre-fetch lookup data to resolve IDs.
+      const [whRes, suppliersRes, usersRes] = await Promise.all([
         api.get<any[]>("/warehouses"),
+        api.get<any>("/suppliers", { params: { page: 0, size: 100 } }),
         api.get<any>("/users"),
       ]);
       const warehouseList = whRes.data;
+      const supplierList = suppliersRes.data?.content ?? suppliersRes.data ?? [];
       const userList = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.content ?? []);
 
       // Group rows by GroupKey
@@ -220,11 +222,27 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
         const warehouseId = whMatch.id;
 
-        // Build remark from Date, Supplier and Notes
+        const supplierName = firstRow.SUPPLIER ? String(firstRow.SUPPLIER).trim() : "";
+        if (!supplierName) {
+          throw new Error(`Supplier is required for GroupKey ${key}.`);
+        }
+        const inconsistentSupplier = rows.some((row) =>
+          String(row.SUPPLIER ?? "").trim().toLowerCase() !== supplierName.toLowerCase()
+        );
+        if (inconsistentSupplier) {
+          throw new Error(`All rows in GroupKey ${key} must have the same supplier.`);
+        }
+        const supplierMatch = supplierList.find(
+          (supplier: any) => supplier.name?.trim().toLowerCase() === supplierName.toLowerCase()
+        );
+        if (!supplierMatch) {
+          throw new Error(`Supplier "${supplierName}" not found (GroupKey ${key}).`);
+        }
+
+        // Supplier is sent as supplierId; remarks only retain the date and notes.
         const dateStr = firstRow["DATE (yyyy-mm-dd)"] ? `Date: ${String(firstRow["DATE (yyyy-mm-dd)"]).trim()}` : (firstRow.DATE ? `Date: ${String(firstRow.DATE).trim()}` : "");
-        const suppStr = firstRow.SUPPLIER ? `Supplier: ${String(firstRow.SUPPLIER).trim()}` : "";
         const noteStr = firstRow.NOTES ? String(firstRow.NOTES).trim() : "";
-        const remark = [dateStr, suppStr, noteStr].filter(Boolean).join(" | ") || null;
+        const remark = [dateStr, noteStr].filter(Boolean).join(" | ") || null;
 
         const items = rows.map((row, idx) => {
           const code = row.PRODUCT ? String(row.PRODUCT).trim() : "";
@@ -265,6 +283,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         await api.post("/receipts", {
           warehouseId,
           type: "INBOUND",
+          supplierId: supplierMatch.id,
           remark,
           items,
           ...(assignedUserId !== null && { assignedUserId })

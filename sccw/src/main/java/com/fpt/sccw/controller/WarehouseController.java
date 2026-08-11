@@ -3,6 +3,7 @@ package com.fpt.sccw.controller;
 import com.fpt.sccw.dto.request.CreateWarehouseRequest;
 import com.fpt.sccw.dto.request.UpdateWarehouseRequest;
 import com.fpt.sccw.dto.response.WarehouseDTO;
+import com.fpt.sccw.entity.Status;
 import com.fpt.sccw.entity.User;
 import com.fpt.sccw.entity.Warehouse;
 import com.fpt.sccw.repository.UserRepository;
@@ -97,7 +98,7 @@ public class WarehouseController {
                 .warehouseName(request.getName().trim())
                 .location(request.getAddress().trim())
                 .capacity(request.getCapacity())
-                .status("ACTIVE")
+                .status(Status.WarehouseStatus.ACTIVE)
                 .build();
 
         Warehouse saved = warehouseRepository.save(warehouse);
@@ -154,7 +155,7 @@ public class WarehouseController {
         warehouse.setLocation(request.getAddress().trim());
         warehouse.setCapacity(request.getCapacity());
         if (request.getStatus() != null && !request.getStatus().isBlank()) {
-            warehouse.setStatus(request.getStatus().trim().toUpperCase());
+            warehouse.setStatus(parseStatus(request.getStatus()));
         }
 
         // Xử lý manager
@@ -221,8 +222,9 @@ public class WarehouseController {
             return ResponseEntity.status(404).body("Warehouse not found: " + id);
         }
 
-        String newStatus = "INACTIVE".equalsIgnoreCase(warehouse.getStatus()) ? "ACTIVE" : "INACTIVE";
-        if ("INACTIVE".equals(newStatus)) {
+        Status.WarehouseStatus newStatus = warehouse.getStatus() == Status.WarehouseStatus.INACTIVE
+                ? Status.WarehouseStatus.ACTIVE : Status.WarehouseStatus.INACTIVE;
+        if (newStatus == Status.WarehouseStatus.INACTIVE) {
             long totalStock = inventoryRepository.findByWarehouseId(id).stream()
                     .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L).sum();
             if (totalStock > 0) {
@@ -235,6 +237,14 @@ public class WarehouseController {
 
         String managerName = resolveManagerName(saved.getId());
         return ResponseEntity.ok(WarehouseDTO.fromEntity(saved, managerName));
+    }
+
+    private Status.WarehouseStatus parseStatus(String value) {
+        try {
+            return Status.WarehouseStatus.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
+        }
     }
 
     /** Tìm tên Warehouse Manager đang được gán cho kho này */

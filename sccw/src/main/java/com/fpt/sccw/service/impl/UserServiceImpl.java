@@ -76,7 +76,7 @@ public class UserServiceImpl implements UserService {
 
         // Check policy acceptance
         boolean needsPolicyAcceptance = false;
-        Optional<PolicyAcceptance> latestAcceptance = policyAcceptanceRepository.findFirstByUserIdOrderByAcceptedAtDesc(user.getId());
+        Optional<PolicyAcceptance> latestAcceptance = policyAcceptanceRepository.findFirstByUserIdOrderByCreatedAtDesc(user.getId());
         if (latestAcceptance.isEmpty() || !latestAcceptance.get().getPolicyVersion().equals(currentPolicyVersion)) {
             needsPolicyAcceptance = true;
         }
@@ -354,8 +354,7 @@ public class UserServiceImpl implements UserService {
 
         PolicyAcceptance acceptance = PolicyAcceptance.builder()
                 .user(user)
-                .acceptedAt(java.time.LocalDateTime.now())
-                .policyVersion(currentPolicyVersion)
+                                .policyVersion(currentPolicyVersion)
                 .ipAddress(ipAddress)
                 .build();
         policyAcceptanceRepository.save(acceptance);

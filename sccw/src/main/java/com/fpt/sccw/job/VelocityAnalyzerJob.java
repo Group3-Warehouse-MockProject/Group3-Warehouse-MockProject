@@ -65,7 +65,7 @@ public class VelocityAnalyzerJob {
                                     .user(user)
                                     .title(title)
                                     .message("Product " + productCode + " in warehouse " + inventory.getWarehouse().getWarehouseName() + " is estimated to run out in " + estimatedDaysLeft + " days.")
-                                    .type("WARNING")
+                                    .type(com.fpt.sccw.entity.Status.NotificationType.WARNING)
                                     .isRead(false)
                                     .build();
                             notificationRepository.save(notification);

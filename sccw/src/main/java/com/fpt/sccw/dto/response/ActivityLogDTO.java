@@ -18,7 +18,7 @@ public class ActivityLogDTO {
     private String ipAddress;
     private String location;
     private String details;
-    private LocalDateTime timestamp;
+    private LocalDateTime createdAt;
     private UserSummary user;
 
     @Data
