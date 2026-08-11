@@ -268,7 +268,7 @@ function TransferPage() {
                     <td className="p-4 text-right font-semibold">{t.totalQuantity}</td>
                     <td className="p-4">
                       <div>{t.createdBy}</div>
-                      <div className="text-[11px] text-muted-foreground">Responsible: {t.assignedBy || "Unassigned"}</div>
+                      <div className="text-[11px] text-muted-foreground">Receiving manager: {t.assignedBy || "Unassigned"}</div>
                     </td>
                     <td className="p-4 text-center">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusTone[t.status]}`}>{t.status}</span>
@@ -635,12 +635,12 @@ function AddTransferModal({ open, transfer, onClose }: { open: boolean; transfer
           </>
         )}
         <Field label="Date" required><input type="date" className={inputCls} value={new Date().toISOString().slice(0, 10)} readOnly /></Field>
-        <Field label="Responsible manager">
+        <Field label="Receiving manager">
           <select className={selectCls} value={assignedById} onChange={(e) => setAssignedById(e.target.value)}>
-            <option value="">No assignee</option>
+            <option value="">No receiving manager</option>
             {users
               .filter((u: any) => u.role === "WAREHOUSE_MANAGER" && !u.isDeleted
-                && [sourceWarehouse, destWarehouse].includes(String(u.warehouseId)))
+                && String(u.warehouseId) === String(type === "cross" ? destWarehouse : sourceWarehouse))
               .map((u: any) => <option key={u.id} value={u.id}>{u.fullName} - {u.role}</option>)}
           </select>
         </Field>
