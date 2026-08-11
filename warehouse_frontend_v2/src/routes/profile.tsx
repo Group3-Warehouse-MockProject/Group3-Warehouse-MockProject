@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { useApp, roleLabels } from "@/lib/app-context";
 import { warehouseName } from "@/lib/warehouse-data";
 import { User, Mail, Phone, MapPin, KeyRound, ShieldCheck, Save, Camera, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/profile")({
@@ -69,8 +69,8 @@ function ProfilePage() {
       updateCurrentUser({ name: data.fullName, avatarUrl: data.avatarUrl });
       setTimeout(() => setMessage(null), 3000);
     },
-    onError: (err: any) => {
-      setMessage({ type: "error", text: err.response?.data?.message || "Failed to update profile." });
+    onError: (err: unknown) => {
+      setMessage({ type: "error", text: getErrorMessage(err, "Failed to update profile.") });
     }
   });
 
@@ -86,8 +86,8 @@ function ProfilePage() {
       setConfirmPassword("");
       setTimeout(() => setPwdMessage(null), 3000);
     },
-    onError: (err: any) => {
-      setPwdMessage({ type: "error", text: err.response?.data?.message || "Failed to change password." });
+    onError: (err: unknown) => {
+      setPwdMessage({ type: "error", text: getErrorMessage(err, "Failed to change password.") });
     }
   });
 
@@ -128,8 +128,9 @@ function ProfilePage() {
       } else {
         throw new Error(data.error?.message || "Upload failed");
       }
-    } catch (err: any) {
-      setMessage({ type: "error", text: "Avatar upload failed: " + err.message + ". Are you sure your Cloud Name doesn't have spaces?" });
+    } catch (error: unknown) {
+      console.error("Avatar upload failed", error);
+      setMessage({ type: "error", text: "Avatar upload failed. Please try again." });
     } finally {
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
