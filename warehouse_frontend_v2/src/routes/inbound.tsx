@@ -57,7 +57,7 @@ function InboundPage() {
 
   const [movements, setMovements] = useState<ReceiptMovement[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
-  const [allUsers, setAllUsers]     = useState<{ id: number; fullName: string; role: string }[]>([]);
+  const [allUsers, setAllUsers]     = useState<{ id: number; fullName: string; role: string; warehouseId?: number | null }[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [stats, setStats]           = useState<{ totalReceipts: number; totalUnits: number; totalPartners: number } | null>(null);
@@ -134,16 +134,31 @@ function InboundPage() {
 
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
 
-  // Unique dropdown options derived from data
+  // Resolve effective warehouse for filtering user dropdowns
+  const effectiveWarehouseId = filters.warehouse || activeWarehouseId || "";
+
+  // Unique dropdown options derived from data, filtered by warehouse
   const staffOptions = useMemo(() => {
-    if (allUsers.length > 0) return allUsers.map(u => u.fullName).sort();
+    if (allUsers.length > 0) {
+      let filtered = allUsers;
+      if (effectiveWarehouseId) {
+        filtered = allUsers.filter(u => !u.warehouseId || String(u.warehouseId) === String(effectiveWarehouseId));
+      }
+      return filtered.map(u => u.fullName).sort();
+    }
     return [...new Set(movements.map((m) => m.staff))].sort();
-  }, [allUsers, movements]);
+  }, [allUsers, movements, effectiveWarehouseId]);
 
   const assigneeOptions = useMemo(() => {
-    if (allUsers.length > 0) return allUsers.filter(u => u.role?.toUpperCase() === "STAFF" || u.role === "Staff").map(u => u.fullName).sort();
+    if (allUsers.length > 0) {
+      let filtered = allUsers.filter(u => u.role?.toUpperCase() === "STAFF" || u.role === "Staff");
+      if (effectiveWarehouseId) {
+        filtered = filtered.filter(u => !u.warehouseId || String(u.warehouseId) === String(effectiveWarehouseId));
+      }
+      return filtered.map(u => u.fullName).sort();
+    }
     return [...new Set(movements.map((m) => m.assignedUserName).filter((name): name is string => !!name && name !== "—"))].sort();
-  }, [allUsers, movements]);
+  }, [allUsers, movements, effectiveWarehouseId]);
 
   // Active filter count (for badge on Filter button)
   const activeFilterCount = Object.values(filters).filter(Boolean).length;

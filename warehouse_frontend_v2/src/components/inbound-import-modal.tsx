@@ -58,7 +58,8 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
       dataSheet.getCell("D1").value = "Assignees";
       staffUsers.forEach((u: any, idx: number) => {
-        dataSheet.getCell(`D${idx + 2}`).value = u.fullName;
+        const whCode = warehouses.find((w: any) => String(w.id) === String(u.warehouseId))?.code;
+        dataSheet.getCell(`D${idx + 2}`).value = whCode ? `${u.fullName} (${whCode})` : u.fullName;
       });
 
       // Hide the reference data sheet so it looks clean to the user
@@ -266,8 +267,9 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           };
         });
 
-        // Resolve Assignee name to user ID
-        const assigneeName = firstRow.ASSIGNEE ? String(firstRow.ASSIGNEE).trim() : "";
+        // Resolve Assignee name to user ID (strip warehouse code suffix if present, e.g. "Hoai Linh (TS-HCM-01)")
+        const rawAssignee = firstRow.ASSIGNEE ? String(firstRow.ASSIGNEE).trim() : "";
+        const assigneeName = rawAssignee.replace(/\s*\(.*\)\s*$/, "");
         let assignedUserId: number | null = null;
         if (assigneeName) {
           const userMatch = userList.find(
