@@ -12,7 +12,10 @@ public class ProductDTO {
     private Long id;
     private String sku;
     private String name;
+    private String specification;
+    private Long categoryId;
     private String category;
+    private Long supplierId;
     private String brand;
     private Long stock;
     private Long reorder; 
@@ -52,7 +55,10 @@ public class ProductDTO {
                 .id(product.getId())
                 .sku(product.getCode())
                 .name(product.getName())
+                .specification(product.getSpecification())
+                .categoryId(product.getCategory() != null ? product.getCategory().getId() : null)
                 .category(product.getCategory() != null ? product.getCategory().getName() : "")
+                .supplierId(product.getSupplier() != null ? product.getSupplier().getId() : null)
                 .brand(product.getSupplier() != null ? product.getSupplier().getName() : "")
                 .stock(stock)
                 .reorder(reorder)
