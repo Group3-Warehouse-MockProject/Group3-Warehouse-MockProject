@@ -22,5 +22,5 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> 
     )
     Page<ActivityLog> findByFilters(@Param("actionType") String actionType, @Param("search") String search, Pageable pageable);
 
-    Page<ActivityLog> findByUserIdOrderByTimestampDesc(Long userId, Pageable pageable);
+    Page<ActivityLog> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 }

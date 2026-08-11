@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { formatVND } from "@/lib/warehouse-data";
 import { useApp } from "@/lib/app-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search, LayoutGrid, List, Pencil, Trash2, AlertCircle, RefreshCw } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
@@ -679,7 +679,7 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
       setEditing(false);
       onClose();
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to update product"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to update product")),
   });
 
   const softDeleteMutation = useMutation({
@@ -690,7 +690,7 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
       toast.success("Product deactivated");
       onClose();
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to delete product"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to delete product")),
   });
 
   const hardDeleteMutation = useMutation({
@@ -702,7 +702,7 @@ function ProductDetailModal({ product, warehouses, onClose }: { product: any; wa
       setConfirmHardDelete(false);
       onClose();
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to permanently delete product"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to permanently delete product")),
   });
 
   const out = product.stock === 0;
@@ -918,7 +918,7 @@ function EditProductModal({ product, onClose, onSave, saving }: {
   onSave: (data: any) => void;
   saving: boolean;
 }) {
-  const { data: categories } = useQuery({
+  const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
   });
@@ -927,6 +927,10 @@ function EditProductModal({ product, onClose, onSave, saving }: {
     queryFn: async () => { const res = await api.get("/suppliers", { params: { page: 0, size: 100 } }); return res.data?.content ?? []; },
     staleTime: 5 * 60_000,
   });
+  const [selectedCategoryId, setSelectedCategoryId] = useState(String(product.categoryId ?? ""));
+  const [selectedSupplierId, setSelectedSupplierId] = useState(String(product.supplierId ?? ""));
+  const categoryIsMissing = Boolean(selectedCategoryId) && !categories.some((category: any) => String(category.id) === selectedCategoryId);
+  const supplierIsMissing = Boolean(selectedSupplierId) && !suppliers.some((supplier: any) => String(supplier.id) === selectedSupplierId);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -962,18 +966,20 @@ function EditProductModal({ product, onClose, onSave, saving }: {
       <form id="edit-product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="SKU Code" required><input name="code" className={inputCls} defaultValue={product.sku} required /></Field>
         <Field label="Supplier" required>
-          <select name="supplierId" className={selectCls} defaultValue={suppliers.find((s: any) => s.name === product.brand)?.id || ""} required>
+          <select name="supplierId" className={selectCls} value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} required>
             <option value="" disabled>Select supplier</option>
+            {supplierIsMissing && <option value={selectedSupplierId}>{product.brand || "Current supplier"}</option>}
             {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <Field label="Product Name" required className="sm:col-span-2"><input name="name" className={inputCls} defaultValue={product.name} required /></Field>
         <Field label="Image URL" className="sm:col-span-2"><input name="imageUrl" className={inputCls} defaultValue={product.imageUrl || ""} /></Field>
-        <Field label="Specification" className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} /></Field>
+        <Field label="Specification" required className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} required /></Field>
         <Field label="Category" required>
-          <select name="categoryId" className={selectCls} defaultValue={categories?.find((c: any) => c.name === product.category)?.id || ""} required>
+          <select name="categoryId" className={selectCls} value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} required>
             <option value="" disabled>Select category</option>
-            {categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {categoryIsMissing && <option value={selectedCategoryId}>{product.category || "Current category"}</option>}
+            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="Cost (₫)"><input name="cost" type="number" className={inputCls} defaultValue={product.cost} min={0} /></Field>
@@ -987,10 +993,17 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [selectedWarehouse, setSelectedWarehouse] = useState("");
+  const activeSuppliers = suppliers.filter(
+    (supplier: any) => String(supplier.status || "").toUpperCase() === "ACTIVE",
+  );
+  const [selectedLocationId, setSelectedLocationId] = useState("");
+  const [initialStock, setInitialStock] = useState("0");
 
   useEffect(() => {
     if (!open) {
       setSelectedWarehouse("");
+      setSelectedLocationId("");
+      setInitialStock("0");
     }
   }, [open]);
 
@@ -1022,8 +1035,19 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
     return true;
   });
 
+  const selectedLocation = (locations || []).find((location: any) => String(location.id) === selectedLocationId);
+  const initialStockQuantity = Number(initialStock) || 0;
+  const remainingCapacity = selectedLocation?.maxCapacity != null
+    ? Math.max(0, Number(selectedLocation.maxCapacity) - (Number(selectedLocation.currentQuantity) || 0))
+    : null;
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (remainingCapacity != null && initialStockQuantity > remainingCapacity) {
+      toast.error(`The selected bin has room for only ${remainingCapacity} more units.`);
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     const payload = {
       code: formData.get("code"),
@@ -1034,7 +1058,7 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
       categoryId: Number(formData.get("categoryId")),
       warehouseId: Number(formData.get("warehouseId")),
       locationId: formData.get("locationId") ? Number(formData.get("locationId")) : null,
-      initialStock: Number(formData.get("initialStock")),
+      initialStock: initialStockQuantity,
       reorderPoint: Number(formData.get("reorderPoint")),
       cost: Number(formData.get("cost")),
       price: Number(formData.get("price")),
@@ -1044,9 +1068,9 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
       await api.post("/products", payload);
       queryClient.invalidateQueries({ queryKey: ["products"] });
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error("Error saving product: " + (err.response?.data?.message || err.response?.data?.error || err.message || JSON.stringify(err)));
+      toast.error(getErrorMessage(err, "We couldn't save the product. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -1070,7 +1094,7 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
         <Field label="Supplier" required>
           <select name="supplierId" className={selectCls} defaultValue="" required>
             <option value="" disabled>Select supplier</option>
-            {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {activeSuppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <Field label="Product name" required className="sm:col-span-2"><input name="name" className={inputCls} placeholder="Intel Core i7-14700K" required /></Field>
@@ -1083,13 +1107,13 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
           </select>
         </Field>
         <Field label="Warehouse" required>
-          <select name="warehouseId" className={selectCls} value={selectedWarehouse} onChange={(e) => setSelectedWarehouse(e.target.value)} required>
+          <select name="warehouseId" className={selectCls} value={selectedWarehouse} onChange={(e) => { setSelectedWarehouse(e.target.value); setSelectedLocationId(""); }} required>
             <option value="" disabled>Select warehouse</option>
             {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.code} — {w.city}</option>)}
           </select>
         </Field>
         <Field label="Bin location">
-          <select name="locationId" className={selectCls} defaultValue="">
+          <select name="locationId" className={selectCls} value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)}>
             <option value="">No location assigned</option>
             {availableLocations.map((loc: any) => {
               const currentQty = loc.currentQuantity || 0;
@@ -1109,7 +1133,14 @@ function AddSkuModal({ open, onClose, warehouses, categories, suppliers, locatio
             })}
           </select>
         </Field>
-        <Field label="Initial stock"><input name="initialStock" type="number" className={inputCls} defaultValue={0} min={0} /></Field>
+        <Field label="Initial stock">
+          <input name="initialStock" type="number" className={inputCls} value={initialStock} onChange={(e) => setInitialStock(e.target.value)} min={0} max={remainingCapacity ?? undefined} />
+          {remainingCapacity != null && (
+            <p className={`mt-1 text-xs ${initialStockQuantity > remainingCapacity ? "text-destructive" : "text-muted-foreground"}`}>
+              Remaining capacity: {remainingCapacity} units
+            </p>
+          )}
+        </Field>
         <Field label="Reorder point"><input name="reorderPoint" type="number" className={inputCls} defaultValue={20} min={0} /></Field>
         <Field label="Cost (₫)"><input name="cost" type="number" className={inputCls} defaultValue={0} min={0} /></Field>
         <Field label="Sell price (₫)" className="sm:col-span-2"><input name="price" type="number" className={inputCls} defaultValue={0} min={0} /></Field>
@@ -1193,9 +1224,9 @@ function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
       queryClient.invalidateQueries({ queryKey: ["products"] });
       toast.success("Products imported successfully!");
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error("Error importing products: " + (err.response?.data?.message || err.response?.data?.error || err.message || JSON.stringify(err)));
+      toast.error(getErrorMessage(err, "We couldn't import the products. Please review the file and try again."));
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1292,7 +1323,7 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
   onClose: () => void;
   queryClient: any;
 }) {
-  const { data: categories } = useQuery({
+  const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
   });
@@ -1301,6 +1332,10 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
     queryFn: async () => { const res = await api.get("/suppliers", { params: { page: 0, size: 100 } }); return res.data?.content ?? []; },
     staleTime: 5 * 60_000,
   });
+  const [selectedCategoryId, setSelectedCategoryId] = useState(String(product.categoryId ?? ""));
+  const [selectedSupplierId, setSelectedSupplierId] = useState(String(product.supplierId ?? ""));
+  const categoryIsMissing = Boolean(selectedCategoryId) && !categories.some((category: any) => String(category.id) === selectedCategoryId);
+  const supplierIsMissing = Boolean(selectedSupplierId) && !suppliers.some((supplier: any) => String(supplier.id) === selectedSupplierId);
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => api.put(`/products/${product.id || product.sku}`, data),
@@ -1310,7 +1345,7 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
       toast.success("Product updated successfully");
       onClose();
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to update product"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to update product")),
   });
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -1347,18 +1382,20 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
       <form id="inline-edit-product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="SKU Code" required><input name="code" className={inputCls} defaultValue={product.sku} required /></Field>
         <Field label="Supplier" required>
-          <select name="supplierId" className={selectCls} defaultValue={suppliers.find((s: any) => s.name === product.brand)?.id || ""} required>
+          <select name="supplierId" className={selectCls} value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} required>
             <option value="" disabled>Select supplier</option>
+            {supplierIsMissing && <option value={selectedSupplierId}>{product.brand || "Current supplier"}</option>}
             {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <Field label="Product Name" required className="sm:col-span-2"><input name="name" className={inputCls} defaultValue={product.name} required /></Field>
         <Field label="Image URL" className="sm:col-span-2"><input name="imageUrl" className={inputCls} defaultValue={product.imageUrl || ""} /></Field>
-        <Field label="Specification" className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} /></Field>
+        <Field label="Specification" required className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} required /></Field>
         <Field label="Category" required>
-          <select name="categoryId" className={selectCls} defaultValue={categories?.find((c: any) => c.name === product.category)?.id || ""} required>
+          <select name="categoryId" className={selectCls} value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} required>
             <option value="" disabled>Select category</option>
-            {categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {categoryIsMissing && <option value={selectedCategoryId}>{product.category || "Current category"}</option>}
+            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="Cost (₫)"><input name="cost" type="number" className={inputCls} defaultValue={product.cost} min={0} /></Field>
@@ -1381,7 +1418,7 @@ function InlineReactivateButton({ product, onDone, queryClient }: {
       toast.success("Product reactivated");
       onDone();
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to reactivate product"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to reactivate product")),
   });
 
   return (
@@ -1411,7 +1448,7 @@ function InlineDeleteButton({ product, onDone, queryClient, mode }: {
       toast.success(mode === "hard" ? "Product permanently deleted" : "Product deactivated");
       onDone();
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to delete product"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to delete product")),
   });
 
   return (

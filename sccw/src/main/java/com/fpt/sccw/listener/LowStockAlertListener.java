@@ -113,7 +113,6 @@ public class LowStockAlertListener {
         Product product = inventory.getProduct();
         Warehouse warehouse = inventory.getWarehouse();
 
-        String supplierName = product.getSupplier() != null ? product.getSupplier().getName() : "Supplier";
         BigDecimal unitPrice = product.getCost() != null && product.getCost().compareTo(BigDecimal.ZERO) > 0 
                 ? product.getCost() : BigDecimal.ONE;
 
@@ -122,7 +121,7 @@ public class LowStockAlertListener {
                 .status(Status.ReceiptStatus.PENDING)
                 .remark("Auto-generated reorder — Low stock alert for " + product.getCode()
                         + " (current: " + inventory.getQuantity() + ", threshold: " + inventory.getLowStockThreshold() + ")")
-                .partner(supplierName)
+                .supplier(product.getSupplier())
                 .user(manager)
                 .warehouse(warehouse)
                 .build();

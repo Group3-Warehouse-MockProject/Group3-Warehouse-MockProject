@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { Upload, Download, Loader2, FileSpreadsheet } from "lucide-react";
 import { ModalShell } from "@/components/modal-shell";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 
@@ -27,15 +27,18 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const dataSheet = workbook.addWorksheet("DataSheet");
 
       // Fetch dynamic lookup data from backend
-      const [wRes, sRes, pRes] = await Promise.all([
+      const [wRes, sRes, pRes, uRes] = await Promise.all([
         api.get<any>("/warehouses"),
         api.get<any>("/suppliers"),
         api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
+        api.get<any>("/users"),
       ]);
 
       const warehouses = wRes.data?.content ?? (wRes.data as any);
       const suppliers = sRes.data?.content ?? (sRes.data as any);
       const products = pRes.data?.content ?? (pRes.data as any);
+      const users = Array.isArray(uRes.data) ? uRes.data : (uRes.data?.content ?? []);
+      const staffUsers = users.filter((u: any) => u.role?.toUpperCase() === "STAFF" || u.role === "Staff");
 
       // Populate DataSheet with available choices
       dataSheet.getCell("A1").value = "Warehouses";
@@ -53,6 +56,12 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         dataSheet.getCell(`C${idx + 2}`).value = p.sku;
       });
 
+      dataSheet.getCell("D1").value = "Assignees";
+      staffUsers.forEach((u: any, idx: number) => {
+        const whCode = warehouses.find((w: any) => String(w.id) === String(u.warehouseId))?.code;
+        dataSheet.getCell(`D${idx + 2}`).value = whCode ? `${u.fullName} (${whCode})` : u.fullName;
+      });
+
       // Hide the reference data sheet so it looks clean to the user
       dataSheet.state = "hidden";
 
@@ -65,6 +74,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         { header: "PRODUCT", key: "product", width: 22 },
         { header: "QTY", key: "qty", width: 10 },
         { header: "UNIT_COST", key: "unitCost", width: 15 },
+        { header: "ASSIGNEE", key: "assignee", width: 20 },
         { header: "NOTES", key: "notes", width: 30 }
       ];
 
@@ -74,6 +84,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const numWH = warehouses.length;
       const numSupp = suppliers.length;
       const numProd = products.length;
+      const numStaff = staffUsers.length;
 
       for (let i = 2; i <= 100; i++) {
         templateSheet.getCell(`C${i}`).dataValidation = {
@@ -127,6 +138,13 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
             formulae: [`'DataSheet'!$C$2:$C$${numProd + 1}`]
           };
         }
+        if (numStaff > 0) {
+          templateSheet.getCell(`H${i}`).dataValidation = {
+            type: "list",
+            allowBlank: true,
+            formulae: [`'DataSheet'!$D$2:$D$${numStaff + 1}`]
+          };
+        }
       }
 
       // Generate file buffer and trigger download
@@ -170,9 +188,15 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         throw new Error("No valid data to import. Please fill in your own data.");
       }
 
-      // Pre-fetch warehouses to resolve IDs by Warehouse Code
-      const whRes = await api.get<any[]>("/warehouses");
+      // Pre-fetch lookup data to resolve IDs.
+      const [whRes, suppliersRes, usersRes] = await Promise.all([
+        api.get<any[]>("/warehouses"),
+        api.get<any>("/suppliers", { params: { page: 0, size: 100 } }),
+        api.get<any>("/users"),
+      ]);
       const warehouseList = whRes.data;
+      const supplierList = suppliersRes.data?.content ?? suppliersRes.data ?? [];
+      const userList = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.content ?? []);
 
       // Group rows by GroupKey
       const groups: Record<string, any[]> = {};
@@ -199,11 +223,27 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
 
         const warehouseId = whMatch.id;
 
-        // Build remark from Date, Supplier and Notes
+        const supplierName = firstRow.SUPPLIER ? String(firstRow.SUPPLIER).trim() : "";
+        if (!supplierName) {
+          throw new Error(`Supplier is required for GroupKey ${key}.`);
+        }
+        const inconsistentSupplier = rows.some((row) =>
+          String(row.SUPPLIER ?? "").trim().toLowerCase() !== supplierName.toLowerCase()
+        );
+        if (inconsistentSupplier) {
+          throw new Error(`All rows in GroupKey ${key} must have the same supplier.`);
+        }
+        const supplierMatch = supplierList.find(
+          (supplier: any) => supplier.name?.trim().toLowerCase() === supplierName.toLowerCase()
+        );
+        if (!supplierMatch) {
+          throw new Error(`Supplier "${supplierName}" not found (GroupKey ${key}).`);
+        }
+
+        // Supplier is sent as supplierId; remarks only retain the date and notes.
         const dateStr = firstRow["DATE (yyyy-mm-dd)"] ? `Date: ${String(firstRow["DATE (yyyy-mm-dd)"]).trim()}` : (firstRow.DATE ? `Date: ${String(firstRow.DATE).trim()}` : "");
-        const suppStr = firstRow.SUPPLIER ? `Supplier: ${String(firstRow.SUPPLIER).trim()}` : "";
         const noteStr = firstRow.NOTES ? String(firstRow.NOTES).trim() : "";
-        const remark = [dateStr, suppStr, noteStr].filter(Boolean).join(" | ") || null;
+        const remark = [dateStr, noteStr].filter(Boolean).join(" | ") || null;
 
         const items = rows.map((row, idx) => {
           const code = row.PRODUCT ? String(row.PRODUCT).trim() : "";
@@ -227,22 +267,37 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           };
         });
 
+        // Resolve Assignee name to user ID (strip warehouse code suffix if present, e.g. "Hoai Linh (TS-HCM-01)")
+        const rawAssignee = firstRow.ASSIGNEE ? String(firstRow.ASSIGNEE).trim() : "";
+        const assigneeName = rawAssignee.replace(/\s*\(.*\)\s*$/, "");
+        let assignedUserId: number | null = null;
+        if (assigneeName) {
+          const userMatch = userList.find(
+            (u: any) => u.fullName?.toLowerCase() === assigneeName.toLowerCase()
+          );
+          if (!userMatch) {
+            throw new Error(`Assignee "${assigneeName}" not found (GroupKey ${key}).`);
+          }
+          assignedUserId = userMatch.id;
+        }
+
         // Send create receipt API call
         await api.post("/receipts", {
           warehouseId,
           type: "INBOUND",
+          supplierId: supplierMatch.id,
           remark,
-          items
+          items,
+          ...(assignedUserId !== null && { assignedUserId })
         });
       }
 
       toast.success("Inbound receipts imported successfully!");
       onClose();
       onSaved?.();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      const apiMsg = err.response?.data?.message || err.response?.data || err.message;
-      setError(typeof apiMsg === "string" ? apiMsg : "Error importing inbound receipts.");
+      setError(getErrorMessage(err, "Error importing inbound receipts."));
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

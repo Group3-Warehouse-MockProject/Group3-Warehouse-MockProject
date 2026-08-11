@@ -51,7 +51,7 @@ public class User extends BaseEntity{
     @Builder.Default
     private Boolean isFirstLogin = true;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
 
@@ -59,7 +59,7 @@ public class User extends BaseEntity{
     @Builder.Default
     private List<WarehouseReceipt> receipts = new ArrayList<>();
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id")
     private Warehouse warehouse;
 

@@ -50,7 +50,7 @@ public class NotificationController {
                 .userId(notif.getUser().getId().toString())
                 .title(notif.getTitle())
                 .message(notif.getMessage())
-                .type(notif.getType())
+                .type(notif.getType().name())
                 .createdAt(notif.getCreatedAt() != null ? notif.getCreatedAt().toString() : "")
                 .isRead(notif.isRead())
                 .build()).collect(java.util.stream.Collectors.toList());

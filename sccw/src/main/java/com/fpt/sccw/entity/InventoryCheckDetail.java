@@ -29,11 +29,11 @@ public class InventoryCheckDetail extends BaseEntity {
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark;
     
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "inventory_check_id", nullable = false)
     private InventoryCheck inventoryCheck;
 
@@ -41,7 +41,7 @@ public class InventoryCheckDetail extends BaseEntity {
     @PreUpdate
     public void calculateDifference() {
         if (this.actualQuantity != null && this.systemQuantity != null) {
-            this.difference = Math.abs(this.actualQuantity - this.systemQuantity);
+            this.difference = this.actualQuantity - this.systemQuantity;
         } else {
             this.difference = 0L;
         }

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { useApp, roleLabels } from "@/lib/app-context";
@@ -351,9 +351,10 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
       setIsEditing(false);
       toast.success("User updated successfully");
     },
-    onError: (err: any) => {
-      const e = setError(err.response?.data?.message || "Failed to update user");
-      toast.error(typeof e === "string" ? e : "Failed to update user");
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err, "Failed to update user");
+      setError(message);
+      toast.error(message);
     }
   });
 
@@ -363,9 +364,10 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
       onUpdated();
       toast.success("User deactivated successfully");
     },
-    onError: (err: any) => {
-      const e = setError(err.response?.data?.message || "Failed to deactivate user");
-      toast.error(typeof e === "string" ? e : "Failed to deactivate user");
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err, "Failed to deactivate user");
+      setError(message);
+      toast.error(message);
     }
   });
 
@@ -375,9 +377,10 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
       onUpdated();
       toast.success("User activated successfully");
     },
-    onError: (err: any) => {
-      const e = setError(err.response?.data?.message || "Failed to activate user");
-      toast.error(typeof e === "string" ? e : "Failed to activate user");
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err, "Failed to activate user");
+      setError(message);
+      toast.error(message);
     }
   });
 
@@ -413,9 +416,10 @@ function UserDetailModal({ user, dbWarehouses, onClose, onUpdated }: { user: any
       onUpdated();
       toast.success("User permanently deleted successfully");
     },
-    onError: (err: any) => {
-      const e = setError(err.response?.data?.message || "Failed to delete user permanently");
-      toast.error(typeof e === "string" ? e : "Failed to delete user permanently");
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err, "Failed to delete user permanently");
+      setError(message);
+      toast.error(message);
     }
   });
 
@@ -672,8 +676,8 @@ function RegisterModal({ onClose, dbWarehouses }: { onClose: () => void, dbWareh
         setSuccess(true);
         setTimeout(onClose, 1200);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Registration failed. Please try again.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Registration failed. Please try again."));
     }
   };
 

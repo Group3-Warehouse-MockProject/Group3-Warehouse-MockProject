@@ -19,6 +19,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     boolean existsByCode(String code);
     List<Product> findByIsDeletedTrue();
     Optional<Product> findByCode(String code);
+    Optional<Product> findByCodeIgnoreCase(String code);
     Optional<Product> findByName(String name);
 
     // ── Legacy (kept for compatibility) ──────────────────────────────────────

@@ -42,6 +42,7 @@ public class WarehouseReceiptController {
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
     private final WarehouseRepository warehouseRepository;
+    private final SupplierRepository supplierRepository;
     private final ActivityLogService activityLogService;
     private final PaymentRepository paymentRepository;
     private final ApprovalHistoryRepository approvalHistoryRepository;
@@ -235,7 +236,7 @@ public class WarehouseReceiptController {
             uniqueReceiptIds.add(r.getId());
 
             if (isInbound) {
-                if (d.getQuantity() != null) {
+                if (d.getQuantity() != null && r.getStatus() == Status.ReceiptStatus.APPROVED) {
                     totalUnits += d.getQuantity();
                 }
                 String partner = resolvePartner(r, d, true);
@@ -307,7 +308,7 @@ public class WarehouseReceiptController {
                 .type(txType)
                 .status(Status.ReceiptStatus.PENDING)
                 .remark(request.getRemark())
-                .partner(request.getPartner())
+                .supplier(resolveSupplier(request.getSupplierId(), isInbound))
                 .user(user)
                 .assignedUser(assignedUser)
                 .warehouse(warehouse)
@@ -488,9 +489,12 @@ public class WarehouseReceiptController {
             receipt.setWarehouse(newWarehouse);
         }
 
-        // Update partner
-        if (request.getPartner() != null) {
-            receipt.setPartner(request.getPartner().isBlank() ? null : request.getPartner());
+        if (request.getSupplierId() != null) {
+            if (receipt.getStatus() != Status.ReceiptStatus.PENDING) {
+                return ResponseEntity.badRequest().body("Cannot change supplier of a finalized receipt");
+            }
+            receipt.setSupplier(resolveSupplier(request.getSupplierId(),
+                    receipt.getType() == Status.TransactionType.INBOUND));
         }
 
         // Update assigned user
@@ -650,8 +654,22 @@ public class WarehouseReceiptController {
                 && user.getWarehouse().getId().equals(receipt.getWarehouse().getId());
     }
 
+    private Supplier resolveSupplier(Long supplierId, boolean inbound) {
+        if (supplierId == null) {
+            return null;
+        }
+        if (!inbound) {
+            throw new IllegalArgumentException("supplierId is only supported for inbound receipts");
+        }
+        if (supplierId <= 0) {
+            return null;
+        }
+        return supplierRepository.findById(supplierId)
+                .orElseThrow(() -> new IllegalArgumentException("Supplier not found: " + supplierId));
+    }
+
     private String resolvePartner(WarehouseReceipt r, ReceiptDetail d, boolean isInbound) {
-        if (r.getPartner() != null && !r.getPartner().isBlank()) return r.getPartner();
+        if (isInbound && r.getSupplier() != null) return r.getSupplier().getName();
         if (isInbound && d.getProduct().getSupplier() != null) return d.getProduct().getSupplier().getName();
         return isInbound ? "Supplier" : "Customer";
     }
@@ -752,6 +770,8 @@ public class WarehouseReceiptController {
                 .sku(d.getProduct().getCode())
                 .product(d.getProduct().getName())
                 .partner(partner)
+                .supplierId(r.getSupplier() != null ? r.getSupplier().getId() : null)
+                .supplierName(r.getSupplier() != null ? r.getSupplier().getName() : null)
                 .staff(r.getUser().getFullName())
                 .assignedUserId(r.getAssignedUser() != null ? r.getAssignedUser().getId() : null)
                 .assignedUserName(r.getAssignedUser() != null ? r.getAssignedUser().getFullName() : null)

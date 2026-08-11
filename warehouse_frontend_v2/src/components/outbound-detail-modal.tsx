@@ -6,7 +6,7 @@ import {
   Truck, Ban, Check, AlertTriangle, Banknote, Wallet, CreditCard,
   QrCode
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
 import { formatVND } from "@/lib/warehouse-data";
 import { ReceiptMovement } from "@/types";
@@ -137,15 +137,8 @@ export function OutboundDetailModal({
         status: newStatus,
       });
       onUpdated(res.data);
-    } catch (err: any) {
-      const data = err.response?.data;
-      const msg =
-        typeof data === "string"
-          ? data
-          : typeof data === "object" && data !== null && "message" in data
-          ? String((data as { message: string }).message)
-          : `Failed to update status to ${newStatus}. Please try again.`;
-      setError(msg);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, `Failed to update status to ${newStatus}. Please try again.`));
     } finally {
       setActionLoading(false);
     }
@@ -160,15 +153,8 @@ export function OutboundDetailModal({
       });
       onUpdated(res.data);
       setEditing(false);
-    } catch (err: any) {
-      const data = err.response?.data;
-      const msg =
-        typeof data === "string"
-          ? data
-          : typeof data === "object" && data !== null && "message" in data
-          ? String((data as { message: string }).message)
-          : "Failed to update notes. Please try again.";
-      setError(msg);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to update notes. Please try again."));
     } finally {
       setSaving(false);
     }

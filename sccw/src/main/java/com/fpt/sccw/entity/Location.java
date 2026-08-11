@@ -20,13 +20,14 @@ public class Location extends BaseEntity {
     @Column(name = "bin_code")
     private String binCode;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status")
-    private String status;
+    private Status.LocationStatus status;
     
     @Column(name = "max_capacity")
     private Long maxCapacity;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id")
     private Warehouse warehouse;
 

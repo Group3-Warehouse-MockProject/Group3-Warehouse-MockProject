@@ -26,7 +26,7 @@ function LoginPage() {
     }
     setError(null);
     try {
-      const { api } = await import("@/lib/api");
+      const { api, getErrorMessage } = await import("@/lib/api");
       const res = await api.post("/auth/login", { emailOrUsername: email, password });
       if (res.data.success) {
         if (res.data.isFirstLogin || res.data.needsPolicyAcceptance) {
@@ -50,8 +50,8 @@ function LoginPage() {
       } else {
         setError(res.data.message || "Login failed. Please try again.");
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Invalid credentials. Please try again.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Invalid credentials. Please try again."));
     }
   };
 

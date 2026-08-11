@@ -6,7 +6,10 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "transfers")
+@Table(name = "transfers", indexes = {
+    @Index(name = "idx_transfer_status", columnList = "status"),
+    @Index(name = "idx_transfer_type", columnList = "transfer_type")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -38,9 +41,7 @@ public class Transfer extends BaseEntity{
     @JoinColumn(name = "created_by_id", nullable = false)
     private User createdByUser;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    private User legacyUser;
+
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_by_id", nullable = true)

@@ -220,8 +220,7 @@ public class TransferController {
                 .warehouse(source)
                 .warehouseDestination(destination)
                 .createdByUser(user)
-                .legacyUser(user)
-                .assignedByUser(assignee)
+                                .assignedByUser(assignee)
                 .sourceLocation(internalLocations[0])
                 .destinationLocation(internalLocations[1])
                 .details(new LinkedHashSet<>())
@@ -320,7 +319,7 @@ public class TransferController {
         Transfer transfer = transferRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Transfer not found"));
         if (transfer.getStatus() != Status.TransactionStatus.PENDING
-                && transfer.getStatus() != Status.TransactionStatus.CANCEL) {
+                && transfer.getStatus() != Status.TransactionStatus.CANCELLED) {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "Only pending or cancelled transfers can be deleted"));
         }
@@ -357,7 +356,12 @@ public class TransferController {
             return ResponseEntity.ok(TransferDTO.fromEntity(transfer));
         }
 
-        if (nextStatus == Status.TransactionStatus.DELIVERING && isCrossWarehouse(transfer.getTransferType())) {
+        if (nextStatus == Status.TransactionStatus.CANCELLED
+                && isCrossWarehouse(transfer.getTransferType())
+                && (transfer.getStatus() == Status.TransactionStatus.DELIVERING
+                        || transfer.getStatus() == Status.TransactionStatus.DELIVERED)) {
+            restoreSourceInventory(transfer);
+        } else if (nextStatus == Status.TransactionStatus.DELIVERING && isCrossWarehouse(transfer.getTransferType())) {
             deductSourceInventory(transfer);
         } else if (nextStatus == Status.TransactionStatus.COMPLETED && isCrossWarehouse(transfer.getTransferType())) {
             if (transfer.getStatus() != Status.TransactionStatus.DELIVERING) {
@@ -479,7 +483,7 @@ public class TransferController {
         if (location.getWarehouse() == null || !warehouse.getId().equals(location.getWarehouse().getId())) {
             throw new RuntimeException(label + " location must belong to the source warehouse");
         }
-        if (!"ACTIVE".equalsIgnoreCase(location.getStatus())) {
+        if (location.getStatus() != Status.LocationStatus.ACTIVE) {
             throw new RuntimeException(label + " location is inactive");
         }
     }
@@ -510,12 +514,12 @@ public class TransferController {
     private Status.TransferType parseType(String type) {
         if ("internal".equalsIgnoreCase(type)
                 || "Internal Movement".equalsIgnoreCase(type)) {
-            return Status.TransferType.INBOUND;
+            return Status.TransferType.INTERNAL_WAREHOUSE;
         }
 
         if ("cross".equalsIgnoreCase(type)
                 || "Cross-Warehouse".equalsIgnoreCase(type)) {
-            return Status.TransferType.OUTBOUND;
+            return Status.TransferType.CROSS_WAREHOUSE;
         }
 
         throw new RuntimeException(
@@ -526,8 +530,8 @@ public class TransferController {
     private boolean isCrossWarehouse(
             Status.TransferType type
     ) {
-        return type == Status.TransferType.Cross_Warehouse
-                || type == Status.TransferType.OUTBOUND;
+        return type == Status.TransferType.CROSS_WAREHOUSE
+                || type == Status.TransferType.CROSS_WAREHOUSE;
     }
 
     private Status.TransactionStatus parseStatus(String status) {
@@ -543,7 +547,7 @@ public class TransferController {
 
         if ("Cancelled".equalsIgnoreCase(status)
                 || "CANCEL".equalsIgnoreCase(status)) {
-            return Status.TransactionStatus.CANCEL;
+            return Status.TransactionStatus.CANCELLED;
         }
 
         if ("Pending".equalsIgnoreCase(status)
@@ -576,13 +580,13 @@ public class TransferController {
         if ("cross".equalsIgnoreCase(type)
                 || "Cross-Warehouse".equalsIgnoreCase(type)) {
             return List.of(
-                    Status.TransferType.OUTBOUND,
-                    Status.TransferType.Cross_Warehouse
+                    Status.TransferType.CROSS_WAREHOUSE,
+                    Status.TransferType.CROSS_WAREHOUSE
             );
         }
         return List.of(
-                Status.TransferType.INBOUND,
-                Status.TransferType.Internal_Warehouse
+                Status.TransferType.INTERNAL_WAREHOUSE,
+                Status.TransferType.INTERNAL_WAREHOUSE
         );
     }
 
@@ -675,7 +679,7 @@ public class TransferController {
                                             nextStatus
                                                     == Status.TransactionStatus.DELIVERING
                                                     || nextStatus
-                                                    == Status.TransactionStatus.CANCEL
+                                                    == Status.TransactionStatus.CANCELLED
                                     )
                     )
                     || (
@@ -689,7 +693,7 @@ public class TransferController {
                                     nextStatus
                                             == Status.TransactionStatus.COMPLETED
                                     || nextStatus
-                                            == Status.TransactionStatus.CANCEL
+                                            == Status.TransactionStatus.CANCELLED
                             )
                     );
         } else {
@@ -698,7 +702,7 @@ public class TransferController {
                             nextStatus
                                     == Status.TransactionStatus.COMPLETED
                                     || nextStatus
-                                    == Status.TransactionStatus.CANCEL
+                                    == Status.TransactionStatus.CANCELLED
                     );
         }
 
@@ -758,7 +762,7 @@ public class TransferController {
             String label
     ) {
         if (warehouse.getStatus() != null
-                && !"ACTIVE".equalsIgnoreCase(warehouse.getStatus())) {
+                && warehouse.getStatus() != Status.WarehouseStatus.ACTIVE) {
             throw new RuntimeException(
                     label + " warehouse is inactive"
             );
@@ -800,18 +804,10 @@ public class TransferController {
         Long assigneeWarehouseId =
                 assignee.getWarehouse().getId();
 
-        boolean involved =
-                source.getId().equals(assigneeWarehouseId)
-                        || (
-                                destination != null
-                                        && destination.getId().equals(
-                                                assigneeWarehouseId
-                                        )
-                        );
-
-        if (!involved) {
+        Warehouse receivingWarehouse = destination != null ? destination : source;
+        if (!receivingWarehouse.getId().equals(assigneeWarehouseId)) {
             throw new RuntimeException(
-                    "Assigned manager must belong to the source or destination warehouse"
+                    "Assigned manager must belong to the receiving warehouse"
             );
         }
 
@@ -894,6 +890,31 @@ public class TransferController {
                 dest.setQuantity(dest.getQuantity() + detail.getQuantity());
             }
             inventoryRepository.save(dest);
+        }
+    }
+
+    private void restoreSourceInventory(Transfer transfer) {
+        for (TransferDetail detail : transfer.getDetails()) {
+            List<Inventory> sources = inventoryRepository.findAllByProductIdAndWarehouseId(
+                    detail.getProduct().getId(),
+                    transfer.getWarehouse().getId()
+            );
+
+            Inventory source;
+            if (sources.isEmpty()) {
+                source = Inventory.builder()
+                        .warehouse(transfer.getWarehouse())
+                        .product(detail.getProduct())
+                        .quantity(detail.getQuantity())
+                        .lowStockThreshold(10L)
+                        .outOfStockWarningDays(3L)
+                        .build();
+            } else {
+                source = sources.get(0);
+                long currentQuantity = source.getQuantity() == null ? 0L : source.getQuantity();
+                source.setQuantity(currentQuantity + detail.getQuantity());
+            }
+            inventoryRepository.save(source);
         }
     }
 

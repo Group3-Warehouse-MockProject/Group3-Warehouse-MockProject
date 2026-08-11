@@ -9,7 +9,9 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,8 +21,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fpt.sccw.dto.request.SupplierRequest;
 import com.fpt.sccw.dto.response.SupplierDTO;
+import com.fpt.sccw.entity.Category;
 import com.fpt.sccw.entity.Product;
+import com.fpt.sccw.entity.Status;
 import com.fpt.sccw.entity.Supplier;
+import com.fpt.sccw.repository.CategoryRepository;
 import com.fpt.sccw.repository.SupplierRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,16 +34,20 @@ class SupplierServiceTests {
     @Mock
     private SupplierRepository supplierRepository;
 
+    @Mock
+    private CategoryRepository categoryRepository;
+
     private SupplierService supplierService;
 
     @BeforeEach
     void setUp() {
-        supplierService = new SupplierService(supplierRepository);
+        supplierService = new SupplierService(supplierRepository, categoryRepository);
     }
 
     @Test
     void createSupplierNormalizesAndPersistsAllFields() {
         SupplierRequest request = request();
+        when(categoryRepository.findAllById(Set.of(2L, 1L))).thenReturn(List.of(category(1L, "CPU"), category(2L, "GPU")));
         when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> {
             Supplier supplier = invocation.getArgument(0);
             supplier.setId(99L);
@@ -52,6 +61,7 @@ class SupplierServiceTests {
         assertThat(result.getStatus()).isEqualTo("ACTIVE");
         assertThat(result.getRating()).isEqualByComparingTo("4.7");
         assertThat(result.getOnTimeDelivery()).isEqualTo(96);
+        assertThat(result.getCategoryIds()).containsExactlyInAnyOrder(1L, 2L);
         verify(supplierRepository).save(any(Supplier.class));
     }
 
@@ -97,11 +107,17 @@ class SupplierServiceTests {
                 .address(" Ho Chi Minh City ")
                 .country(" Vietnam ")
                 .contactPerson(" Demo Contact ")
-                .categories(" GPU, CPU ")
+                .categoryIds(Set.of(1L, 2L))
                 .rating(new BigDecimal("4.7"))
                 .onTimeDelivery(96)
                 .notes(" Net 30 ")
                 .build();
+    }
+
+    private Category category(Long id, String code) {
+        Category category = Category.builder().code(code).name(code + " category").build();
+        category.setId(id);
+        return category;
     }
 
     private Supplier supplier() {
@@ -111,9 +127,10 @@ class SupplierServiceTests {
                 .phoneNumber("+84 900 000 001")
                 .address("Ho Chi Minh City")
                 .country("Vietnam")
-                .status("ACTIVE")
+                .status(Status.SupplierStatus.ACTIVE)
                 .rating(new BigDecimal("4.7"))
                 .onTimeDelivery(96)
+                .categories(new java.util.LinkedHashSet<>())
                 .products(new ArrayList<>())
                 .build();
         supplier.setId(1L);

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useApp } from "@/lib/app-context";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { buildBankTransferQrUrl, BANK_ACCOUNT_NUMBER } from "@/lib/payment";
 import { formatVND } from "@/lib/warehouse-data";
 import { type ReceiptMovement } from "@/types";
@@ -126,8 +126,8 @@ function RecordPaymentPage() {
       setSuccess(true);
       setNote("");
       await loadData();
-    } catch (err: any) {
-      setError(typeof err.response?.data === "string" ? err.response.data : "Failed to record payment. Please try again.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to record payment. Please try again."));
     } finally {
       setSubmitting(false);
     }
