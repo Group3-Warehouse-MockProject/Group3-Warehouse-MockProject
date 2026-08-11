@@ -235,7 +235,7 @@ public class WarehouseReceiptController {
             uniqueReceiptIds.add(r.getId());
 
             if (isInbound) {
-                if (d.getQuantity() != null) {
+                if (d.getQuantity() != null && r.getStatus() == Status.ReceiptStatus.APPROVED) {
                     totalUnits += d.getQuantity();
                 }
                 String partner = resolvePartner(r, d, true);
