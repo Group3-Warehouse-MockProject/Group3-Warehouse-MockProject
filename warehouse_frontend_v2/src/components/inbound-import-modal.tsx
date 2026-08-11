@@ -27,15 +27,18 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const dataSheet = workbook.addWorksheet("DataSheet");
 
       // Fetch dynamic lookup data from backend
-      const [wRes, sRes, pRes] = await Promise.all([
+      const [wRes, sRes, pRes, uRes] = await Promise.all([
         api.get<any>("/warehouses"),
         api.get<any>("/suppliers"),
         api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
+        api.get<any>("/users"),
       ]);
 
       const warehouses = wRes.data?.content ?? (wRes.data as any);
       const suppliers = sRes.data?.content ?? (sRes.data as any);
       const products = pRes.data?.content ?? (pRes.data as any);
+      const users = Array.isArray(uRes.data) ? uRes.data : (uRes.data?.content ?? []);
+      const staffUsers = users.filter((u: any) => u.role?.toUpperCase() === "STAFF" || u.role === "Staff");
 
       // Populate DataSheet with available choices
       dataSheet.getCell("A1").value = "Warehouses";
@@ -53,6 +56,11 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         dataSheet.getCell(`C${idx + 2}`).value = p.sku;
       });
 
+      dataSheet.getCell("D1").value = "Assignees";
+      staffUsers.forEach((u: any, idx: number) => {
+        dataSheet.getCell(`D${idx + 2}`).value = u.fullName;
+      });
+
       // Hide the reference data sheet so it looks clean to the user
       dataSheet.state = "hidden";
 
@@ -65,6 +73,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         { header: "PRODUCT", key: "product", width: 22 },
         { header: "QTY", key: "qty", width: 10 },
         { header: "UNIT_COST", key: "unitCost", width: 15 },
+        { header: "ASSIGNEE", key: "assignee", width: 20 },
         { header: "NOTES", key: "notes", width: 30 }
       ];
 
@@ -74,6 +83,7 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const numWH = warehouses.length;
       const numSupp = suppliers.length;
       const numProd = products.length;
+      const numStaff = staffUsers.length;
 
       for (let i = 2; i <= 100; i++) {
         templateSheet.getCell(`C${i}`).dataValidation = {
@@ -127,6 +137,13 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
             formulae: [`'DataSheet'!$C$2:$C$${numProd + 1}`]
           };
         }
+        if (numStaff > 0) {
+          templateSheet.getCell(`H${i}`).dataValidation = {
+            type: "list",
+            allowBlank: true,
+            formulae: [`'DataSheet'!$D$2:$D$${numStaff + 1}`]
+          };
+        }
       }
 
       // Generate file buffer and trigger download
@@ -170,9 +187,13 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         throw new Error("No valid data to import. Please fill in your own data.");
       }
 
-      // Pre-fetch warehouses to resolve IDs by Warehouse Code
-      const whRes = await api.get<any[]>("/warehouses");
+      // Pre-fetch warehouses and users to resolve IDs
+      const [whRes, usersRes] = await Promise.all([
+        api.get<any[]>("/warehouses"),
+        api.get<any>("/users"),
+      ]);
       const warehouseList = whRes.data;
+      const userList = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.content ?? []);
 
       // Group rows by GroupKey
       const groups: Record<string, any[]> = {};
@@ -227,12 +248,26 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
           };
         });
 
+        // Resolve Assignee name to user ID
+        const assigneeName = firstRow.ASSIGNEE ? String(firstRow.ASSIGNEE).trim() : "";
+        let assignedUserId: number | null = null;
+        if (assigneeName) {
+          const userMatch = userList.find(
+            (u: any) => u.fullName?.toLowerCase() === assigneeName.toLowerCase()
+          );
+          if (!userMatch) {
+            throw new Error(`Assignee "${assigneeName}" not found (GroupKey ${key}).`);
+          }
+          assignedUserId = userMatch.id;
+        }
+
         // Send create receipt API call
         await api.post("/receipts", {
           warehouseId,
           type: "INBOUND",
           remark,
-          items
+          items,
+          ...(assignedUserId !== null && { assignedUserId })
         });
       }
 

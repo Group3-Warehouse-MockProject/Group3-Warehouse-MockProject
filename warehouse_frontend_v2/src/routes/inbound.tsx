@@ -128,16 +128,8 @@ function InboundPage() {
   function handleUpdated(updated: ReceiptMovement[]) {
     if (!updated.length) return;
     const rid = updated[0].receiptId;
-    setMovements((prev) =>
-      [...prev.filter((m) => m.receiptId !== rid), ...updated].sort((a, b) => {
-        const timeA = a.createdAt || "";
-        const timeB = b.createdAt || "";
-        const cmp = timeB.localeCompare(timeA);
-        if (cmp !== 0) return cmp;
-        return b.id.localeCompare(a.id);
-      })
-    );
     setSelectedMovement((prev) => (prev?.receiptId === rid ? updated[0] : prev));
+    fetchReceipts();
   }
 
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
@@ -193,7 +185,7 @@ function InboundPage() {
 
   const handleExport = () => {
     if (movements.length === 0) return;
-    const headers = ["Receipt", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Created by"];
+    const headers = ["Receipt", "Product", "SKU", "Supplier", "Warehouse", "Qty", "Date", "Status", "Created by", "Assignee"];
     const csvContent = [
       headers.join(","),
       ...movements.map((m) =>
@@ -206,7 +198,8 @@ function InboundPage() {
           m.qty,
           m.date,
           m.status,
-          `"${m.staff.replace(/"/g, '""')}"`
+          `"${m.staff.replace(/"/g, '""')}"`,
+          `"${(m.assignedUserName ?? "").replace(/"/g, '""')}"`
         ].join(",")
       )
     ].join("\n");
