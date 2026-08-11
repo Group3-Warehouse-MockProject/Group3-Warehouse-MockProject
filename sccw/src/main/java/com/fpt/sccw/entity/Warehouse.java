@@ -7,7 +7,9 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
 @Entity
-@Table(name = "warehouses")
+@Table(name = "warehouses", indexes = {
+    @Index(name = "idx_warehouse_status", columnList = "status")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -30,9 +32,10 @@ public class Warehouse extends BaseEntity {
     @Column(name = "capacity")
     private Long capacity;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status")
     @Builder.Default
-    private String status = "ACTIVE";
+    private Status.WarehouseStatus status = Status.WarehouseStatus.ACTIVE;
 
     @OneToMany(mappedBy = "warehouse", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Builder.Default

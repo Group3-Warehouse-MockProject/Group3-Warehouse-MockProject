@@ -18,7 +18,7 @@ import lombok.Setter;
 @NoArgsConstructor
 public class Feedback extends BaseEntity {
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
@@ -34,7 +34,7 @@ public class Feedback extends BaseEntity {
     @Column(length = 2000)
     private String response;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "responded_by_user_id")
     private User respondedBy;
 

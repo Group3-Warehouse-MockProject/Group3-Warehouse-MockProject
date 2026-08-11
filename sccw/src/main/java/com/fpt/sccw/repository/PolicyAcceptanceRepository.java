@@ -8,5 +8,5 @@ import java.util.Optional;
 
 @Repository
 public interface PolicyAcceptanceRepository extends JpaRepository<PolicyAcceptance, Long> {
-    Optional<PolicyAcceptance> findFirstByUserIdOrderByAcceptedAtDesc(Long userId);
+    Optional<PolicyAcceptance> findFirstByUserIdOrderByCreatedAtDesc(Long userId);
 }

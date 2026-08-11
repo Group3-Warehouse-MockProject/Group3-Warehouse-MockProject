@@ -16,6 +16,8 @@ public class MovementDTO {
     private String sku;              // Product code
     private String product;
     private String partner;          // Supplier name or destination
+    private Long supplierId;
+    private String supplierName;
     private String staff;            // fullName of creator
     private Long assignedUserId;     // ID of assigned staff
     private String assignedUserName; // Name of assigned staff

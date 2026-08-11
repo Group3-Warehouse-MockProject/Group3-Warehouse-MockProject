@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "approval_histories")
+@Table(name = "approval_histories", indexes = {
+    @Index(name = "idx_approval_doc", columnList = "document_type, document_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -27,6 +29,10 @@ public class ApprovalHistory extends BaseEntity {
 
     @Column(name = "approver_id", nullable = false)
     private Long approverId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approver_id", nullable = false, insertable = false, updatable = false)
+    private User approver;
 
     @Column(name = "approver_name")
     private String approverName;

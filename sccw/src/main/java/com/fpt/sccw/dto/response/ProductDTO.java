@@ -40,12 +40,12 @@ public class ProductDTO {
             }
             if (inventory.getWarehouse() != null) {
                 wId = String.valueOf(inventory.getWarehouse().getId());
-                whStatus = inventory.getWarehouse().getStatus();
+                whStatus = inventory.getWarehouse().getStatus() != null ? inventory.getWarehouse().getStatus().name() : "ACTIVE";
             }
             if (inventory.getLocation() != null) {
                 location = inventory.getLocation().getRackCode() + "-" + 
                            inventory.getLocation().getBinCode();
-                locStatus = inventory.getLocation().getStatus();
+                locStatus = inventory.getLocation().getStatus() != null ? inventory.getLocation().getStatus().name() : "ACTIVE";
             }
         }
         return ProductDTO.builder()

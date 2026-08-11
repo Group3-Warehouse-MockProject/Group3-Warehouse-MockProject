@@ -23,6 +23,7 @@ public interface WarehouseReceiptRepository extends JpaRepository<WarehouseRecei
            "LEFT JOIN FETCH r.user " +
            "LEFT JOIN FETCH r.assignedUser " +
            "LEFT JOIN FETCH r.warehouse " +
+           "LEFT JOIN FETCH r.supplier " +
            "LEFT JOIN FETCH r.details d " +
            "LEFT JOIN FETCH d.product dp " +
            "LEFT JOIN FETCH dp.supplier " +
@@ -34,6 +35,7 @@ public interface WarehouseReceiptRepository extends JpaRepository<WarehouseRecei
            "LEFT JOIN FETCH r.user " +
            "LEFT JOIN FETCH r.assignedUser " +
            "LEFT JOIN FETCH r.warehouse " +
+           "LEFT JOIN FETCH r.supplier " +
            "LEFT JOIN FETCH r.details d " +
            "LEFT JOIN FETCH d.product dp " +
            "LEFT JOIN FETCH dp.supplier " +

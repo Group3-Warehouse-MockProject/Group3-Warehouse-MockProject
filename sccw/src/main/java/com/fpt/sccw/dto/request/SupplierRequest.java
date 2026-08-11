@@ -1,6 +1,7 @@
 package com.fpt.sccw.dto.request;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -43,8 +44,7 @@ public class SupplierRequest {
     @Size(max = 100, message = "Contact person must not exceed 100 characters")
     private String contactPerson;
 
-    @Size(max = 500, message = "Categories must not exceed 500 characters")
-    private String categories;
+    private Set<Long> categoryIds;
 
     @DecimalMin(value = "0.0", message = "Rating must be at least 0")
     @DecimalMax(value = "5.0", message = "Rating must not exceed 5")

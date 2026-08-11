@@ -2,11 +2,6 @@ package com.fpt.sccw.entity;
 
 public class Status{
 
-    public enum StockTransactionType {
-        IN,
-        OUT
-    }
-
     public enum ReceiptStatus{
         PENDING,
         APPROVED,
@@ -16,10 +11,8 @@ public class Status{
     }
 
     public enum TransferType{
-        Cross_Warehouse,
-        Internal_Warehouse,
-        INBOUND,
-        OUTBOUND,
+        CROSS_WAREHOUSE,
+        INTERNAL_WAREHOUSE
     }
 
     public enum TransactionType{
@@ -32,7 +25,7 @@ public class Status{
         DELIVERING,
         DELIVERED,
         COMPLETED,
-        CANCEL
+        CANCELLED
     }
 
     public enum InventoryCheckStatus {
@@ -66,5 +59,27 @@ public class Status{
         BANK_TRANSFER,
         CARD,
         OTHER
+    }
+
+    public enum WarehouseStatus {
+        ACTIVE,
+        INACTIVE
+    }
+
+    public enum LocationStatus {
+        ACTIVE,
+        INACTIVE
+    }
+
+    public enum SupplierStatus {
+        ACTIVE,
+        INACTIVE
+    }
+
+    public enum NotificationType {
+        SUCCESS,
+        INFO,
+        WARNING,
+        ERROR
     }
 }

@@ -2,15 +2,20 @@ package com.fpt.sccw.service;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fpt.sccw.dto.request.SupplierRequest;
 import com.fpt.sccw.dto.response.SupplierDTO;
+import com.fpt.sccw.entity.Category;
+import com.fpt.sccw.entity.Status;
 import com.fpt.sccw.entity.Supplier;
+import com.fpt.sccw.repository.CategoryRepository;
 import com.fpt.sccw.repository.SupplierRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -21,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 public class SupplierService {
 
     private final SupplierRepository supplierRepository;
+    private final CategoryRepository categoryRepository;
 
     @Transactional(readOnly = true)
     public List<SupplierDTO> getSuppliers(String query, String status) {
@@ -29,7 +35,7 @@ public class SupplierService {
 
         return supplierRepository.findAll().stream()
                 .filter(supplier -> normalizedStatus == null
-                        || supplier.getStatus().equalsIgnoreCase(normalizedStatus))
+                        || supplier.getStatus().name().equalsIgnoreCase(normalizedStatus))
                 .filter(supplier -> normalizedQuery == null || matches(supplier, normalizedQuery))
                 .sorted(Comparator.comparing(Supplier::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(SupplierDTO::fromEntity)
@@ -45,7 +51,9 @@ public class SupplierService {
         validateUniqueFields(request, null);
         Supplier supplier = new Supplier();
         applyRequest(supplier, request);
-        supplier.setStatus(request.getStatus() != null ? request.getStatus() : "ACTIVE");
+        supplier.setStatus(request.getStatus() != null
+                ? parseStatus(request.getStatus())
+                : Status.SupplierStatus.ACTIVE);
         return SupplierDTO.fromEntity(supplierRepository.save(supplier));
     }
 
@@ -54,17 +62,14 @@ public class SupplierService {
         validateUniqueFields(request, id);
         applyRequest(supplier, request);
         if (request.getStatus() != null) {
-            supplier.setStatus(request.getStatus());
+            supplier.setStatus(parseStatus(request.getStatus()));
         }
         return SupplierDTO.fromEntity(supplierRepository.save(supplier));
     }
 
     public SupplierDTO setSupplierStatus(Long id, String status) {
-        if (!"ACTIVE".equalsIgnoreCase(status) && !"INACTIVE".equalsIgnoreCase(status)) {
-            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
-        }
         Supplier supplier = findSupplier(id);
-        supplier.setStatus(status.toUpperCase(Locale.ROOT));
+        supplier.setStatus(parseStatus(status));
         return SupplierDTO.fromEntity(supplierRepository.save(supplier));
     }
 
@@ -107,10 +112,31 @@ public class SupplierService {
         supplier.setAddress(request.getAddress().trim());
         supplier.setCountry(request.getCountry().trim());
         supplier.setContactPerson(trimToNull(request.getContactPerson()));
-        supplier.setCategories(trimToNull(request.getCategories()));
         supplier.setRating(request.getRating() != null ? request.getRating() : BigDecimal.ZERO);
         supplier.setOnTimeDelivery(request.getOnTimeDelivery() != null ? request.getOnTimeDelivery() : 0);
         supplier.setNotes(trimToNull(request.getNotes()));
+        supplier.setCategories(resolveCategories(request.getCategoryIds()));
+    }
+
+    private Set<Category> resolveCategories(Set<Long> categoryIds) {
+        if (categoryIds == null || categoryIds.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+
+        Set<Long> ids = new LinkedHashSet<>(categoryIds);
+        List<Category> categories = categoryRepository.findAllById(ids);
+        if (categories.size() != ids.size()) {
+            throw new IllegalArgumentException("One or more categories were not found");
+        }
+        return new LinkedHashSet<>(categories);
+    }
+
+    private Status.SupplierStatus parseStatus(String status) {
+        try {
+            return Status.SupplierStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
+        }
     }
 
     private boolean matches(Supplier supplier, String query) {
@@ -119,8 +145,7 @@ public class SupplierService {
                 || contains(supplier.getPhoneNumber(), query)
                 || contains(supplier.getAddress(), query)
                 || contains(supplier.getCountry(), query)
-                || contains(supplier.getContactPerson(), query)
-                || contains(supplier.getCategories(), query);
+                || contains(supplier.getContactPerson(), query);
     }
 
     private boolean contains(String value, String query) {
