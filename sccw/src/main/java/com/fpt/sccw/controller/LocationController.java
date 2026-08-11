@@ -198,7 +198,9 @@ public class LocationController {
         ResponseEntity<?> permCheck = validateWritePermission(targetWarehouseId);
         if (permCheck != null) return permCheck;
 
-        String newStatus = "INACTIVE".equalsIgnoreCase(location.getStatus()) ? "ACTIVE" : "INACTIVE";
+        Status.LocationStatus newStatus = location.getStatus() == Status.LocationStatus.INACTIVE
+                ? Status.LocationStatus.ACTIVE
+                : Status.LocationStatus.INACTIVE;
         location.setStatus(newStatus);
         Location saved = locationRepository.save(location);
         return ResponseEntity.ok(LocationDTO.fromEntity(saved));

@@ -16,6 +16,7 @@ import {
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/confirm-modal"
+import { PanelLoadingState } from "@/components/loading-state";
 
 export const Route = createFileRoute("/location")({
   head: () => ({ meta: [{ title: "Locations — TechStock" }] }),
@@ -530,9 +531,7 @@ function LocationPage() {
         {/* Tree View Container: Warehouse -> Rack -> Bin */}
         <div className="surface-card overflow-hidden rounded-xl border">
           {isLoading ? (
-            <div className="p-14 text-center text-muted-foreground flex items-center justify-center gap-2">
-              <Spinner /> Loading location tree…
-            </div>
+            <PanelLoadingState label="Loading location tree…" className="min-h-72" />
           ) : filteredWhIds.length === 0 ? (
             <div className="p-14 text-center text-muted-foreground">
               <Building2 className="size-12 mx-auto mb-3 opacity-20" />

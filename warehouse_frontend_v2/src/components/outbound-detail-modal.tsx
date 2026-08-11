@@ -10,6 +10,7 @@ import { api, getErrorMessage } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
 import { formatVND } from "@/lib/warehouse-data";
 import { ReceiptMovement } from "@/types";
+import { InlineLoadingState } from "@/components/loading-state";
 
 function parseRemark(remark?: string) {
   if (!remark) return { reference: "", assignee: "", note: "" };
@@ -301,9 +302,7 @@ export function OutboundDetailModal({
             <div className="mb-3">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Payment history</div>
               {fetchingPayments ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                  <Loader2 className="size-3.5 animate-spin" /> Loading…
-                </div>
+                <InlineLoadingState label="Loading payment history…" className="py-2 text-xs" />
               ) : payments.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">No payments recorded yet.</p>
               ) : (

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { warehouses } from "@/lib/warehouse-data";
 import { ApprovalHistoryItem } from "@/types";
 import { ConfirmModal } from "@/components/confirm-modal";
+import { PanelLoadingState } from "@/components/loading-state";
 import {
   ClipboardCheck, Plus, X, Save, ListChecks,
   AlertTriangle, CheckCircle2, Boxes,
@@ -533,10 +534,7 @@ function StocktakePage() {
         {/* Bảng danh sách */}
         <div className="surface-card overflow-hidden">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-3 py-20 text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" />
-              <span className="text-sm">Loading stocktake sheets…</span>
-            </div>
+            <PanelLoadingState label="Loading stocktake sheets…" className="min-h-72" />
           ) : paginatedList.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
               <Search className="size-8 opacity-30" />

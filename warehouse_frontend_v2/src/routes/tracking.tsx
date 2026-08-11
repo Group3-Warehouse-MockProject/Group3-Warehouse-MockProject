@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
+import { PanelLoadingState } from "@/components/loading-state";
 import {
   Activity,
   Clock,
@@ -205,10 +206,7 @@ function TrackingPage() {
         {/* Table */}
         <div className="surface-card overflow-hidden rounded-xl border border-border/50 shadow-sm">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-3 py-20 text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" />
-              <span className="text-sm">Loading activity logs…</span>
-            </div>
+            <PanelLoadingState label="Loading activity logs…" className="min-h-72" />
           ) : currentPageLogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
               <Activity className="size-10 opacity-20" />

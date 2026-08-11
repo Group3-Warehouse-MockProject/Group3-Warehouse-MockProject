@@ -7,6 +7,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { useApp, roleLabels } from "@/lib/app-context";
 import { Info, Users, Shield, Building2, UserCheck, UserPlus, X, Eye, EyeOff, ChevronLeft, ChevronRight, Trash2, Edit, Save, Search, Filter, RefreshCcw, UserMinus, Activity, Clock, LogIn, Globe } from "lucide-react";
 import { toast } from "sonner";
+import { PanelLoadingState } from "@/components/loading-state";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({ meta: [{ title: "Staff — TechStock" }] }),
@@ -855,12 +856,7 @@ function ActivityTimeline({ userId }: { userId: number }) {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center gap-3 py-12 text-muted-foreground">
-        <Activity className="size-5 animate-spin" />
-        <span className="text-sm">Loading activity history…</span>
-      </div>
-    );
+    return <PanelLoadingState label="Loading activity history…" />;
   }
 
   if (logs.length === 0) {

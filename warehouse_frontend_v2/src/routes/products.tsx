@@ -7,6 +7,7 @@ import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { Filter, Plus, Download, Upload, Package, Boxes, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, Search, LayoutGrid, List, Pencil, Trash2, AlertCircle, RefreshCw } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
+import { PageLoadingState } from "@/components/loading-state";
 import { useState, useEffect, useRef } from "react";
 
 
@@ -156,7 +157,7 @@ function ProductsPage() {
   const low = productStats?.lowStockCount ?? list.filter((p: any) => p.stock < p.reorder).length;
   const value = productStats?.inventoryValue ?? list.reduce((s: number, p: any) => s + p.stock * p.cost, 0);
 
-  if (isLoading) return <AppShell><div className="p-8">Loading data...</div></AppShell>;
+  if (isLoading) return <AppShell><PageLoadingState label="Loading products" /></AppShell>;
   if (error) return <AppShell><div className="p-8 text-destructive">Error loading data</div></AppShell>;
 
   const handleExport = async () => {
