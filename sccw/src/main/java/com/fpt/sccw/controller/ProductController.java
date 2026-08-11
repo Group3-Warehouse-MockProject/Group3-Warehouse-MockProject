@@ -209,6 +209,7 @@ public class ProductController {
                 .orElseThrow(() -> new RuntimeException("Category not found"));
         Supplier supplier = supplierRepository.findById(request.getSupplierId())
                 .orElseThrow(() -> new RuntimeException("Supplier not found"));
+        requireActiveSupplier(supplier);
 
         Product product = Product.builder()
                 .code(request.getCode())
@@ -272,6 +273,7 @@ public class ProductController {
                     .orElseThrow(() -> new RuntimeException("Category not found for ID: " + request.getCategoryId()));
             Supplier supplier = supplierRepository.findById(request.getSupplierId())
                     .orElseThrow(() -> new RuntimeException("Supplier not found for ID: " + request.getSupplierId()));
+            requireActiveSupplier(supplier);
 
             Product product = Product.builder()
                     .code(request.getCode())
@@ -339,6 +341,11 @@ public class ProductController {
         if (request.getSupplierId() != null) {
             Supplier supplier = supplierRepository.findById(request.getSupplierId())
                     .orElseThrow(() -> new RuntimeException("Supplier not found"));
+            boolean isChangingSupplier = product.getSupplier() == null
+                    || !supplier.getId().equals(product.getSupplier().getId());
+            if (isChangingSupplier) {
+                requireActiveSupplier(supplier);
+            }
             product.setSupplier(supplier);
         }
 
@@ -457,5 +464,11 @@ public class ProductController {
         if (auth == null || !auth.isAuthenticated()) return null;
         return userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found in database"));
+    }
+
+    private void requireActiveSupplier(Supplier supplier) {
+        if (supplier.getStatus() != Status.SupplierStatus.ACTIVE) {
+            throw new IllegalStateException("Cannot assign an inactive supplier to a product");
+        }
     }
 }

@@ -356,7 +356,7 @@ public class TransferController {
             return ResponseEntity.ok(TransferDTO.fromEntity(transfer));
         }
 
-        if (nextStatus == Status.TransactionStatus.CANCEL
+        if (nextStatus == Status.TransactionStatus.CANCELLED
                 && isCrossWarehouse(transfer.getTransferType())
                 && (transfer.getStatus() == Status.TransactionStatus.DELIVERING
                         || transfer.getStatus() == Status.TransactionStatus.DELIVERED)) {

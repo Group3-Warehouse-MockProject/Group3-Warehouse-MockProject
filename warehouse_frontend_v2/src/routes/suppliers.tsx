@@ -165,10 +165,8 @@ function SuppliersPage() {
     const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
       await statusMutation.mutateAsync({ id: supplier.id, status: newStatus });
-      toast.success("Status updated");
     } catch (err) {
       console.error("Error updating status:", err);
-      toast.error("Failed to update status");
     }
   };
 
