@@ -51,7 +51,8 @@ export function InboundDetailModal({
   // Editing state
   const [editing, setEditing]         = useState(false);
   const [editRemark, setEditRemark]   = useState(movement.remark ?? "");
-  const [editPartner, setEditPartner] = useState(movement.partner ?? "");
+  const [editSupplierId, setEditSupplierId] = useState<string>("");
+  const [partnerInitialized, setPartnerInitialized] = useState(false);
   const [editWarehouseId, setEditWarehouseId] = useState(movement.warehouseId);
   const [editAssignedUserId, setEditAssignedUserId] = useState<number | "">(movement.assignedUserId ?? "");
   const [editItems, setEditItems]     = useState<EditLineItem[]>([]);
@@ -95,10 +96,19 @@ export function InboundDetailModal({
     }).finally(() => setRefLoading(false));
   }, [editing]);
 
+  useEffect(() => {
+    if (editing && suppliers.length > 0 && !partnerInitialized) {
+      const matched = suppliers.find(s => s.name === movement.partner);
+      if (matched) setEditSupplierId(matched.id);
+      setPartnerInitialized(true);
+    }
+  }, [editing, suppliers, partnerInitialized, movement.partner]);
+
   function enterEditMode() {
     setEditing(true);
     setEditRemark(movement.remark ?? "");
-    setEditPartner(movement.partner ?? "");
+    setEditSupplierId("");
+    setPartnerInitialized(false);
     setEditWarehouseId(movement.warehouseId);
     setEditAssignedUserId(movement.assignedUserId ?? "");
     setEditItems(lines.map((l) => ({ key: nextLineKey(), sku: l.sku, qty: l.qty })));
@@ -160,7 +170,8 @@ export function InboundDetailModal({
 
     // Check if anything changed
     const remarkChanged = editRemark.trim() !== (movement.remark ?? "").trim();
-    const partnerChanged = editPartner.trim() !== (movement.partner ?? "").trim();
+    const originalSupplierId = suppliers.find(s => s.name === movement.partner)?.id || "";
+    const partnerChanged = editSupplierId !== originalSupplierId;
     const warehouseChanged = editWarehouseId !== movement.warehouseId;
     const oldAssigned = movement.assignedUserId ? Number(movement.assignedUserId) : "";
     const newAssigned = editAssignedUserId !== "" ? Number(editAssignedUserId) : "";
@@ -182,8 +193,8 @@ export function InboundDetailModal({
       const payload: Record<string, any> = {
         status: movement.status,
         remark: editRemark.trim() || null,
-        partner: editPartner.trim() || null,
       };
+      if (partnerChanged) payload.supplierId = editSupplierId ? Number(editSupplierId) : -1;
       if (warehouseChanged) payload.warehouseId = Number(editWarehouseId);
       if (assignedChanged) payload.assignedUserId = newAssigned === "" ? -1 : newAssigned;
       if (itemsChanged) {
@@ -311,17 +322,14 @@ export function InboundDetailModal({
               </div>
               {editing ? (
                 <select
-                  value={editPartner}
-                  onChange={(e) => { setEditPartner(e.target.value); setSaveWarning(null); }}
+                  value={editSupplierId}
+                  onChange={(e) => { setEditSupplierId(e.target.value); setSaveWarning(null); }}
                   className="h-9 px-3 rounded-lg bg-input border border-border text-sm w-full text-foreground"
                   disabled={refLoading}
                 >
                   <option value="">— Select supplier —</option>
-                  {editPartner && !suppliers.some((s) => s.name === editPartner) && (
-                    <option value={editPartner}>{editPartner}</option>
-                  )}
                   {suppliers.map((s) => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
+                    <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
               ) : (
