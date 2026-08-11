@@ -77,7 +77,8 @@ INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, w
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (2, 18, 10, 2, 1, 2, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (3, 7, 10, 3, 1, 3, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (4, 24, 15, 4, 1, 4, NOW(), NOW());
-INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (5, 86, 20, 5, 1, 5, NOW(), NOW());
+-- Product 5 is already at its destination after internal transfer #9 (location 5 -> 6).
+INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (5, 86, 20, 5, 1, 6, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (6, 54, 20, 6, 1, 6, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (7, 31, 15, 7, 1, 7, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (8, 12, 10, 8, 1, 8, NOW(), NOW());
@@ -111,7 +112,8 @@ INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, w
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (32, 11, 15, 4, 3, 4, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (33, 4, 20, 5, 3, 5, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (34, 17, 20, 6, 3, 6, NOW(), NOW());
-INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (35, 8, 15, 7, 3, 7, NOW(), NOW());
+-- Warehouse 3 inventory must reference a location that belongs to warehouse 3.
+INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (35, 8, 15, 7, 3, 15, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (36, 12, 10, 8, 3, 8, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (37, 20, 10, 9, 3, 9, NOW(), NOW());
 INSERT IGNORE INTO inventories (id, quantity, low_stock_threshold, product_id, warehouse_id, location_id, created_at, updated_at) VALUES (38, 30, 10, 10, 3, 10, NOW(), NOW());
@@ -155,10 +157,11 @@ INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, 
 INSERT IGNORE INTO transfer_details (id, quantity, product_id, transfer_id, created_at, updated_at) VALUES (7, 9, 8, 7, '2026-06-21 10:00:00', '2026-06-21 10:00:00');
 INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, assigned_by_id, warehouse_id, warehouse_destination_id, created_at, updated_at) VALUES (8, 'Cross_Warehouse', 'PENDING', 'Transfer TR-10234 from HN to DN', 7, 4, 2, 3, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
 INSERT IGNORE INTO transfer_details (id, quantity, product_id, transfer_id, created_at, updated_at) VALUES (8, 14, 9, 8, '2026-06-20 10:00:00', '2026-06-20 10:00:00');
--- INBOUND: from supplier (warehouse_destination_id = NULL, only warehouse = destination)
-INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, assigned_by_id, warehouse_id, warehouse_destination_id, created_at, updated_at) VALUES (9, 'Internal_Warehouse', 'COMPLETED', 'Supplier delivery SUP-3301 from Corsair APAC', 5, 3, 1, NULL, '2026-06-19 10:00:00', '2026-06-19 10:00:00');
+-- Internal movements keep both selected locations as foreign keys. IDs 5 and 6 belong to warehouse 1.
+INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, assigned_by_id, warehouse_id, warehouse_destination_id, source_location_id, destination_location_id, created_at, updated_at) VALUES (9, 'Internal_Warehouse', 'COMPLETED', 'Relocate Corsair Vengeance stock | From: 03 - 01 | To: 03 - 02', 5, 3, 1, NULL, 5, 6, '2026-06-19 10:00:00', '2026-06-19 10:00:00');
 INSERT IGNORE INTO transfer_details (id, quantity, product_id, transfer_id, created_at, updated_at) VALUES (9, 50, 5, 9, '2026-06-19 10:00:00', '2026-06-19 10:00:00');
-INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, assigned_by_id, warehouse_id, warehouse_destination_id, created_at, updated_at) VALUES (10, 'Internal_Warehouse', 'PENDING', 'Supplier delivery SUP-3302 from Samsung Vietnam', 9, 2, 3, NULL, '2026-06-25 09:00:00', '2026-06-25 09:00:00');
+-- IDs 15 and 16 belong to warehouse 3 and are valid selectable locations for pending transfer #10.
+INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, assigned_by_id, warehouse_id, warehouse_destination_id, source_location_id, destination_location_id, created_at, updated_at) VALUES (10, 'Internal_Warehouse', 'PENDING', 'Relocate Samsung 990 Pro stock | From: 01 - 01 | To: 01 - 02', 9, 2, 3, NULL, 15, 16, '2026-06-25 09:00:00', '2026-06-25 09:00:00');
 INSERT IGNORE INTO transfer_details (id, quantity, product_id, transfer_id, created_at, updated_at) VALUES (10, 20, 7, 10, '2026-06-25 09:00:00', '2026-06-25 09:00:00');
 -- OUTBOUND internal: warehouse-to-warehouse transfer (warehouse_destination_id = target warehouse)
 INSERT IGNORE INTO transfers (id, transfer_type, status, remark, created_by_id, assigned_by_id, warehouse_id, warehouse_destination_id, created_at, updated_at) VALUES (11, 'Cross_Warehouse', 'DELIVERING', 'Internal restock: HCM → HN (low GPU stock at HN)', 3, 4, 1, 2, '2026-06-25 08:00:00', '2026-06-25 08:00:00');
