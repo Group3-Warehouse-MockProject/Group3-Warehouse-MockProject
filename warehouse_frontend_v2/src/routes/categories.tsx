@@ -22,6 +22,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { ModalShell, Field, inputCls, selectCls } from "@/components/modal-shell";
+import { TableLoadingState } from "@/components/loading-state";
 import {
   Table,
   TableBody,
@@ -279,23 +280,10 @@ function CategoriesPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <TableRow key={i} className="animate-pulse hover:bg-transparent">
-                      <TableCell className="p-5">
-                        <div className="space-y-1.5">
-                          <div className="h-4 w-28 rounded bg-secondary/60" />
-                          <div className="h-3 w-44 rounded bg-secondary/40" />
-                        </div>
-                      </TableCell>
-                      <TableCell className="p-5"><div className="h-4 w-12 rounded bg-secondary/50" /></TableCell>
-                      <TableCell className="p-5"><div className="h-4 w-24 rounded bg-secondary/40" /></TableCell>
-                      <TableCell className="p-5"><div className="mx-auto h-4 w-8 rounded bg-secondary/40" /></TableCell>
-                      <TableCell className="p-5"><div className="mx-auto h-4 w-10 rounded bg-secondary/40" /></TableCell>
-                      <TableCell className="p-5"><div className="ml-auto h-4 w-28 rounded bg-secondary/40" /></TableCell>
-                      <TableCell className="p-5"><div className="mx-auto h-6 w-16 rounded-full bg-secondary/40" /></TableCell>
-                      {canManage && <TableCell className="p-5"><div className="mx-auto h-8 w-20 rounded bg-secondary/40" /></TableCell>}
-                    </TableRow>
-                  ))
+                  <TableLoadingState
+                    label="Loading categories…"
+                    columns={canManage ? 8 : 7}
+                  />
                 ) : list.length > 0 ? (
                   list.map((cat) => (
                     <TableRow key={cat.id} className="border-border/60 hover:bg-secondary/30 transition-colors">

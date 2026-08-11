@@ -7,6 +7,7 @@ import { ModalShell, Field, inputCls, selectCls, textareaCls } from "@/component
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { InlineLoadingState, PageLoadingState } from "@/components/loading-state";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/transfer")({
@@ -183,7 +184,7 @@ function TransferPage() {
     }
   };
 
-  if (isLoading) return <AppShell><div className="p-8">Loading transfers...</div></AppShell>;
+  if (isLoading) return <AppShell><PageLoadingState label="Loading transfers" /></AppShell>;
   if (error) return <AppShell><div className="p-8 text-destructive">Error loading transfers</div></AppShell>;
 
   return (
@@ -406,7 +407,7 @@ function TransferDetailModal({ transfer, onClose }: { transfer: Transfer | null;
 
       <section className="mt-6">
         <div className="text-xs uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5"><History className="size-3.5" /> Processing history</div>
-        {isLoading ? <div className="text-sm text-muted-foreground">Loading history...</div> : (
+        {isLoading ? <InlineLoadingState label="Loading history…" className="py-3" /> : (
           <div className="border-l-2 border-border/60 ml-2 space-y-5">
             {history.slice().reverse().map((event) => (
               <div key={event.id} className="relative pl-5">

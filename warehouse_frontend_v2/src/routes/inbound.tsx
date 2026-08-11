@@ -8,10 +8,11 @@ import { useApp } from "@/lib/app-context";
 import { api } from "@/lib/api";
 import {
   ArrowDownToLine, Plus, ChevronLeft, ChevronRight,
-  Loader2, AlertCircle, CheckCircle2, Clock, XCircle, Eye,
+  AlertCircle, CheckCircle2, Clock, XCircle, Eye,
   Search, Filter, X, Upload, Download,
 } from "lucide-react";
 import { InboundImportModal } from "@/components/inbound-import-modal";
+import { PanelLoadingState } from "@/components/loading-state";
 
 export const Route = createFileRoute("/inbound")({
   head: () => ({ meta: [{ title: "Inbound — TechStock" }] }),
@@ -441,10 +442,7 @@ function InboundPage() {
         {/* Table */}
         <div className="surface-card overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center gap-3 py-20 text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" />
-              <span className="text-sm">Loading inbound receipts…</span>
-            </div>
+            <PanelLoadingState label="Loading inbound receipts…" className="min-h-72" />
           ) : error ? (
             <div className="flex items-center justify-center gap-3 py-20 text-destructive">
               <AlertCircle className="size-5" />

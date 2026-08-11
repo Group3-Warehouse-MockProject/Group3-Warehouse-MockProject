@@ -6,6 +6,7 @@ import {
 import { useApp } from "@/lib/app-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { PageLoadingState } from "@/components/loading-state";
 import { Package, TrendingUp, TrendingDown, AlertTriangle, Boxes, ArrowUpRight, ClipboardList } from "lucide-react";
 import {
   Area,
@@ -84,6 +85,10 @@ function Dashboard() {
       : { label: "Inventory value", value: formatVND(dashboardData?.inventoryValue ?? 0), delta: "+2.4%", icon: TrendingUp, tone: "primary" as const },
     { label: "Low stock", value: lowStock.length.toString(), delta: "Reorder needed", icon: AlertTriangle, tone: "warning" as const },
   ];
+
+  if (isLoading) {
+    return <AppShell><PageLoadingState label="Loading dashboard" /></AppShell>;
+  }
 
   return (
     <AppShell>

@@ -5,6 +5,7 @@ import { useApp } from "@/lib/app-context";
 import { api } from "@/lib/api";
 import { BarcodeScanner } from "./barcode-scanner";
 import { toast } from "sonner";
+import { PanelLoadingState } from "@/components/loading-state";
 
 export type ReceiptType = "Inbound" | "Outbound";
 
@@ -306,10 +307,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
         </div>
 
         {dataLoading ? (
-          <div className="flex items-center justify-center gap-3 py-20 text-muted-foreground">
-            <Loader2 className="size-5 animate-spin" />
-            <span className="text-sm">Loading form data…</span>
-          </div>
+          <PanelLoadingState label="Loading form data…" className="min-h-80" />
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
             <div className="p-6 space-y-5">

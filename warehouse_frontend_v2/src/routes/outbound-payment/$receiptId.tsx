@@ -23,6 +23,7 @@ import { buildBankTransferQrUrl, BANK_ACCOUNT_NUMBER } from "@/lib/payment";
 import { formatVND } from "@/lib/warehouse-data";
 import { type ReceiptMovement } from "@/types";
 import type { PaymentRecord } from "@/components/outbound-detail-modal";
+import { PageLoadingState } from "@/components/loading-state";
 
 export const Route = createFileRoute("/outbound-payment/$receiptId")({
   head: () => ({ meta: [{ title: "Record Payment — TechStock" }] }),
@@ -287,7 +288,7 @@ function RecordPaymentPage() {
 }
 
 function LoadingState() {
-  return <div className="flex min-h-[50vh] items-center justify-center gap-3 text-sm text-muted-foreground"><Loader2 className="size-5 animate-spin" />Loading payment workspace…</div>;
+  return <PageLoadingState label="Loading payment workspace…" />;
 }
 
 function SummaryCard({ label, value, icon, tone = "primary" }: { label: string; value: string; icon: React.ReactNode; tone?: "primary" | "success" | "warning" }) {

@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, getErrorMessage } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
 import { toast } from "sonner";
+import { PanelLoadingState } from "@/components/loading-state";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — TechStock" }] }),
@@ -145,10 +146,7 @@ function SettingsPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center h-32 text-muted-foreground gap-2">
-            <Loader2 className="size-5 animate-spin" />
-            <span className="text-sm">Loading warehouses…</span>
-          </div>
+          <PanelLoadingState label="Loading warehouses…" />
         ) : (
           <>
             {/* KPI cards */}
