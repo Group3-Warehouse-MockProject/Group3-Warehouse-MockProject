@@ -3,7 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { useApp } from "@/lib/app-context";
 import {
@@ -171,8 +171,8 @@ function LocationPage() {
       invalidate();
       toast.success("Location deleted successfully");
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data || "Failed to delete location");
+    onError: (err: unknown) => {
+      toast.error(getErrorMessage(err, "Failed to delete location"));
     },
   });
 
@@ -183,8 +183,8 @@ function LocationPage() {
       invalidate();
       toast.success("Bin status updated successfully");
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data || "Failed to update bin status");
+    onError: (err: unknown) => {
+      toast.error(getErrorMessage(err, "Failed to update bin status"));
     },
   });
 
@@ -198,8 +198,8 @@ function LocationPage() {
       invalidate();
       toast.success("Rack status updated successfully for all bins");
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data || "Failed to update rack status");
+    onError: (err: unknown) => {
+      toast.error(getErrorMessage(err, "Failed to update rack status"));
     },
   });
 
@@ -1248,8 +1248,8 @@ function LocationFormModal({
       }
       onSuccess();
       onClose();
-    } catch (e: any) {
-      toast.error(e?.response?.data || (isEdit ? "Failed to update location" : "Failed to create location"));
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, isEdit ? "Failed to update location" : "Failed to create location"));
     } finally {
       setSaving(false);
     }

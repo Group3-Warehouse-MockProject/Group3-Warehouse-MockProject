@@ -1,5 +1,7 @@
 package com.fpt.sccw.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fpt.sccw.dto.response.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.web.cors.CorsConfiguration;
@@ -47,6 +49,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/auth/login",
                     "/api/auth/logout",
+                    "/api/health",
                     "/api/ai/ingest-all",
                     "/api/ai/ask",
                     "/error"
@@ -57,12 +60,19 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .exceptionHandling(exceptions -> exceptions
                 .defaultAuthenticationEntryPointFor(
-                    (request, response, authException) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getMessage()),
+                    (request, response, authException) -> writeUnauthorizedResponse(response),
                     request -> request.getServletPath().startsWith("/api/")
                 )
             );
 
         return http.build();
+    }
+
+    private void writeUnauthorizedResponse(HttpServletResponse response) throws java.io.IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        new ObjectMapper().writeValue(response.getOutputStream(),
+                ApiErrorResponse.of("Your session has expired. Please sign in again.", "UNAUTHENTICATED"));
     }
 
     @Bean

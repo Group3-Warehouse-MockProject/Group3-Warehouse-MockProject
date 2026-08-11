@@ -50,7 +50,7 @@ public class WarehouseDTO {
                 .city(city)
                 .capacity(warehouse.getCapacity() != null ? warehouse.getCapacity() : 0L)
                 .usedCapacity(used)
-                .status(warehouse.getStatus() != null ? warehouse.getStatus() : "ACTIVE")
+                .status(warehouse.getStatus() != null ? warehouse.getStatus().name() : "ACTIVE")
                 .managerName(managerName)
                 .build();
     }

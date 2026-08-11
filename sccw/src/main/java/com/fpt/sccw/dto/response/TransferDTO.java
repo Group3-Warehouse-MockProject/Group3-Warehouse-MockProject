@@ -61,7 +61,7 @@ public class TransferDTO {
                 .destinationWarehouseId(transfer.getWarehouseDestination() != null ? transfer.getWarehouseDestination().getId() : null)
                 .destinationWarehouseCode(transfer.getWarehouseDestination() != null ? transfer.getWarehouseDestination().getCode() : "")
                 .destinationWarehouseName(transfer.getWarehouseDestination() != null ? transfer.getWarehouseDestination().getWarehouseName() : "")
-                .createdBy(safeUserName(transfer.getCreatedByUser(), transfer.getLegacyUser()))
+                .createdBy(safeUserName(transfer.getCreatedByUser()))
                 .assignedById(transfer.getAssignedByUser() != null ? transfer.getAssignedByUser().getId() : null)
                 .assignedBy(safeUserName(transfer.getAssignedByUser()))
                 .sourceLocationId(transfer.getSourceLocation() != null ? transfer.getSourceLocation().getId() : null)
@@ -72,7 +72,7 @@ public class TransferDTO {
     }
 
     private static String toDisplayType(Status.TransferType type) {
-        if (type == Status.TransferType.Cross_Warehouse || type == Status.TransferType.OUTBOUND) return "Cross-Warehouse";
+        if (type == Status.TransferType.CROSS_WAREHOUSE) return "Cross-Warehouse";
         return "Internal Movement";
     }
 
@@ -81,7 +81,7 @@ public class TransferDTO {
             case PENDING -> "Pending";
             case DELIVERING, DELIVERED -> "InTransit";
             case COMPLETED -> "Completed";
-            case CANCEL -> "Cancelled";
+            case CANCELLED -> "Cancelled";
         };
     }
 
@@ -92,13 +92,6 @@ public class TransferDTO {
         } catch (EntityNotFoundException ex) {
             return "Unknown";
         }
-    }
-
-    private static String safeUserName(User primary, User fallback) {
-        String name = safeUserName(primary);
-        if (!name.isBlank() && !"Unknown".equals(name)) return name;
-        String fallbackName = safeUserName(fallback);
-        return fallbackName.isBlank() ? name : fallbackName;
     }
 
     @Data

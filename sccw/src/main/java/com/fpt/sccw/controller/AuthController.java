@@ -106,8 +106,7 @@ public class AuthController {
                     .actionType("LOGIN")
                     .ipAddress(ipAddress)
                     .location(ipAddress)
-                    .timestamp(LocalDateTime.now())
-                    .build();
+                                        .build();
             activityLogRepository.save(activityLog);
         } catch (Exception e) {
             log.error("Failed to log login activity", e);

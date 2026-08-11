@@ -1,6 +1,6 @@
 package com.fpt.sccw.service;
 
-import com.fpt.sccw.dto.AiResponseDto;
+import com.fpt.sccw.dto.response.AiResponseDto;
 
 public interface AiRagService {
 

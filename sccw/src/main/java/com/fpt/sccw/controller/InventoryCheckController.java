@@ -187,8 +187,7 @@ public class InventoryCheckController {
 
             return ResponseEntity.ok(toDTO(saved));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Error creating stocktake sheet"));
+            throw new RuntimeException("Unable to create the stocktake sheet. Please try again.", e);
         }
     }
 
@@ -248,7 +247,7 @@ public class InventoryCheckController {
         // Tự động chuyển sang IN_PROGRESS khi bắt đầu đếm
         boolean statusChanged = false;
         String oldStatus = check.getStatus().name();
-        if (check.getStatus() == Status.InventoryCheckStatus.PENDING) {
+        if (check.getStatus() == Status.InventoryCheckStatus.PENDING || check.getStatus() == Status.InventoryCheckStatus.RETURNED) {
             check.setStatus(Status.InventoryCheckStatus.IN_PROGRESS);
             statusChanged = true;
         }
@@ -371,6 +370,19 @@ public class InventoryCheckController {
                             .title("Inventory Check Completed")
                             .message("Inventory check #" + saved.getId() + " was completed and closed by Manager " + user.getUsername())
                             .type("SUCCESS")
+                            .createdAt(java.time.Instant.now().toString())
+                            .build();
+                    eventPublisher.publishEvent(event);
+                }
+            } else if ("RETURNED".equals(newStatus)) {
+                if (saved.getAssignedUser() != null) {
+                    String reason = body.getOrDefault("remark", "Sheet returned for recount");
+                    NotificationEventDTO event = NotificationEventDTO.builder()
+                            .id(java.util.UUID.randomUUID().toString())
+                            .userId(saved.getAssignedUser().getId().toString())
+                            .title("Stocktake Returned for Recount")
+                            .message("Inventory check #" + saved.getId() + " was returned for recount by " + user.getUsername() + ". Reason: " + reason)
+                            .type("WARNING")
                             .createdAt(java.time.Instant.now().toString())
                             .build();
                     eventPublisher.publishEvent(event);

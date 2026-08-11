@@ -220,8 +220,7 @@ public class TransferController {
                 .warehouse(source)
                 .warehouseDestination(destination)
                 .createdByUser(user)
-                .legacyUser(user)
-                .assignedByUser(assignee)
+                                .assignedByUser(assignee)
                 .sourceLocation(internalLocations[0])
                 .destinationLocation(internalLocations[1])
                 .details(new LinkedHashSet<>())
@@ -320,7 +319,7 @@ public class TransferController {
         Transfer transfer = transferRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Transfer not found"));
         if (transfer.getStatus() != Status.TransactionStatus.PENDING
-                && transfer.getStatus() != Status.TransactionStatus.CANCEL) {
+                && transfer.getStatus() != Status.TransactionStatus.CANCELLED) {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "Only pending or cancelled transfers can be deleted"));
         }
@@ -484,7 +483,7 @@ public class TransferController {
         if (location.getWarehouse() == null || !warehouse.getId().equals(location.getWarehouse().getId())) {
             throw new RuntimeException(label + " location must belong to the source warehouse");
         }
-        if (!"ACTIVE".equalsIgnoreCase(location.getStatus())) {
+        if (location.getStatus() != Status.LocationStatus.ACTIVE) {
             throw new RuntimeException(label + " location is inactive");
         }
     }
@@ -515,12 +514,12 @@ public class TransferController {
     private Status.TransferType parseType(String type) {
         if ("internal".equalsIgnoreCase(type)
                 || "Internal Movement".equalsIgnoreCase(type)) {
-            return Status.TransferType.INBOUND;
+            return Status.TransferType.INTERNAL_WAREHOUSE;
         }
 
         if ("cross".equalsIgnoreCase(type)
                 || "Cross-Warehouse".equalsIgnoreCase(type)) {
-            return Status.TransferType.OUTBOUND;
+            return Status.TransferType.CROSS_WAREHOUSE;
         }
 
         throw new RuntimeException(
@@ -531,8 +530,8 @@ public class TransferController {
     private boolean isCrossWarehouse(
             Status.TransferType type
     ) {
-        return type == Status.TransferType.Cross_Warehouse
-                || type == Status.TransferType.OUTBOUND;
+        return type == Status.TransferType.CROSS_WAREHOUSE
+                || type == Status.TransferType.CROSS_WAREHOUSE;
     }
 
     private Status.TransactionStatus parseStatus(String status) {
@@ -548,7 +547,7 @@ public class TransferController {
 
         if ("Cancelled".equalsIgnoreCase(status)
                 || "CANCEL".equalsIgnoreCase(status)) {
-            return Status.TransactionStatus.CANCEL;
+            return Status.TransactionStatus.CANCELLED;
         }
 
         if ("Pending".equalsIgnoreCase(status)
@@ -581,13 +580,13 @@ public class TransferController {
         if ("cross".equalsIgnoreCase(type)
                 || "Cross-Warehouse".equalsIgnoreCase(type)) {
             return List.of(
-                    Status.TransferType.OUTBOUND,
-                    Status.TransferType.Cross_Warehouse
+                    Status.TransferType.CROSS_WAREHOUSE,
+                    Status.TransferType.CROSS_WAREHOUSE
             );
         }
         return List.of(
-                Status.TransferType.INBOUND,
-                Status.TransferType.Internal_Warehouse
+                Status.TransferType.INTERNAL_WAREHOUSE,
+                Status.TransferType.INTERNAL_WAREHOUSE
         );
     }
 
@@ -680,7 +679,7 @@ public class TransferController {
                                             nextStatus
                                                     == Status.TransactionStatus.DELIVERING
                                                     || nextStatus
-                                                    == Status.TransactionStatus.CANCEL
+                                                    == Status.TransactionStatus.CANCELLED
                                     )
                     )
                     || (
@@ -694,7 +693,7 @@ public class TransferController {
                                     nextStatus
                                             == Status.TransactionStatus.COMPLETED
                                     || nextStatus
-                                            == Status.TransactionStatus.CANCEL
+                                            == Status.TransactionStatus.CANCELLED
                             )
                     );
         } else {
@@ -703,7 +702,7 @@ public class TransferController {
                             nextStatus
                                     == Status.TransactionStatus.COMPLETED
                                     || nextStatus
-                                    == Status.TransactionStatus.CANCEL
+                                    == Status.TransactionStatus.CANCELLED
                     );
         }
 
@@ -763,7 +762,7 @@ public class TransferController {
             String label
     ) {
         if (warehouse.getStatus() != null
-                && !"ACTIVE".equalsIgnoreCase(warehouse.getStatus())) {
+                && warehouse.getStatus() != Status.WarehouseStatus.ACTIVE) {
             throw new RuntimeException(
                     label + " warehouse is inactive"
             );

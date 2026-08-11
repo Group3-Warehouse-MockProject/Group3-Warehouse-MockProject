@@ -59,7 +59,7 @@ public class LocationDTO {
             wId = String.valueOf(w.getId());
             wName = w.getWarehouseName();
             wCode = w.getCode();
-            whStatus = w.getStatus();
+            whStatus = w.getStatus() != null ? w.getStatus().name() : "ACTIVE";
         }
 
         List<LocationItemDTO> itemList = new ArrayList<>();
@@ -74,7 +74,7 @@ public class LocationDTO {
                     wId = String.valueOf(w.getId());
                     wName = w.getWarehouseName();
                     wCode = w.getCode();
-                    whStatus = w.getStatus();
+                    whStatus = w.getStatus() != null ? w.getStatus().name() : "ACTIVE";
                 }
 
                 Product p = inv.getProduct();
@@ -96,7 +96,7 @@ public class LocationDTO {
         }
 
         String effStatus = "ACTIVE";
-        if ("INACTIVE".equalsIgnoreCase(location.getStatus()) || "INACTIVE".equalsIgnoreCase(whStatus)) {
+        if (location.getStatus() == com.fpt.sccw.entity.Status.LocationStatus.INACTIVE || "INACTIVE".equalsIgnoreCase(whStatus)) {
             effStatus = "INACTIVE";
         }
 
@@ -104,7 +104,7 @@ public class LocationDTO {
                 .id(location.getId())
                 .rackCode(location.getRackCode())
                 .binCode(location.getBinCode())
-                .status(location.getStatus())
+                .status(location.getStatus() != null ? location.getStatus().name() : "ACTIVE")
                 .effectiveStatus(effStatus)
                 .maxCapacity(location.getMaxCapacity())
                 .currentQuantity(totalQty)

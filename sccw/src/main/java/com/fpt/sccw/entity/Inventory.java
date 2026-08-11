@@ -7,7 +7,15 @@ import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 @Entity
-@Table(name = "inventories")
+@Table(name = "inventories",
+    uniqueConstraints = @UniqueConstraint(
+        name = "uk_inventory_product_warehouse_location",
+        columnNames = {"product_id", "warehouse_id", "location_id"}
+    ),
+    indexes = {
+        @Index(name = "idx_inventory_product_warehouse", columnList = "product_id, warehouse_id")
+    }
+)
 @EntityListeners(InventoryListener.class)
 @Getter
 @Setter
@@ -33,11 +41,11 @@ public class Inventory extends BaseEntity{
     @Column(name = "estimated_days_left")
     private Long estimatedDaysLeft;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 

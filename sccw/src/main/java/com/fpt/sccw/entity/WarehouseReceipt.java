@@ -7,7 +7,11 @@ import jakarta.validation.constraints.*;
 import lombok.*;
 
 @Entity
-@Table(name = "warehouse_receipts")
+@Table(name = "warehouse_receipts", indexes = {
+    @Index(name = "idx_receipt_status", columnList = "receipt_status"),
+    @Index(name = "idx_receipt_type", columnList = "receipt_type"),
+    @Index(name = "idx_receipt_supplier", columnList = "supplier_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -29,24 +33,25 @@ public class WarehouseReceipt extends BaseEntity{
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark;
 
-    @Column(name = "partner")
-    private String partner;
-
     @NotNull(message = "User is required")
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @NotNull(message = "Warehouse is required")
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_id")
+    private Supplier supplier;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_user_id")
     private User assignedUser;
 
-    @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @org.hibernate.annotations.BatchSize(size = 100)
     @Builder.Default
     private Set<ReceiptDetail> details = new LinkedHashSet<>();

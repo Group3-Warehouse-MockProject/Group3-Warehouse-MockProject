@@ -14,8 +14,8 @@ public class UpdateReceiptRequest {
     private String remark;
     /** New warehouse ID — null = không đổi. Only allowed when PENDING. */
     private Long warehouseId;
-    /** Partner name (supplier) — null = không đổi */
-    private String partner;
+    /** Supplier ID — null = không đổi, -1 = clear. Only allowed when PENDING. */
+    private Long supplierId;
     /** Updated line items — null = không đổi. Only allowed when PENDING. */
     private java.util.List<CreateReceiptRequest.LineItemRequest> items;
     /** Assigned user id — null = không đổi, -1 = unassign */

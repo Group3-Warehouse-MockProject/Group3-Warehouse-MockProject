@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.fpt.sccw.service.AiRagService;
-import com.fpt.sccw.dto.AiResponseDto;
+import com.fpt.sccw.dto.response.AiResponseDto;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

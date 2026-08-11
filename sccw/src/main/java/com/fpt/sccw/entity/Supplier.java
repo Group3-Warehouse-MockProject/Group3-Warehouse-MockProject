@@ -32,9 +32,10 @@ public class Supplier extends BaseEntity{
     @Column(name = "address", nullable = false)
     private String address;
 
-    @NotBlank(message = "Supplier status is required")
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private String status;
+    @Builder.Default
+    private Status.SupplierStatus status = Status.SupplierStatus.ACTIVE;
 
     @NotBlank(message = "Supplier country is required")
     @Column(name = "country", nullable = false)
@@ -43,8 +44,14 @@ public class Supplier extends BaseEntity{
     @Column(name = "contact_person", length = 100)
     private String contactPerson;
 
-    @Column(name = "categories", length = 500)
-    private String categories;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "supplier_categories",
+        joinColumns = @JoinColumn(name = "supplier_id"),
+        inverseJoinColumns = @JoinColumn(name = "category_id")
+    )
+    @Builder.Default
+    private Set<Category> categories = new HashSet<>();
 
     @Column(name = "rating", precision = 2, scale = 1)
     private BigDecimal rating;

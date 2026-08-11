@@ -56,7 +56,7 @@ public class ActivityLogController {
             return ResponseEntity.status(403).build();
         }
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "timestamp"));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<ActivityLog> logPage = activityLogRepository.findByFilters(
                 actionType != null && !actionType.isBlank() ? actionType : null,
                 search != null && !search.isBlank() ? search : null,
@@ -81,8 +81,8 @@ public class ActivityLogController {
             return ResponseEntity.status(403).build();
         }
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "timestamp"));
-        Page<ActivityLog> logPage = activityLogRepository.findByUserIdOrderByTimestampDesc(userId, pageable);
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<ActivityLog> logPage = activityLogRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
         return ResponseEntity.ok(logPage.map(this::toDTO));
     }
 
@@ -125,7 +125,7 @@ public class ActivityLogController {
                 .details(log.getDetails())
                 .ipAddress(log.getIpAddress())
                 .location(log.getLocation())
-                .timestamp(log.getTimestamp())
+                .createdAt(log.getCreatedAt())
                 .user(userSummary)
                 .build();
     }

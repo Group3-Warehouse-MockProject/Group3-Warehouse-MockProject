@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, MessageSquareText, Send } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useApp } from "@/lib/app-context";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 
 export const Route = createFileRoute("/feedback")({
   head: () => ({ meta: [{ title: "Feedback — TechStock" }] }),
@@ -51,7 +51,7 @@ function FeedbackPage() {
       setSubmitted(true);
       queryClient.invalidateQueries({ queryKey: ["feedback"] });
     },
-    onError: (requestError: any) => setError(requestError.response?.data?.message || "We couldn't send your feedback. Please try again."),
+    onError: (requestError: unknown) => setError(getErrorMessage(requestError, "We couldn't send your feedback. Please try again.")),
   });
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {

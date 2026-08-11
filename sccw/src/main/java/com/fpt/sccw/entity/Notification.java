@@ -22,8 +22,9 @@ public class Notification extends BaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String type; // SUCCESS, INFO, WARNING, ERROR
+    private Status.NotificationType type;
 
     @Column(name = "is_read", nullable = false)
     private boolean isRead = false;

@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.fpt.sccw.entity.Status;
+
 public interface SupplierRepository extends JpaRepository<Supplier, Long> {
     boolean existsByEmailIgnoreCase(String email);
 
@@ -24,8 +26,8 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
                         "WHERE (:search IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(s.email) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(s.phoneNumber) LIKE LOWER(CONCAT('%', :search, '%'))) " +
                         "AND (:status IS NULL OR s.status = :status) " +
                         "AND (:country IS NULL OR s.country = :country)")
-    Page<Supplier> findSuppliersFiltered(@Param("search") String search, 
-                                         @Param("status") String status, 
+    Page<Supplier> findSuppliersFiltered(@Param("search") String search,
+                                         @Param("status") Status.SupplierStatus status,
                                          @Param("country") String country,
                                          Pageable pageable);
 }

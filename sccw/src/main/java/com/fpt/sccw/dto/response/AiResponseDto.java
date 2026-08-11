@@ -1,4 +1,4 @@
-package com.fpt.sccw.dto;
+package com.fpt.sccw.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
