@@ -12,7 +12,7 @@ import {
   ClipboardCheck, Plus, X, Save, ListChecks,
   AlertTriangle, CheckCircle2, Boxes,
   ChevronLeft, ChevronRight, Loader2,
-  Search, Filter, History, Clock
+  Search, Filter, History, Clock, RotateCcw
 } from "lucide-react";
 
 export const Route = createFileRoute("/stocktake")({
@@ -35,7 +35,7 @@ interface StocktakeDetail {
 
 interface Stocktake {
   id: number;
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "RETURNED";
   remark?: string;
   warehouseId: number;
   warehouseName: string;
@@ -57,6 +57,7 @@ const statusLabel: Record<string, string> = {
   IN_PROGRESS: "In Progress",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
+  RETURNED: "Returned",
 };
 
 const statusTone: Record<string, string> = {
@@ -64,6 +65,7 @@ const statusTone: Record<string, string> = {
   IN_PROGRESS: "bg-warning/15 text-warning",
   COMPLETED: "bg-success/15 text-success",
   CANCELLED: "bg-destructive/15 text-destructive",
+  RETURNED: "bg-amber-500/15 text-amber-500",
 };
 
 interface StocktakeFilters {
@@ -103,6 +105,12 @@ function StocktakePage() {
     onConfirm: () => void;
   }>({ isOpen: false, title: "", message: "", isPending: false, onConfirm: () => {} });
   const closeConfirmModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+
+  const [returnModal, setReturnModal] = useState<{
+    isOpen: boolean;
+    sheet: Stocktake | null;
+    remark: string;
+  }>({ isOpen: false, sheet: null, remark: "" });
 
   const canCreate =
     currentUser?.role === "Warehouse_Manager" ||
@@ -201,8 +209,8 @@ function StocktakePage() {
 
   // --- Mutation: Đổi trạng thái phiếu ---
   const updateStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      const res = await api.put(`/stocktake/${id}/status`, { status });
+    mutationFn: async ({ id, status, remark }: { id: number; status: string; remark?: string }) => {
+      const res = await api.put(`/stocktake/${id}/status`, { status, remark });
       return res.data;
     },
     onSuccess: () => {
@@ -465,6 +473,7 @@ function StocktakePage() {
                       <option value="">All Statuses</option>
                       <option value="PENDING">Draft</option>
                       <option value="IN_PROGRESS">In Progress</option>
+                      <option value="RETURNED">Returned</option>
                       <option value="COMPLETED">Completed</option>
                       <option value="CANCELLED">Cancelled</option>
                     </select>
@@ -593,7 +602,7 @@ function StocktakePage() {
                                   <ClipboardCheck className="size-3.5" /> Count
                                 </button>
                               )}
-                              {/* Chỉ WH_Manager được Complete */}
+                              {/* Chỉ WH_Manager mới được đóng phiếu */}
                               {canComplete && s.status === "IN_PROGRESS" && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ id: s.id, status: "COMPLETED" }); }}
@@ -845,6 +854,7 @@ function StocktakePage() {
                     if (isLatest) {
                         if (event.newStatus === "COMPLETED" || event.newStatus === "APPROVED") ringColor = "bg-emerald-500";
                         else if (event.newStatus === "CANCELLED" || event.newStatus === "REJECTED") ringColor = "bg-red-500";
+                        else if (event.newStatus === "RETURNED") ringColor = "bg-amber-500";
                         else if (event.newStatus === "IN_PROGRESS" || event.newStatus === "DELIVERING") ringColor = "bg-warning";
                         else ringColor = "bg-blue-500";
                     }
@@ -905,24 +915,29 @@ function StocktakePage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setViewing(null)}
-                  className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm"
-                >
-                  Close
-                </button>
                 {canComplete && viewing.status === "IN_PROGRESS" && (
-                  <button
-                    onClick={() => {
-                      updateStatusMutation.mutate({ id: viewing.id, status: "COMPLETED" });
-                      setViewing(null);
-                    }}
-                    disabled={updateStatusMutation.isPending}
-                    className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring disabled:opacity-60"
-                    style={{ background: "var(--gradient-primary)" }}
-                  >
-                    <CheckCircle2 className="size-4" /> Complete sheet
-                  </button>
+                  <>
+                    <button
+                      onClick={() => {
+                        setReturnModal({ isOpen: true, sheet: viewing, remark: "" });
+                      }}
+                      disabled={updateStatusMutation.isPending}
+                      className="h-10 px-4 rounded-lg bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 text-sm font-medium transition-colors flex items-center gap-2"
+                    >
+                      <RotateCcw className="size-4" /> Return Task
+                    </button>
+                    <button
+                      onClick={() => {
+                        updateStatusMutation.mutate({ id: viewing.id, status: "COMPLETED" });
+                        setViewing(null);
+                      }}
+                      disabled={updateStatusMutation.isPending}
+                      className="h-10 px-5 rounded-lg text-sm font-medium text-primary-foreground flex items-center gap-2 glow-ring disabled:opacity-60"
+                      style={{ background: "var(--gradient-primary)" }}
+                    >
+                      <CheckCircle2 className="size-4" /> Complete sheet
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -938,6 +953,64 @@ function StocktakePage() {
         isPending={confirmModal.isPending}
         onClose={closeConfirmModal}
       />
+
+      {/* Modal trả lại task để đếm lại */}
+      {returnModal.isOpen && returnModal.sheet && (
+        <Modal
+          onClose={() => setReturnModal({ isOpen: false, sheet: null, remark: "" })}
+          title={`Return Task — ST-${String(returnModal.sheet.id).padStart(4, "0")} for Recount`}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!returnModal.remark.trim()) {
+                toast.error("Please enter a reason for returning the task");
+                return;
+              }
+              updateStatusMutation.mutate({
+                id: returnModal.sheet!.id,
+                status: "RETURNED",
+                remark: returnModal.remark,
+              });
+              setReturnModal({ isOpen: false, sheet: null, remark: "" });
+              if (viewing?.id === returnModal.sheet!.id) setViewing(null);
+            }}
+            className="space-y-4"
+          >
+            <p className="text-sm text-muted-foreground">
+              Specify the reason for returning this stocktake sheet back to staff for a recount:
+            </p>
+            <div>
+              <label className="text-xs text-muted-foreground">Reason / Note for recount <span className="text-destructive">*</span></label>
+              <textarea
+                required
+                rows={3}
+                value={returnModal.remark}
+                onChange={(e) => setReturnModal((prev) => ({ ...prev, remark: e.target.value }))}
+                placeholder="E.g. Large variance detected on SKU-001. Please re-verify physical count in zone A."
+                className="w-full mt-1 px-3 py-2 rounded-lg bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setReturnModal({ isOpen: false, sheet: null, remark: "" })}
+                className="h-10 px-4 rounded-lg bg-secondary border border-border text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={updateStatusMutation.isPending}
+                className="h-10 px-5 rounded-lg text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-2"
+              >
+                {updateStatusMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                Return for recount
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </AppShell>
   );
 }
