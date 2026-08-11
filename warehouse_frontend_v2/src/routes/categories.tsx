@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { useApp } from "@/lib/app-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Plus,
@@ -115,7 +115,7 @@ function CategoriesPage() {
       toast.success("Category created successfully");
       setAddOpen(false);
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to create category"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to create category")),
   });
 
   const updateMutation = useMutation({
@@ -126,7 +126,7 @@ function CategoriesPage() {
       toast.success("Category updated successfully");
       setEditCategory(null);
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to update category"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to update category")),
   });
 
   const softDeleteMutation = useMutation({
@@ -137,7 +137,7 @@ function CategoriesPage() {
       toast.success("Category archived");
       setDeleteTarget(null);
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to archive category"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to archive category")),
   });
 
   const hardDeleteMutation = useMutation({
@@ -148,7 +148,7 @@ function CategoriesPage() {
       toast.success("Category permanently deleted");
       setHardDeleteTarget(null);
     },
-    onError: (err: any) => toast.error(err.response?.data?.message || "Failed to permanently delete category"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err, "Failed to permanently delete category")),
   });
 
   return (

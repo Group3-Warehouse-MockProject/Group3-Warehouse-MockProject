@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.fpt.sccw.dto.request.ProductRequest;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/products")
@@ -201,7 +202,9 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER')")
     @PostMapping
     @Transactional
-    public ResponseEntity<ProductDTO> saveNewProduct(@RequestBody ProductRequest request) {
+    public ResponseEntity<ProductDTO> saveNewProduct(@Valid @RequestBody ProductRequest request) {
+        ensureProductCodeAvailable(request.getCode(), null);
+
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new RuntimeException("Category not found"));
         Supplier supplier = supplierRepository.findById(request.getSupplierId())
@@ -236,8 +239,9 @@ public class ProductController {
             if (request.getLocationId() != null) {
                 location = locationRepository.findById(request.getLocationId())
                         .orElseThrow(() -> new RuntimeException("Location not found"));
+                validateLocationCapacity(location, warehouse, request.getInitialStock());
             }
-            
+
             Inventory inventory = Inventory.builder()
                     .product(savedProduct)
                     .warehouse(warehouse)
@@ -254,9 +258,16 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER')")
     @PostMapping("/bulk")
     @Transactional
-    public ResponseEntity<List<ProductDTO>> saveBulkProducts(@RequestBody List<ProductRequest> requests) {
+    public ResponseEntity<List<ProductDTO>> saveBulkProducts(@RequestBody List<@Valid ProductRequest> requests) {
         List<ProductDTO> result = new java.util.ArrayList<>();
+        java.util.Set<String> importedCodes = new java.util.HashSet<>();
         for (ProductRequest request : requests) {
+            String normalizedCode = request.getCode().trim().toUpperCase();
+            if (!importedCodes.add(normalizedCode)) {
+                throw new IllegalStateException("The import file contains duplicate SKU codes.");
+            }
+            ensureProductCodeAvailable(request.getCode(), null);
+
             Category category = categoryRepository.findById(request.getCategoryId())
                     .orElseThrow(() -> new RuntimeException("Category not found for ID: " + request.getCategoryId()));
             Supplier supplier = supplierRepository.findById(request.getSupplierId())
@@ -304,14 +315,17 @@ public class ProductController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER')")
     @PutMapping("/{id}")
     @Transactional
-    public ResponseEntity<?> updateProduct(@PathVariable Long id, @RequestBody ProductRequest request) {
+    public ResponseEntity<?> updateProduct(@PathVariable Long id, @Valid @RequestBody ProductRequest request) {
         Product product = productRepository.findById(id).orElse(null);
         if (product == null || product.getIsDeleted()) {
             return ResponseEntity.notFound().build();
         }
 
         if (request.getName() != null) product.setName(request.getName());
-        if (request.getCode() != null) product.setCode(request.getCode());
+        if (request.getCode() != null) {
+            ensureProductCodeAvailable(request.getCode(), product.getId());
+            product.setCode(request.getCode());
+        }
         if (request.getSpecification() != null) product.setSpecification(request.getSpecification());
         if (request.getCost() != null) product.setCost(request.getCost());
         if (request.getPrice() != null) product.setPrice(request.getPrice());
@@ -409,6 +423,33 @@ public class ProductController {
         }
 
         return ResponseEntity.noContent().build();
+    }
+
+    private void validateLocationCapacity(Location location, Warehouse warehouse, Long initialStock) {
+        if (location.getWarehouse() == null || !location.getWarehouse().getId().equals(warehouse.getId())) {
+            throw new IllegalArgumentException("The selected bin does not belong to the selected warehouse.");
+        }
+        if (location.getStatus() == Status.LocationStatus.INACTIVE) {
+            throw new IllegalArgumentException("The selected bin is inactive. Please choose another bin.");
+        }
+
+        long requestedStock = initialStock != null ? initialStock : 0L;
+        long currentQuantity = inventoryRepository.findByLocationId(location.getId()).stream()
+                .mapToLong(inventory -> inventory.getQuantity() != null ? inventory.getQuantity() : 0L)
+                .sum();
+        Long maxCapacity = location.getMaxCapacity();
+        if (maxCapacity != null && currentQuantity + requestedStock > maxCapacity) {
+            long remainingCapacity = Math.max(0L, maxCapacity - currentQuantity);
+            throw new IllegalArgumentException("The selected bin has room for only " + remainingCapacity + " more units.");
+        }
+    }
+
+    private void ensureProductCodeAvailable(String code, Long currentProductId) {
+        productRepository.findByCodeIgnoreCase(code.trim())
+                .filter(existingProduct -> !existingProduct.getId().equals(currentProductId))
+                .ifPresent(existingProduct -> {
+                    throw new IllegalStateException("A product with this SKU code already exists.");
+                });
     }
 
     private User resolveUser() {

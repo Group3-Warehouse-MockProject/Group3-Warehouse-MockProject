@@ -4,7 +4,7 @@ import {
   CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save, Plus, History,
   CreditCard, DollarSign
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
 import { ReceiptMovement } from "@/types";
 
@@ -137,9 +137,7 @@ export function InboundDetailModal({
       onUpdated(res.data);
       setConfirmAction(null);
     } catch (err: any) {
-      const data = err.response?.data;
-      const msg = typeof data === "string" ? data : (data?.message || "Failed to update status. Please try again.");
-      setError(msg);
+      setError(getErrorMessage(err, "Failed to update status. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -194,15 +192,8 @@ export function InboundDetailModal({
       const res = await api.patch<ReceiptMovement[]>(`/receipts/${movement.receiptId}`, payload);
       onUpdated(res.data);
       setEditing(false);
-    } catch (err: any) {
-      const data = err.response?.data;
-      const msg =
-        typeof data === "string"
-          ? data
-          : typeof data === "object" && data !== null && "message" in data
-          ? String((data as { message: string }).message)
-          : "Failed to update receipt. Please try again.";
-      setError(msg);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to update receipt. Please try again."));
     } finally {
       setSaving(false);
     }

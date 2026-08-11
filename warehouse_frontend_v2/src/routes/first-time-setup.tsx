@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Cpu, Eye, EyeOff, Lock, CheckCircle2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 
 export const Route = createFileRoute("/first-time-setup")({
   head: () => ({ meta: [{ title: "Account Setup — TechStock" }] }),
@@ -87,7 +87,7 @@ function FirstTimeSetupPage() {
         setError(res.data.message || "Setup failed.");
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "An error occurred during setup.");
+      setError(getErrorMessage(err, "An error occurred during setup."));
     }
   };
 

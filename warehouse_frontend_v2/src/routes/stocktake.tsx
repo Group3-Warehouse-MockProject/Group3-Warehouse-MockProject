@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useApp } from "@/lib/app-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { warehouses } from "@/lib/warehouse-data";
 import { ApprovalHistoryItem } from "@/types";
@@ -1141,10 +1141,10 @@ function CreateForm({
       toast.success("Stocktake sheet created successfully!");
       onClose();
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.message || "Failed to create stocktake sheet";
-      setFormError(String(msg));
-      toast.error(msg);
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err, "Failed to create stocktake sheet");
+      setFormError(message);
+      toast.error(message);
     },
   });
 

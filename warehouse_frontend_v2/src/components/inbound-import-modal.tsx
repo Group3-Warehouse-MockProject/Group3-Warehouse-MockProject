@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { Upload, Download, Loader2, FileSpreadsheet } from "lucide-react";
 import { ModalShell } from "@/components/modal-shell";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 
@@ -293,10 +293,9 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       toast.success("Inbound receipts imported successfully!");
       onClose();
       onSaved?.();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      const apiMsg = err.response?.data?.message || err.response?.data || err.message;
-      setError(typeof apiMsg === "string" ? apiMsg : "Error importing inbound receipts.");
+      setError(getErrorMessage(err, "Error importing inbound receipts."));
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

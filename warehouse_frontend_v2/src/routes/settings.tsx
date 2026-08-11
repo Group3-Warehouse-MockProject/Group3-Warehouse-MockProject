@@ -4,7 +4,7 @@ import { MapPin, Building2, Plus, Package, TrendingUp, AlertTriangle, Loader2, P
 import { useState, useEffect } from "react";
 import { ModalShell, Field, inputCls } from "@/components/modal-shell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
 import { toast } from "sonner";
 
@@ -115,10 +115,9 @@ function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       toast.success("Alert thresholds updated successfully");
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       console.error(error);
-      const msg = error.response?.data || "Failed to update thresholds. You may need Manager permissions.";
-      toast.error(typeof msg === 'string' ? msg : "Failed to update thresholds");
+      toast.error(getErrorMessage(error, "Failed to update thresholds. You may need Manager permissions."));
     }
   });
 
