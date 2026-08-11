@@ -918,7 +918,7 @@ function EditProductModal({ product, onClose, onSave, saving }: {
   onSave: (data: any) => void;
   saving: boolean;
 }) {
-  const { data: categories } = useQuery({
+  const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
   });
@@ -927,6 +927,10 @@ function EditProductModal({ product, onClose, onSave, saving }: {
     queryFn: async () => { const res = await api.get("/suppliers", { params: { page: 0, size: 100 } }); return res.data?.content ?? []; },
     staleTime: 5 * 60_000,
   });
+  const [selectedCategoryId, setSelectedCategoryId] = useState(String(product.categoryId ?? ""));
+  const [selectedSupplierId, setSelectedSupplierId] = useState(String(product.supplierId ?? ""));
+  const categoryIsMissing = Boolean(selectedCategoryId) && !categories.some((category: any) => String(category.id) === selectedCategoryId);
+  const supplierIsMissing = Boolean(selectedSupplierId) && !suppliers.some((supplier: any) => String(supplier.id) === selectedSupplierId);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -962,18 +966,20 @@ function EditProductModal({ product, onClose, onSave, saving }: {
       <form id="edit-product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="SKU Code" required><input name="code" className={inputCls} defaultValue={product.sku} required /></Field>
         <Field label="Supplier" required>
-          <select name="supplierId" className={selectCls} defaultValue={suppliers.find((s: any) => s.name === product.brand)?.id || ""} required>
+          <select name="supplierId" className={selectCls} value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} required>
             <option value="" disabled>Select supplier</option>
+            {supplierIsMissing && <option value={selectedSupplierId}>{product.brand || "Current supplier"}</option>}
             {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <Field label="Product Name" required className="sm:col-span-2"><input name="name" className={inputCls} defaultValue={product.name} required /></Field>
         <Field label="Image URL" className="sm:col-span-2"><input name="imageUrl" className={inputCls} defaultValue={product.imageUrl || ""} /></Field>
-        <Field label="Specification" className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} /></Field>
+        <Field label="Specification" required className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} required /></Field>
         <Field label="Category" required>
-          <select name="categoryId" className={selectCls} defaultValue={categories?.find((c: any) => c.name === product.category)?.id || ""} required>
+          <select name="categoryId" className={selectCls} value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} required>
             <option value="" disabled>Select category</option>
-            {categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {categoryIsMissing && <option value={selectedCategoryId}>{product.category || "Current category"}</option>}
+            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="Cost (₫)"><input name="cost" type="number" className={inputCls} defaultValue={product.cost} min={0} /></Field>
@@ -1314,7 +1320,7 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
   onClose: () => void;
   queryClient: any;
 }) {
-  const { data: categories } = useQuery({
+  const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
   });
@@ -1323,6 +1329,10 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
     queryFn: async () => { const res = await api.get("/suppliers", { params: { page: 0, size: 100 } }); return res.data?.content ?? []; },
     staleTime: 5 * 60_000,
   });
+  const [selectedCategoryId, setSelectedCategoryId] = useState(String(product.categoryId ?? ""));
+  const [selectedSupplierId, setSelectedSupplierId] = useState(String(product.supplierId ?? ""));
+  const categoryIsMissing = Boolean(selectedCategoryId) && !categories.some((category: any) => String(category.id) === selectedCategoryId);
+  const supplierIsMissing = Boolean(selectedSupplierId) && !suppliers.some((supplier: any) => String(supplier.id) === selectedSupplierId);
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => api.put(`/products/${product.id || product.sku}`, data),
@@ -1369,18 +1379,20 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
       <form id="inline-edit-product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="SKU Code" required><input name="code" className={inputCls} defaultValue={product.sku} required /></Field>
         <Field label="Supplier" required>
-          <select name="supplierId" className={selectCls} defaultValue={suppliers.find((s: any) => s.name === product.brand)?.id || ""} required>
+          <select name="supplierId" className={selectCls} value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} required>
             <option value="" disabled>Select supplier</option>
+            {supplierIsMissing && <option value={selectedSupplierId}>{product.brand || "Current supplier"}</option>}
             {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <Field label="Product Name" required className="sm:col-span-2"><input name="name" className={inputCls} defaultValue={product.name} required /></Field>
         <Field label="Image URL" className="sm:col-span-2"><input name="imageUrl" className={inputCls} defaultValue={product.imageUrl || ""} /></Field>
-        <Field label="Specification" className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} /></Field>
+        <Field label="Specification" required className="sm:col-span-2"><textarea name="specification" className={`${inputCls} min-h-20 resize-y py-2`} defaultValue={product.specification || ""} required /></Field>
         <Field label="Category" required>
-          <select name="categoryId" className={selectCls} defaultValue={categories?.find((c: any) => c.name === product.category)?.id || ""} required>
+          <select name="categoryId" className={selectCls} value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} required>
             <option value="" disabled>Select category</option>
-            {categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {categoryIsMissing && <option value={selectedCategoryId}>{product.category || "Current category"}</option>}
+            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="Cost (₫)"><input name="cost" type="number" className={inputCls} defaultValue={product.cost} min={0} /></Field>
