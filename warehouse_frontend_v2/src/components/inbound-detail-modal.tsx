@@ -5,6 +5,7 @@ import {
   CreditCard, DollarSign
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { useApp } from "@/lib/app-context";
 import { ReceiptMovement } from "@/types";
 
@@ -136,10 +137,12 @@ export function InboundDetailModal({
       });
       onUpdated(res.data);
       setConfirmAction(null);
+      toast.success(`Receipt ${status.toLowerCase()} successfully`);
     } catch (err: any) {
       const data = err.response?.data;
       const msg = typeof data === "string" ? data : (data?.message || "Failed to update status. Please try again.");
       setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -179,9 +182,9 @@ export function InboundDetailModal({
     try {
       const payload: Record<string, any> = {
         status: movement.status,
-        remark: editRemark || null,
+        remark: editRemark.trim() || null,
+        partner: editPartner.trim() || null,
       };
-      if (partnerChanged) payload.partner = editPartner || null;
       if (warehouseChanged) payload.warehouseId = Number(editWarehouseId);
       if (assignedChanged) payload.assignedUserId = newAssigned === "" ? -1 : newAssigned;
       if (itemsChanged) {
@@ -194,6 +197,7 @@ export function InboundDetailModal({
       const res = await api.patch<ReceiptMovement[]>(`/receipts/${movement.receiptId}`, payload);
       onUpdated(res.data);
       setEditing(false);
+      toast.success("Receipt updated successfully");
     } catch (err: any) {
       const data = err.response?.data;
       const msg =
@@ -203,6 +207,7 @@ export function InboundDetailModal({
           ? String((data as { message: string }).message)
           : "Failed to update receipt. Please try again.";
       setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -294,10 +299,8 @@ export function InboundDetailModal({
               )}
             </div>
 
-            <MetaRow icon={CreditCard} label="Payment Term" value={movement.paymentTerm ?? "—"} />
-            <MetaRow icon={CreditCard} label="Payment Status" value={movement.paymentStatus ?? "—"} />
+
             <MetaRow icon={DollarSign} label="Total Amount" value={movement.totalAmount != null ? `$${movement.totalAmount.toLocaleString()}` : "—"} />
-            <MetaRow icon={DollarSign} label="Paid Amount" value={movement.paidAmount != null ? `$${movement.paidAmount.toLocaleString()}` : "—"} />
 
             {/* Status */}
             <div className="col-span-2">

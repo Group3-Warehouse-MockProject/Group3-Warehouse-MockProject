@@ -46,7 +46,7 @@ public class WarehouseReceipt extends BaseEntity{
     @JoinColumn(name = "assigned_user_id")
     private User assignedUser;
 
-    @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @org.hibernate.annotations.BatchSize(size = 100)
     @Builder.Default
     private Set<ReceiptDetail> details = new LinkedHashSet<>();
