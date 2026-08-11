@@ -46,6 +46,14 @@ public class Transfer extends BaseEntity{
     @JoinColumn(name = "assigned_by_id", nullable = true)
     private User assignedByUser;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_location_id")
+    private Location sourceLocation;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "destination_location_id")
+    private Location destinationLocation;
+
     @OneToMany(mappedBy = "transfer", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @org.hibernate.annotations.BatchSize(size = 100)
     @Builder.Default
