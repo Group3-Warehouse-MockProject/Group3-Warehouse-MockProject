@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Cpu, Eye, EyeOff, Lock, Mail, User, ShieldCheck , CircleUser} from "lucide-react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 
 export const Route = createFileRoute("/register")({
   head: () => ({ meta: [{ title: "Create account — TechStock" }] }),
@@ -45,7 +45,7 @@ function RegisterPage() {
         navigate({ to: "/login" });
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "Registration failed. Please try again.");
+      setError(getErrorMessage(err, "Registration failed. Please try again."));
     }
   };
 

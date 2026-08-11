@@ -22,16 +22,16 @@ public class InventoryCheck extends BaseEntity {
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
     // Nhân viên được giao thực hiện đếm (có thể null nếu chưa assign)
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_user_id", nullable = true)
     private User assignedUser;
 

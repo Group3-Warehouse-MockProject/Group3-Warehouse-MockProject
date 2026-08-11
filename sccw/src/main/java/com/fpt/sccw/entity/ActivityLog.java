@@ -2,20 +2,17 @@ package com.fpt.sccw.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "activity_logs")
+@Table(name = "activity_logs", indexes = {
+    @Index(name = "idx_activity_log_user_created", columnList = "user_id, created_at")
+})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ActivityLog {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class ActivityLog extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
@@ -35,7 +32,4 @@ public class ActivityLog {
 
     @Column(name = "details", columnDefinition = "TEXT")
     private String details;
-
-    @Column(name = "timestamp")
-    private LocalDateTime timestamp;
 }

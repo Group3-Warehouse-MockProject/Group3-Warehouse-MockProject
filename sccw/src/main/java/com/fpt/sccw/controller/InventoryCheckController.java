@@ -187,8 +187,7 @@ public class InventoryCheckController {
 
             return ResponseEntity.ok(toDTO(saved));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("message", e.getMessage() != null ? e.getMessage() : "Error creating stocktake sheet"));
+            throw new RuntimeException("Unable to create the stocktake sheet. Please try again.", e);
         }
     }
 

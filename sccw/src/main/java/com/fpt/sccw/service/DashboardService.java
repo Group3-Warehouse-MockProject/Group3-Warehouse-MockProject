@@ -54,8 +54,9 @@ public class DashboardService {
             for (ReceiptDetail d : r.getDetails()) {
                 boolean isInbound = r.getType().name().equals("INBOUND");
                 String partner = r.getType().name().equals("INBOUND") ? "Supplier" : "Customer";
-                // Approx partner info from supplier if available, but receipt doesn't map directly to supplier in entity except via product
-                if (isInbound && d.getProduct().getSupplier() != null) {
+                if (isInbound && r.getSupplier() != null) {
+                    partner = r.getSupplier().getName();
+                } else if (isInbound && d.getProduct().getSupplier() != null) {
                     partner = d.getProduct().getSupplier().getName();
                 }
 

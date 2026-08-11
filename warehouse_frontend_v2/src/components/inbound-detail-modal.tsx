@@ -4,7 +4,7 @@ import {
   CheckCircle2, Clock, XCircle, Pencil, Trash2, Loader2, Save, Plus, History,
   CreditCard, DollarSign
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { useApp } from "@/lib/app-context";
 import { ReceiptMovement } from "@/types";
@@ -139,8 +139,7 @@ export function InboundDetailModal({
       setConfirmAction(null);
       toast.success(`Receipt ${status.toLowerCase()} successfully`);
     } catch (err: any) {
-      const data = err.response?.data;
-      const msg = typeof data === "string" ? data : (data?.message || "Failed to update status. Please try again.");
+      const msg = getErrorMessage(err, "Failed to update status. Please try again.");
       setError(msg);
       toast.error(msg);
     } finally {
@@ -198,14 +197,8 @@ export function InboundDetailModal({
       onUpdated(res.data);
       setEditing(false);
       toast.success("Receipt updated successfully");
-    } catch (err: any) {
-      const data = err.response?.data;
-      const msg =
-        typeof data === "string"
-          ? data
-          : typeof data === "object" && data !== null && "message" in data
-          ? String((data as { message: string }).message)
-          : "Failed to update receipt. Please try again.";
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, "Failed to update receipt. Please try again.");
       setError(msg);
       toast.error(msg);
     } finally {

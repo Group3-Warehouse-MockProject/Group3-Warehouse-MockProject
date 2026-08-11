@@ -74,7 +74,7 @@ public class NotificationServiceImpl implements NotificationService {
                             .user(user)
                             .title(dto.getTitle())
                             .message(dto.getMessage())
-                            .type(dto.getType())
+                            .type(parseNotificationType(dto.getType()))
                             .isRead(false)
                             .build();
                     notificationRepository.save(notif);
@@ -98,6 +98,14 @@ public class NotificationServiceImpl implements NotificationService {
                     emitter.completeWithError(e);
                 }
             }
+        }
+    }
+
+    private com.fpt.sccw.entity.Status.NotificationType parseNotificationType(String type) {
+        try {
+            return com.fpt.sccw.entity.Status.NotificationType.valueOf(type.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return com.fpt.sccw.entity.Status.NotificationType.INFO;
         }
     }
 
