@@ -392,9 +392,8 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                 <Field label={isInbound ? "Receipt reference #" : "Order reference #"}>
                   <input
                     value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    className="input"
-                    placeholder={isInbound ? "INB-…" : "ORD-…"}
+                    className="input bg-muted cursor-not-allowed"
+                    readOnly
                   />
                 </Field>
                 {!isInbound && (

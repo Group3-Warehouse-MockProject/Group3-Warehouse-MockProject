@@ -38,6 +38,26 @@ function StatusBadge({ status }: { status?: string }) {
   );
 }
 
+function parseRemark(remark?: string) {
+  if (!remark) return { reference: "", assignee: "", note: "" };
+  const parts = remark.split(" | ");
+  let reference = "";
+  let assignee = "";
+  let note = "";
+  parts.forEach(part => {
+    if (part.startsWith("Ref: ")) {
+      reference = part.replace("Ref: ", "");
+    } else if (part.startsWith("Assignee: ")) {
+      assignee = part.replace("Assignee: ", "");
+    } else {
+      if (!part.startsWith("Ref: ") && !part.startsWith("Assignee: ")) {
+        note = part;
+      }
+    }
+  });
+  return { reference, assignee, note };
+}
+
 interface Filters {
   warehouse: string;
   status: string;
@@ -502,12 +522,14 @@ function InboundPage() {
                       const m = group[0];
                       const totalQty = group.reduce((sum, item) => sum + (item.qty ?? 0), 0);
                       const itemCount = group.length;
+                      const { reference } = parseRemark(m.remark);
+                      const displayId = reference || `R-${m.receiptId}`;
                       return (
                         <div
                           key={m.receiptId}
                           className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
                         >
-                          <div className="font-mono text-xs">R-{m.receiptId}</div>
+                          <div className="font-mono text-xs">{displayId}</div>
                           <div>
                             <div className="font-medium flex items-center gap-1.5">
                               <span className="truncate">{m.product}</span>
