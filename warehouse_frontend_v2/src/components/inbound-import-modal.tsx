@@ -5,7 +5,7 @@ import { Upload, Download, Loader2, FileSpreadsheet } from "lucide-react";
 import { ModalShell } from "@/components/modal-shell";
 import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation , useQuery} from "@tanstack/react-query";
 
 interface Props {
   open: boolean;
@@ -18,6 +18,46 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get<any>("/warehouses");
+      return Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+    },
+    staleTime: 10 * 60_000,
+    enabled: open,
+  });
+
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers", "reference"],
+    queryFn: async () => {
+      const res = await api.get<any>("/suppliers", { params: { page: 0, size: 100 } });
+      return Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+    },
+    staleTime: 5 * 60_000,
+    enabled: open,
+  });
+
+  const { data: products = [] } = useQuery({
+    queryKey: ["products", "reference"],
+    queryFn: async () => {
+      const res = await api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } });
+      return Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+    },
+    staleTime: 5 * 60_000,
+    enabled: open,
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users", "all"],
+    queryFn: async () => {
+      const res = await api.get<any>("/users");
+      return Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+    },
+    staleTime: 5 * 60_000,
+    enabled: open,
+  });
+
   const downloadTemplate = async () => {
     setLoading(true);
     setError(null);
@@ -26,18 +66,6 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
       const templateSheet = workbook.addWorksheet("Template");
       const dataSheet = workbook.addWorksheet("DataSheet");
 
-      // Fetch dynamic lookup data from backend
-      const [wRes, sRes, pRes, uRes] = await Promise.all([
-        api.get<any>("/warehouses"),
-        api.get<any>("/suppliers"),
-        api.get<{ content: any[] }>("/products", { params: { page: 0, size: 15 } }),
-        api.get<any>("/users"),
-      ]);
-
-      const warehouses = wRes.data?.content ?? (wRes.data as any);
-      const suppliers = sRes.data?.content ?? (sRes.data as any);
-      const products = pRes.data?.content ?? (pRes.data as any);
-      const users = Array.isArray(uRes.data) ? uRes.data : (uRes.data?.content ?? []);
       const staffUsers = users.filter((u: any) => u.role?.toUpperCase() === "STAFF" || u.role === "Staff");
 
       // Populate DataSheet with available choices
@@ -188,15 +216,9 @@ export function InboundImportModal({ open, onClose, onSaved }: Props) {
         throw new Error("No valid data to import. Please fill in your own data.");
       }
 
-      // Pre-fetch lookup data to resolve IDs.
-      const [whRes, suppliersRes, usersRes] = await Promise.all([
-        api.get<any[]>("/warehouses"),
-        api.get<any>("/suppliers", { params: { page: 0, size: 100 } }),
-        api.get<any>("/users"),
-      ]);
-      const warehouseList = whRes.data;
-      const supplierList = suppliersRes.data?.content ?? suppliersRes.data ?? [];
-      const userList = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.content ?? []);
+      const warehouseList: any[] = warehouses;
+      const supplierList: any[] = suppliers;
+      const userList: any[] = users;
 
       // Group rows by GroupKey
       const groups: Record<string, any[]> = {};

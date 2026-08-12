@@ -8,6 +8,7 @@ import { api, getErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { useApp } from "@/lib/app-context";
 import { ReceiptMovement } from "@/types";
+import { useQuery } from "@tanstack/react-query";
 
 interface Props {
   /** All movements — modal will filter by receiptId to show sibling lines */
@@ -58,11 +59,55 @@ export function InboundDetailModal({
   const [editItems, setEditItems]     = useState<EditLineItem[]>([]);
 
   // Reference data for dropdowns
-  const [products, setProducts]       = useState<ProductOption[]>([]);
-  const [warehouses, setWarehouses]   = useState<WarehouseOption[]>([]);
-  const [suppliers, setSuppliers]     = useState<SupplierOption[]>([]);
-  const [users, setUsers]             = useState<{ id: number; fullName: string; role: string; warehouseId: string | null }[]>([]);
-  const [refLoading, setRefLoading]   = useState(false);
+  const { data: refProducts = [], isLoading: refLoadingProducts } = useQuery({
+    queryKey: ["products", "reference"],
+    queryFn: async () => {
+      const res = await api.get<any>("/products", { params: { page: 0, size: 100 } });
+      const pList = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      return pList.map((p: any) => ({ sku: p.code || p.sku, name: p.name }));
+    },
+    staleTime: 5 * 60_000,
+    enabled: editing,
+  });
+
+  const { data: refWarehouses = [] } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get<any>("/warehouses");
+      const wList = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      return wList.map((w: any) => ({ id: String(w.id), code: w.code }));
+    },
+    staleTime: 10 * 60_000,
+    enabled: editing,
+  });
+
+  const { data: refSuppliers = [] } = useQuery({
+    queryKey: ["suppliers", "reference"],
+    queryFn: async () => {
+      const res = await api.get<any>("/suppliers", { params: { page: 0, size: 100 } });
+      const sList = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      return sList.map((s: any) => ({ id: String(s.id), name: s.name }));
+    },
+    staleTime: 5 * 60_000,
+    enabled: editing,
+  });
+
+  const { data: refUsers = [] } = useQuery({
+    queryKey: ["users", "all"],
+    queryFn: async () => {
+      const res = await api.get<any>("/users");
+      const uList = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      return uList.map((u: any) => ({ id: Number(u.id), fullName: u.fullName, role: u.role, warehouseId: u.warehouseId ? String(u.warehouseId) : null }));
+    },
+    staleTime: 5 * 60_000,
+    enabled: editing,
+  });
+
+  const refLoading = refLoadingProducts;
+  const products: any[] = refProducts;
+  const warehouses: any[] = refWarehouses;
+  const suppliers: any[] = refSuppliers;
+  const users: any[] = refUsers;
 
   // Action state
   const [saving, setSaving]           = useState(false);
@@ -72,29 +117,6 @@ export function InboundDetailModal({
 
   const statusCfg = STATUS_CONFIG[movement.status] ?? STATUS_CONFIG["PENDING"];
   const StatusIcon = statusCfg.icon;
-
-  // Fetch reference data when entering edit mode
-  useEffect(() => {
-    if (!editing) return;
-    setRefLoading(true);
-    Promise.all([
-      api.get<any>("/products", { params: { page: 0, size: 100 } }),
-      api.get<any>("/warehouses"),
-      api.get<any>("/suppliers", { params: { page: 0, size: 100 } }),
-      api.get<any>("/users"),
-    ]).then(([pRes, wRes, sRes, uRes]) => {
-      const pList = Array.isArray(pRes.data) ? pRes.data : (pRes.data?.content ?? []);
-      const wList = Array.isArray(wRes.data) ? wRes.data : (wRes.data?.content ?? []);
-      const sList = Array.isArray(sRes.data) ? sRes.data : (sRes.data?.content ?? []);
-      const uList = Array.isArray(uRes.data) ? uRes.data : (uRes.data?.content ?? []);
-      setProducts(pList.map((p: any) => ({ sku: p.code || p.sku, name: p.name })));
-      setWarehouses(wList.map((w: any) => ({ id: String(w.id), code: w.code })));
-      setSuppliers(sList.map((s: any) => ({ id: String(s.id), name: s.name })));
-      setUsers(uList.map((u: any) => ({ id: Number(u.id), fullName: u.fullName, role: u.role, warehouseId: u.warehouseId ? String(u.warehouseId) : null })));
-    }).catch((err) => {
-      console.error("Failed to load reference data:", err);
-    }).finally(() => setRefLoading(false));
-  }, [editing]);
 
   useEffect(() => {
     if (editing && suppliers.length > 0 && !partnerInitialized) {
@@ -347,7 +369,7 @@ export function InboundDetailModal({
                   value={editRemark}
                   onChange={(e) => { setEditRemark(e.target.value); setSaveWarning(null); }}
                   rows={2}
-                  className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground min-h-[60px] resize-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground min-h-15 resize-none"
                   placeholder="Optional notes…"
                 />
               ) : (
@@ -465,7 +487,7 @@ export function InboundDetailModal({
 
                   return (
                     <div key={event.id} className="relative pl-6">
-                      <div className={`absolute -left-[9px] top-1 size-4 rounded-full border-[3px] border-background ${ringColor}`} />
+                      <div className={`absolute -left-2.25 top-1 size-4 rounded-full border-[3px] border-background ${ringColor}`} />
                       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
                         <div className="flex-1">
                           <div className="text-sm font-semibold text-foreground">

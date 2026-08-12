@@ -8,7 +8,8 @@ import lombok.*;
 @Entity
 @Table(name = "transfers", indexes = {
     @Index(name = "idx_transfer_status", columnList = "status"),
-    @Index(name = "idx_transfer_type", columnList = "transfer_type")
+    @Index(name = "idx_transfer_type", columnList = "transfer_type"),
+    @Index(name = "idx_transfer_created_at", columnList = "created_at")
 })
 @Getter
 @Setter

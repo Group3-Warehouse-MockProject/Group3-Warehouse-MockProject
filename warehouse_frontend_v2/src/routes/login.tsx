@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState,useEffect } from "react";
 import { Cpu, Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
+import { getErrorMessage } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — TechStock" }] }),

@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CategoryController {
 
+    private final com.fpt.sccw.repository.InventoryRepository inventoryRepository;
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final ActivityLogService activityLogService;
@@ -80,17 +81,10 @@ public class CategoryController {
     @GetMapping("/stats")
     @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> getCategoryStats() {
-        List<Category> all = categoryRepository.findAll();
-        long totalCategories = all.size();
-        long activeCount = all.stream().filter(c -> !Boolean.TRUE.equals(c.getIsDeleted())).count();
-        long archivedCount = all.stream().filter(c -> Boolean.TRUE.equals(c.getIsDeleted())).count();
-        long totalUnitsInStock = all.stream()
-                .filter(c -> !Boolean.TRUE.equals(c.getIsDeleted()))
-                .flatMap(c -> c.getProducts() != null ? c.getProducts().stream() : java.util.stream.Stream.empty())
-                .filter(p -> !Boolean.TRUE.equals(p.getIsDeleted()))
-                .flatMap(p -> p.getInventories() != null ? p.getInventories().stream() : java.util.stream.Stream.empty())
-                .mapToLong(inv -> inv.getQuantity())
-                .sum();
+        long totalCategories = categoryRepository.count();
+        long activeCount = categoryRepository.countByIsDeletedFalse();
+        long archivedCount = categoryRepository.countByIsDeletedTrue();
+        long totalUnitsInStock = inventoryRepository.sumActiveUnitsInStock();
 
         return ResponseEntity.ok(Map.of(
                 "totalCategories", totalCategories,

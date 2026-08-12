@@ -50,7 +50,7 @@ function ProductsPage() {
   useEffect(() => { setPage(0); }, [q, filterCategory, lifecycleFilter, filterStatus, filterCostMin, filterCostMax, filterPriceMin, filterPriceMax, activeWarehouseId]);
 
   const { data: pageData, isLoading, error } = useQuery({
-    queryKey: ["products", activeWarehouseId, page, q, filterCategory, lifecycleFilter],
+    queryKey: ["products", activeWarehouseId, page, q, filterCategory, lifecycleFilter, filterStatus, filterCostMin, filterCostMax, filterPriceMin, filterPriceMax],
     queryFn: async () => {
       const res = await api.get("/products", {
         params: {
@@ -58,6 +58,11 @@ function ProductsPage() {
           ...(q ? { search: q } : {}),
           ...(filterCategory ? { category: filterCategory } : {}),
           lifecycleStatus: lifecycleFilter,
+          ...(filterStatus ? { stockStatus: filterStatus } : {}),
+          ...(filterCostMin ? { costMin: filterCostMin } : {}),
+          ...(filterCostMax ? { costMax: filterCostMax } : {}),
+          ...(filterPriceMin ? { priceMin: filterPriceMin } : {}),
+          ...(filterPriceMax ? { priceMax: filterPriceMax } : {}),
           page,
           size: limit,
         }
@@ -89,7 +94,8 @@ function ProductsPage() {
     queryFn: async () => {
       const res = await api.get("/warehouses");
       return res.data;
-    }
+    },
+    staleTime: 10 * 60_000,
   });
 
   const { data: categories } = useQuery({
@@ -97,7 +103,8 @@ function ProductsPage() {
     queryFn: async () => {
       const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } });
       return res.data?.content ?? [];
-    }
+    },
+    staleTime: 5 * 60_000,
   });
 
   const { data: suppliers = [] } = useQuery({
@@ -114,7 +121,8 @@ function ProductsPage() {
     queryFn: async () => {
       const res = await api.get("/locations");
       return res.data;
-    }
+    },
+    staleTime: 5 * 60_000,
   });
 
   const getWarehouseCode = (id: string | null | undefined) => {
@@ -128,30 +136,7 @@ function ProductsPage() {
     return warehouses?.find((w: any) => w.id.toString() === id.toString())?.code ?? id;
   };
 
-  const list = (productData || []).filter((p: any) => {
-    const matchesQ =
-      p.name.toLowerCase().includes(q.toLowerCase()) ||
-      p.sku.toLowerCase().includes(q.toLowerCase()) ||
-      p.category.toLowerCase().includes(q.toLowerCase()) ||
-      p.brand.toLowerCase().includes(q.toLowerCase());
-
-    const matchesCategory = filterCategory ? p.category === filterCategory : true;
-
-    let matchesStatus = true;
-    if (filterStatus === "Out") matchesStatus = p.stock === 0;
-    else if (filterStatus === "Low") matchesStatus = p.stock > 0 && p.stock < p.reorder;
-    else if (filterStatus === "In stock") matchesStatus = p.stock > 0 && p.stock >= p.reorder;
-
-    let matchesCost = true;
-    if (filterCostMin) matchesCost = matchesCost && p.cost >= Number(filterCostMin);
-    if (filterCostMax) matchesCost = matchesCost && p.cost <= Number(filterCostMax);
-
-    let matchesPrice = true;
-    if (filterPriceMin) matchesPrice = matchesPrice && p.price >= Number(filterPriceMin);
-    if (filterPriceMax) matchesPrice = matchesPrice && p.price <= Number(filterPriceMax);
-
-    return matchesQ && matchesCategory && matchesStatus && matchesCost && matchesPrice;
-  });
+  const list = productData || [];
 
   const units = productStats?.totalUnits ?? list.reduce((s: number, p: any) => s + p.stock, 0);
   const low = productStats?.lowStockCount ?? list.filter((p: any) => p.stock < p.reorder).length;
@@ -162,39 +147,22 @@ function ProductsPage() {
 
   const handleExport = async () => {
     try {
-      // Fetch all products for export (not just current page)
-      const res = await api.get("/products", {
+      const res = await api.get("/products/export", {
         params: {
           ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
           ...(q ? { search: q } : {}),
           ...(filterCategory ? { category: filterCategory } : {}),
           lifecycleStatus: lifecycleFilter,
-          page: 0,
-          size: totalElements || 10000,
-        }
+          ...(filterStatus ? { stockStatus: filterStatus } : {}),
+          ...(filterCostMin ? { costMin: filterCostMin } : {}),
+          ...(filterCostMax ? { costMax: filterCostMax } : {}),
+          ...(filterPriceMin ? { priceMin: filterPriceMin } : {}),
+          ...(filterPriceMax ? { priceMax: filterPriceMax } : {}),
+        },
+        responseType: 'blob'
       });
-      const allProducts = res.data?.content ?? [];
-      if (allProducts.length === 0) return;
-
-      const headers = ["SKU", "Product Name", "Brand", "Category", "Warehouse", "Location", "Stock", "Cost", "Price"];
-      const csvContent = [
-        headers.join(","),
-        ...allProducts.map((p: any) =>
-          [
-            p.sku,
-            `"${p.name.replace(/"/g, '""')}"`,
-            p.brand,
-            p.category,
-            getWarehouseCode(p.warehouseId),
-            p.location,
-            p.stock,
-            p.cost,
-            p.price
-          ].join(",")
-        )
-      ].join("\n");
-
-      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      
+      const blob = new Blob(["\uFEFF", res.data], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
@@ -921,7 +889,8 @@ function EditProductModal({ product, onClose, onSave, saving }: {
 }) {
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
+    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; },
+    staleTime: 5 * 60_000,
   });
   const { data: suppliers = [] } = useQuery({
     queryKey: ["suppliers", "reference"],
@@ -1326,7 +1295,8 @@ function InlineEditProductModal({ product, onClose, queryClient }: {
 }) {
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; }
+    queryFn: async () => { const res = await api.get("/categories", { params: { page: 0, size: 1000, status: "Active" } }); return res.data?.content ?? []; },
+    staleTime: 5 * 60_000,
   });
   const { data: suppliers = [] } = useQuery({
     queryKey: ["suppliers", "reference"],

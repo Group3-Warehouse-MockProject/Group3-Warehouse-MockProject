@@ -27,30 +27,22 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardDTO getDashboardData(Long warehouseId) {
-        List<WarehouseReceipt> receipts;
-        List<Transfer> transfers;
+        long pendingOrders = receiptRepository.countPending(warehouseId) + transferRepository.countPending(warehouseId);
 
+        java.time.LocalDateTime since30Days = java.time.LocalDateTime.now().minusDays(30);
+        List<WarehouseReceipt> recentReceipts = receiptRepository.findRecentWithBasicJoins(warehouseId, since30Days, org.springframework.data.domain.PageRequest.of(0, 10)).getContent();
+
+        List<Transfer> recentTransfers;
+        org.springframework.data.domain.PageRequest pageRequest = org.springframework.data.domain.PageRequest.of(0, 10, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
         if (warehouseId != null) {
-            receipts = receiptRepository.findByWarehouseId(warehouseId);
-            transfers = transferRepository.findByWarehouseIdOrWarehouseDestinationId(warehouseId, warehouseId);
+            recentTransfers = transferRepository.findByWarehouseEagerPaged(warehouseId, pageRequest).getContent();
         } else {
-            receipts = receiptRepository.findAll();
-            transfers = transferRepository.findAll();
+            recentTransfers = transferRepository.findAllEagerPaged(pageRequest).getContent();
         }
 
-        // Count pending orders
-        long pendingOrders = 0;
-        for (WarehouseReceipt r : receipts) {
-            if (r.getStatus().name().equals("PENDING")) pendingOrders++;
-        }
-        for (Transfer t : transfers) {
-            if (t.getStatus().name().equals("PENDING")) pendingOrders++;
-        }
-
-        // Extract movements
         List<MovementDTO> movements = new ArrayList<>();
         
-        for (WarehouseReceipt r : receipts) {
+        for (WarehouseReceipt r : recentReceipts) {
             for (ReceiptDetail d : r.getDetails()) {
                 boolean isInbound = r.getType().name().equals("INBOUND");
                 String partner = r.getType().name().equals("INBOUND") ? "Supplier" : "Customer";
@@ -79,7 +71,7 @@ public class DashboardService {
             }
         }
 
-        for (Transfer t : transfers) {
+        for (Transfer t : recentTransfers) {
             for (TransferDetail d : t.getDetails()) {
                 boolean isOutboundFromPerspective = warehouseId == null || t.getWarehouse().getId().equals(warehouseId);
                 String type = isOutboundFromPerspective ? "Outbound" : "Inbound";
@@ -99,27 +91,11 @@ public class DashboardService {
             }
         }
 
-        // Sort movements by createdAt roughly (we don't have createdAt in DTO directly, but we can sort by date string)
         movements.sort((a, b) -> b.getId().compareTo(a.getId()));
         List<MovementDTO> recentMovements = movements.stream().limit(10).collect(Collectors.toList());
 
-        // Weekly Flow: Aggregate real data for the last 7 days ending at the latest transaction date
+        // Weekly Flow
         LocalDate maxDate = LocalDate.now();
-        if (!receipts.isEmpty() || !transfers.isEmpty()) {
-            LocalDate maxReceiptDate = receipts.stream()
-                    .map(r -> r.getCreatedAt().toLocalDate())
-                    .max(LocalDate::compareTo)
-                    .orElse(LocalDate.MIN);
-            LocalDate maxTransferDate = transfers.stream()
-                    .map(t -> t.getCreatedAt().toLocalDate())
-                    .max(LocalDate::compareTo)
-                    .orElse(LocalDate.MIN);
-            LocalDate latestDbDate = maxReceiptDate.isAfter(maxTransferDate) ? maxReceiptDate : maxTransferDate;
-            if (latestDbDate.isAfter(LocalDate.MIN)) {
-                maxDate = latestDbDate;
-            }
-        }
-
         Map<String, Long> inMap = new java.util.HashMap<>();
         Map<String, Long> outMap = new java.util.HashMap<>();
         for (int i = 6; i >= 0; i--) {
@@ -128,7 +104,9 @@ public class DashboardService {
             outMap.put(dayStr, 0L);
         }
 
-        for (WarehouseReceipt r : receipts) {
+        java.time.LocalDateTime since7Days = java.time.LocalDateTime.now().minusDays(7);
+        List<WarehouseReceipt> weeklyReceipts = receiptRepository.findRecentWithBasicJoins(warehouseId, since7Days, org.springframework.data.domain.PageRequest.of(0, 1000)).getContent();
+        for (WarehouseReceipt r : weeklyReceipts) {
             LocalDate rDate = r.getCreatedAt().toLocalDate();
             if (!rDate.isBefore(maxDate.minusDays(6))) {
                 String dayStr = rDate.format(DateTimeFormatter.ofPattern("EEE"));
@@ -141,9 +119,16 @@ public class DashboardService {
             }
         }
 
-        for (Transfer t : transfers) {
+        List<Transfer> weeklyTransfers;
+        org.springframework.data.domain.PageRequest weeklyPageRequest = org.springframework.data.domain.PageRequest.of(0, 1000, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        if (warehouseId != null) {
+            weeklyTransfers = transferRepository.findByWarehouseEagerPaged(warehouseId, weeklyPageRequest).getContent();
+        } else {
+            weeklyTransfers = transferRepository.findAllEagerPaged(weeklyPageRequest).getContent();
+        }
+        for (Transfer t : weeklyTransfers) {
             LocalDate tDate = t.getCreatedAt().toLocalDate();
-            if (!tDate.isBefore(maxDate.minusDays(6))) {
+            if (t.getCreatedAt().isAfter(since7Days) && !tDate.isBefore(maxDate.minusDays(6))) {
                 String dayStr = tDate.format(DateTimeFormatter.ofPattern("EEE"));
                 long qty = t.getDetails().stream().mapToLong(TransferDetail::getQuantity).sum();
                 boolean isOutboundFromPerspective = warehouseId == null || t.getWarehouse().getId().equals(warehouseId);
@@ -161,47 +146,18 @@ public class DashboardService {
             weeklyFlow.add(new WeeklyFlowDTO(dayStr, inMap.get(dayStr), outMap.get(dayStr)));
         }
 
-        // ── Inventory aggregates ──────────────────────────────────────────
-        List<Inventory> allInventory;
-        if (warehouseId != null) {
-            allInventory = inventoryRepository.findByWarehouseIdEager(warehouseId);
-        } else {
-            allInventory = inventoryRepository.findAllEager();
+        long totalSKUs = inventoryRepository.countDistinctProducts(warehouseId);
+        long totalUnits = inventoryRepository.sumQuantity(warehouseId);
+        java.math.BigDecimal inventoryValue = inventoryRepository.sumInventoryValue(warehouseId);
+        long lowStockCount = inventoryRepository.countLowStock(warehouseId);
+
+        List<Object[]> categoryShareAgg = inventoryRepository.aggregateCategoryShare(warehouseId);
+        List<CategoryShareDTO> categoryShare = new ArrayList<>();
+        for (Object[] row : categoryShareAgg) {
+            String catName = row[0] != null ? row[0].toString() : "Uncategorized";
+            long qty = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+            categoryShare.add(new CategoryShareDTO(catName, qty));
         }
-
-        long totalSKUs = allInventory.stream()
-                .map(inv -> inv.getProduct().getId())
-                .distinct()
-                .count();
-
-        long totalUnits = allInventory.stream()
-                .mapToLong(inv -> inv.getQuantity() != null ? inv.getQuantity() : 0L)
-                .sum();
-
-        java.math.BigDecimal inventoryValue = allInventory.stream()
-                .map(inv -> {
-                    long qty = inv.getQuantity() != null ? inv.getQuantity() : 0L;
-                    java.math.BigDecimal cost = inv.getProduct().getCost() != null ? inv.getProduct().getCost() : java.math.BigDecimal.ZERO;
-                    return cost.multiply(java.math.BigDecimal.valueOf(qty));
-                })
-                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
-
-        long lowStockCount = allInventory.stream()
-                .filter(inv -> inv.getLowStockThreshold() != null && inv.getLowStockThreshold() > 0
-                        && inv.getQuantity() != null && inv.getQuantity() <= inv.getLowStockThreshold())
-                .count();
-
-        // Category share
-        Map<String, Long> catMap = new java.util.HashMap<>();
-        for (Inventory inv : allInventory) {
-            String catName = inv.getProduct().getCategory() != null ? inv.getProduct().getCategory().getName() : "Uncategorized";
-            long qty = inv.getQuantity() != null ? inv.getQuantity() : 0L;
-            catMap.merge(catName, qty, Long::sum);
-        }
-        List<CategoryShareDTO> categoryShare = catMap.entrySet().stream()
-                .map(e -> new CategoryShareDTO(e.getKey(), e.getValue()))
-                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
-                .collect(Collectors.toList());
 
         return DashboardDTO.builder()
                 .movements(recentMovements)

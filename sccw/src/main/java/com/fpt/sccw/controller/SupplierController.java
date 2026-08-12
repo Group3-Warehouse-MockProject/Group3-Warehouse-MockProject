@@ -74,14 +74,10 @@ public class SupplierController {
 
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getSupplierStats() {
-        List<Supplier> all = supplierRepository.findAll();
-        long totalSuppliers = all.size();
-        double avgRating = all.stream().mapToDouble(s -> s.getRating() != null ? s.getRating().doubleValue() : 0.0)
-                .average().orElse(0.0);
-        double avgOnTime = all.stream().mapToDouble(s -> s.getOnTimeDelivery() != null ? s.getOnTimeDelivery() : 0.0)
-                .average().orElse(0.0);
-        long countriesCount = all.stream().map(Supplier::getCountry)
-                .filter(c -> c != null && !c.isBlank()).distinct().count();
+        long totalSuppliers = supplierRepository.count();
+        double avgRating = supplierRepository.getAverageRating();
+        double avgOnTime = supplierRepository.getAverageOnTimeDelivery();
+        long countriesCount = supplierRepository.countDistinctCountries();
 
         return ResponseEntity.ok(Map.of(
                 "total", totalSuppliers,
