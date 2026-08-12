@@ -130,7 +130,9 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
       }
       setWarehouseId(String(defaultWh));
 
-      if (!isInbound) {
+      if (isInbound) {
+        setReference("INB-" + Math.floor(100000 + Math.random() * 900000));
+      } else {
         setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
       }
     }
@@ -387,16 +389,14 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     />
                   )}
                 </Field>
-                {!isInbound && (
-                  <Field label="Order reference #">
-                    <input
-                      value={reference}
-                      onChange={(e) => setReference(e.target.value)}
-                      className="input"
-                      placeholder="ORD-…"
-                    />
-                  </Field>
-                )}
+                <Field label={isInbound ? "Receipt reference #" : "Order reference #"}>
+                  <input
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    className="input"
+                    placeholder={isInbound ? "INB-…" : "ORD-…"}
+                  />
+                </Field>
                 {!isInbound && (
                   <Field label="Payment term">
                     <select
