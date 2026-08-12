@@ -118,7 +118,7 @@ public class TransferController {
         User user = currentUser();
         Transfer transfer = transferRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Transfer not found"));
-        ensureCanAccess(user, transfer.getWarehouse().getId());
+        ensureCanViewTransfer(user, transfer);
 
         List<ApprovalHistoryDTO> history = approvalHistoryRepository
                 .findByDocumentIdAndDocumentTypeOrderByCreatedAtAsc(
@@ -344,7 +344,7 @@ public class TransferController {
                         new RuntimeException("Transfer not found")
                 );
 
-        ensureCanAccess(user, transfer.getWarehouse().getId());
+        ensureCanViewTransfer(user, transfer);
 
         Status.TransactionStatus nextStatus =
                 parseStatus(request.get("status"));
@@ -507,6 +507,34 @@ public class TransferController {
                 || !userWarehouseId.equals(sourceWarehouseId)) {
             throw new RuntimeException(
                     "You cannot create or update transfers for this warehouse"
+            );
+        }
+    }
+
+    private void ensureCanViewTransfer(
+            User user,
+            Transfer transfer
+    ) {
+        String roleName = user.getRole().getRoleName().name();
+
+        if (roleName.equals("ADMIN")
+                || roleName.equals("MANAGER")) {
+            return;
+        }
+
+        Long userWarehouseId = user.getWarehouse() != null
+                ? user.getWarehouse().getId()
+                : null;
+
+        Long sourceId = transfer.getWarehouse().getId();
+        Long destinationId = transfer.getWarehouseDestination() != null
+                ? transfer.getWarehouseDestination().getId()
+                : null;
+
+        if (userWarehouseId == null
+                || (!userWarehouseId.equals(sourceId) && !userWarehouseId.equals(destinationId))) {
+            throw new RuntimeException(
+                    "You cannot view this transfer"
             );
         }
     }

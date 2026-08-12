@@ -899,7 +899,7 @@ function ActivityTimeline({ userId }: { userId: number }) {
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground shrink-0 bg-secondary/30 px-2.5 py-1 rounded-md border border-border/40">
                     <Clock className="size-3 opacity-70" />
-                    {new Date(log.timestamp).toLocaleString(undefined, {
+                    {new Date(log.createdAt).toLocaleString(undefined, {
                       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                     })}
                   </div>

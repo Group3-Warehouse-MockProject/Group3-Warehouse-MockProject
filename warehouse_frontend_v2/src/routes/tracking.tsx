@@ -41,7 +41,7 @@ interface ActivityLog {
   ipAddress?: string;
   location?: string;
   details?: string;
-  timestamp: string;
+  createdAt: string;
   user?: {
     id: number;
     username: string;
@@ -257,7 +257,7 @@ function TrackingPage() {
                           <td className="p-4">
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <Clock className="size-3.5 shrink-0" />
-                              <span className="text-xs whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</span>
+                              <span className="text-xs whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</span>
                             </div>
                           </td>
                         </tr>
