@@ -240,20 +240,28 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex bg-background">
       <aside className="hidden md:flex w-64 flex-col bg-sidebar border-r border-sidebar-border sticky top-0 h-screen">
-        <div className="p-6 flex items-center gap-3">
+        <Link 
+          to="/" 
+          className="p-6 flex items-center gap-3 hover:opacity-90 transition-opacity"
+          onClick={() => {
+            setSearchQuery("");
+            setSearchOpen(false);
+            setMobileNavOpen(false);
+          }}
+        >
           <div
-            className="size-10 rounded-xl grid place-items-center glow-ring"
+            className="size-10 rounded-xl grid place-items-center glow-ring shrink-0"
             style={{ background: "var(--gradient-primary)" }}
           >
             <Cpu className="size-5 text-primary-foreground" />
           </div>
-          <div>
-            <div className="text-sm font-semibold leading-tight">TechStock</div>
+          <div className="text-left">
+            <div className="text-sm font-semibold leading-tight text-foreground">TechStock</div>
             <div className="text-[11px] text-muted-foreground leading-tight">
               Computer Warehouse
             </div>
           </div>
-        </div>
+        </Link>
 
         <div className="px-3 pb-3">
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">
@@ -353,19 +361,29 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
               <SheetContent side="left" className="p-0 flex flex-col bg-sidebar">
                 <SheetHeader className="p-6 pb-4">
-                  <SheetTitle className="flex items-center gap-3">
-                    <span
-                      className="size-10 rounded-xl grid place-items-center glow-ring"
-                      style={{ background: "var(--gradient-primary)" }}
+                  <SheetTitle asChild>
+                    <Link 
+                      to="/" 
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSearchOpen(false);
+                        setMobileNavOpen(false);
+                      }} 
+                      className="flex items-center gap-3 hover:opacity-90 transition-opacity"
                     >
-                      <Cpu className="size-5 text-primary-foreground" />
-                    </span>
-                    <span className="text-left">
-                      <span className="block text-sm">TechStock</span>
-                      <span className="block text-[11px] font-normal text-muted-foreground">
-                        Computer Warehouse
+                      <span
+                        className="size-10 rounded-xl grid place-items-center glow-ring shrink-0"
+                        style={{ background: "var(--gradient-primary)" }}
+                      >
+                        <Cpu className="size-5 text-primary-foreground" />
                       </span>
-                    </span>
+                      <span className="text-left">
+                        <span className="block text-sm text-foreground">TechStock</span>
+                        <span className="block text-[11px] font-normal text-muted-foreground">
+                          Computer Warehouse
+                        </span>
+                      </span>
+                    </Link>
                   </SheetTitle>
                 </SheetHeader>
                 <div className="px-4 pb-3">
