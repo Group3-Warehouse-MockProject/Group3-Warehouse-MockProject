@@ -48,4 +48,20 @@ public interface WarehouseReceiptRepository extends JpaRepository<WarehouseRecei
            "AND r.warehouse.id = :warehouseId " +
            "AND d.product.id = :productId")
     boolean existsPendingInboundForProduct(@Param("warehouseId") Long warehouseId, @Param("productId") Long productId);
+    @Query("SELECT COUNT(r) FROM WarehouseReceipt r WHERE r.status = com.fpt.sccw.entity.Status.ReceiptStatus.PENDING AND (:warehouseId IS NULL OR r.warehouse.id = :warehouseId)")
+    long countPending(@Param("warehouseId") Long warehouseId);
+
+    @Query(value = "SELECT DISTINCT r FROM WarehouseReceipt r " +
+           "LEFT JOIN FETCH r.user " +
+           "LEFT JOIN FETCH r.assignedUser " +
+           "LEFT JOIN FETCH r.warehouse " +
+           "LEFT JOIN FETCH r.supplier " +
+           "WHERE (:warehouseId IS NULL OR r.warehouse.id = :warehouseId) " +
+           "AND r.createdAt >= :since " +
+           "ORDER BY r.createdAt DESC",
+           countQuery = "SELECT COUNT(r) FROM WarehouseReceipt r WHERE (:warehouseId IS NULL OR r.warehouse.id = :warehouseId) AND r.createdAt >= :since")
+    Page<WarehouseReceipt> findRecentWithBasicJoins(@Param("warehouseId") Long warehouseId, @Param("since") java.time.LocalDateTime since, Pageable pageable);
+
+    @Query("SELECT FUNCTION('DAYNAME', r.createdAt), r.type, COALESCE(SUM(d.quantity), 0) FROM WarehouseReceipt r JOIN r.details d WHERE r.createdAt >= :since AND (:warehouseId IS NULL OR r.warehouse.id = :warehouseId) GROUP BY FUNCTION('DAYNAME', r.createdAt), FUNCTION('DAYOFWEEK', r.createdAt), r.type ORDER BY FUNCTION('DAYOFWEEK', r.createdAt)")
+    List<Object[]> aggregateWeeklyFlow(@Param("warehouseId") Long warehouseId, @Param("since") java.time.LocalDateTime since);
 }

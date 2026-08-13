@@ -10,7 +10,8 @@ import lombok.*;
 @Table(name = "warehouse_receipts", indexes = {
     @Index(name = "idx_receipt_status", columnList = "receipt_status"),
     @Index(name = "idx_receipt_type", columnList = "receipt_type"),
-    @Index(name = "idx_receipt_supplier", columnList = "supplier_id")
+    @Index(name = "idx_receipt_supplier", columnList = "supplier_id"),
+    @Index(name = "idx_receipt_created_at", columnList = "created_at")
 })
 @Getter
 @Setter

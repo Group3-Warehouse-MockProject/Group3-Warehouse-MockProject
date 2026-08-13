@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { BarcodeScanner } from "./barcode-scanner";
 import { toast } from "sonner";
 import { PanelLoadingState } from "@/components/loading-state";
+import { useQuery } from "@tanstack/react-query";
 
 export type ReceiptType = "Inbound" | "Outbound";
 
@@ -54,13 +55,6 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const { currentUser, activeWarehouseId } = useApp();
   const isInbound = type === "Inbound";
 
-  // Remote data
-  const [products, setProducts] = useState<ProductOption[]>([]);
-  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
-  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
-  const [users, setUsers] = useState<UserOption[]>([]);
-  const [dataLoading, setDataLoading] = useState(false);
-
   // Form state
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [partner, setPartner] = useState<string>("");
@@ -77,50 +71,81 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
   const userRole = (currentUser?.role as string | undefined)?.toUpperCase();
   const isStaffOrWhManager = userRole === "STAFF" || userRole === "WAREHOUSE_MANAGER";
 
-  // Fetch reference data when modal opens
+  const { data: warehouses = [], isLoading: wLoading, error: wErr } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => {
+      const res = await api.get<WarehouseOption[]>("/warehouses");
+      return res.data;
+    },
+    staleTime: 10 * 60_000,
+    enabled: open,
+  });
+
+  const { data: suppliers = [], isLoading: sLoading, error: sErr } = useQuery({
+    queryKey: ["suppliers", "reference"],
+    queryFn: async () => {
+      const res = await api.get<SupplierOption[]>("/suppliers");
+      return (res.data as any).content ?? res.data;
+    },
+    staleTime: 5 * 60_000,
+    enabled: open,
+  });
+
+  const { data: users = [], isLoading: uLoading, error: uErr } = useQuery({
+    queryKey: ["users", "all"],
+    queryFn: async () => {
+      const res = await api.get<UserOption[]>("/users");
+      return res.data;
+    },
+    staleTime: 5 * 60_000,
+    enabled: open,
+  });
+
+  const { data: products = [], isLoading: pLoading } = useQuery({
+    queryKey: ["products", "reference", warehouseId],
+    queryFn: async () => {
+      const res = await api.get<{ content: ProductOption[] }>("/products", { params: { warehouseIdParam: warehouseId, page: 0, size: 100 } });
+      return res.data?.content ?? (res.data as any);
+    },
+    staleTime: 5 * 60_000,
+    enabled: open && !!warehouseId,
+  });
+
+  const dataLoading = wLoading || sLoading || uLoading || pLoading;
+
   useEffect(() => {
-    if (!open) return;
-    setDataLoading(true);
-    setSubmitError(null);
-
-    Promise.all([
-      api.get<WarehouseOption[]>("/warehouses"),
-      api.get<SupplierOption[]>("/suppliers"),
-      api.get<UserOption[]>("/users"),
-    ])
-      .then(([wRes, sRes, uRes]) => {
-        setWarehouses(wRes.data);
-        setSuppliers((sRes.data as any).content ?? sRes.data);
-        setUsers(uRes.data);
-        // Default warehouse
-        const activeOnly = wRes.data.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
-        let defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? wRes.data[0]?.id ?? "";
-        if (isStaffOrWhManager && currentUser?.warehouseId) {
-          defaultWh = currentUser.warehouseId;
-        }
-        setWarehouseId(defaultWh);
-
-        if (!isInbound) {
-          setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
-          // Default staff assignee for Staff role
-          if (userRole === "STAFF" && currentUser) {
-            const me = uRes.data.find((u) => String(u.id) === String(currentUser.id));
-            if (me) {
-              setAssignedUserId(me.id);
-            }
-          }
-        }
-      })
-      .catch(() => setSubmitError("Failed to load form data. Please try again."))
-      .finally(() => setDataLoading(false));
-  }, [open, activeWarehouseId]);
+    if (wErr || sErr || uErr) {
+      setSubmitError("Failed to load form data. Please try again.");
+    } else {
+      setSubmitError(null);
+    }
+  }, [wErr, sErr, uErr]);
 
   useEffect(() => {
-    if (!open || !warehouseId) return;
-    api.get<{ content: ProductOption[] }>("/products", { params: { warehouseIdParam: warehouseId, page: 0, size: 100 } })
-      .then(res => setProducts(res.data?.content ?? (res.data as any)))
-      .catch(console.error);
-  }, [open, warehouseId]);
+    if (open && warehouses.length > 0 && !warehouseId) {
+      const activeOnly = warehouses.filter((w) => (w.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
+      let defaultWh = activeWarehouseId ?? activeOnly[0]?.id ?? warehouses[0]?.id ?? "";
+      if (isStaffOrWhManager && currentUser?.warehouseId) {
+        defaultWh = currentUser.warehouseId;
+      }
+      setWarehouseId(String(defaultWh));
+
+      if (isInbound) {
+        setReference("INB-" + Math.floor(100000 + Math.random() * 900000));
+      } else {
+        setReference("ORD-" + Math.floor(100000 + Math.random() * 900000));
+      }
+    }
+  }, [open, warehouses, warehouseId, activeWarehouseId, isStaffOrWhManager, currentUser, isInbound]);
+
+  useEffect(() => {
+    if (open && !isInbound && users.length > 0 && userRole === "STAFF" && currentUser) {
+      const me = users.find((u) => String(u.id) === String(currentUser.id));
+      if (me && !assignedUserId) {
+        setAssignedUserId(me.id);
+      }
+    }
+  }, [open, isInbound, users, userRole, currentUser, assignedUserId]);
 
   // Filter products to selected warehouse
   const skuList = useMemo(
@@ -348,7 +373,7 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                       required
                     >
                       <option value="">Select supplier…</option>
-                      {suppliers.map((s) => (
+                      {suppliers.map((s: any) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
                         </option>
@@ -364,16 +389,13 @@ export function ReceiptModal({ open, onClose, type, onSaved }: Props) {
                     />
                   )}
                 </Field>
-                {!isInbound && (
-                  <Field label="Order reference #">
-                    <input
-                      value={reference}
-                      onChange={(e) => setReference(e.target.value)}
-                      className="input"
-                      placeholder="ORD-…"
-                    />
-                  </Field>
-                )}
+                <Field label={isInbound ? "Receipt reference #" : "Order reference #"}>
+                  <input
+                    value={reference}
+                    className="input bg-muted cursor-not-allowed"
+                    readOnly
+                  />
+                </Field>
                 {!isInbound && (
                   <Field label="Payment term">
                     <select

@@ -178,13 +178,19 @@ function StocktakePage() {
     totalPages: number;
     totalElements: number;
   }>({
-    queryKey: ["stocktake", activeWarehouseId, page],
+    queryKey: ["stocktake", activeWarehouseId, page, searchQuery, filters],
     queryFn: async () => {
       const res = await api.get("/stocktake", {
         params: {
           ...(activeWarehouseId ? { warehouseIdParam: activeWarehouseId } : {}),
           page: page - 1,
           size: limit,
+          ...(searchQuery.trim() ? { search: searchQuery.trim() } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.warehouseCode ? { warehouseCode: filters.warehouseCode } : {}),
+          ...(filters.dateFrom ? { dateFrom: filters.dateFrom } : {}),
+          ...(filters.dateTo ? { dateTo: filters.dateTo } : {}),
+          ...(filters.varianceStatus ? { varianceStatus: filters.varianceStatus } : {}),
         },
       });
       return res.data;
@@ -203,6 +209,7 @@ function StocktakePage() {
         return [];
       }
     },
+    staleTime: 10 * 60_000,
   });
   const apiWarehouses = Array.isArray(rawApiWarehouses) ? rawApiWarehouses : [];
 

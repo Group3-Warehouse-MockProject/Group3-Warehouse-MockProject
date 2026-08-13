@@ -153,6 +153,58 @@ public class ProductController {
     }
 
     /**
+     * Streams all matching products as a CSV file to avoid loading all into memory on the frontend.
+     */
+    @GetMapping(value = "/export", produces = "text/csv; charset=utf-8")
+    @Transactional(readOnly = true)
+    public void exportProducts(
+            @RequestParam(required = false) Long warehouseIdParam,
+            @RequestParam(defaultValue = "ACTIVE") String lifecycleStatus,
+            jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        
+        response.setContentType("text/csv; charset=utf-8");
+        response.setHeader("Content-Disposition", "attachment; filename=\"products_export.csv\"");
+
+        User user = resolveUser();
+        Long effectiveWarehouseId = warehouseIdParam;
+        if (user != null) {
+            String roleName = user.getRole().getRoleName().name();
+            if (!roleName.equals("ADMIN") && !roleName.equals("MANAGER")) {
+                effectiveWarehouseId = user.getWarehouse() != null ? user.getWarehouse().getId() : null;
+            }
+        }
+
+        String normalizedLifecycleStatus = lifecycleStatus.trim().toUpperCase();
+        Pageable pageable = PageRequest.of(0, Integer.MAX_VALUE, Sort.by(Sort.Direction.ASC, "name"));
+        Page<Product> productPage = switch (normalizedLifecycleStatus) {
+            case "ACTIVE" -> productRepository.findPageByDeletedStatusWithInventoryAll(false, pageable);
+            case "DEACTIVE" -> productRepository.findPageByDeletedStatusWithInventoryAll(true, pageable);
+            case "ALL" -> productRepository.findPageWithInventoryAll(pageable);
+            default -> throw new IllegalStateException("Unexpected lifecycle status");
+        };
+
+        final Long warehouseId = effectiveWarehouseId;
+        java.io.PrintWriter writer = response.getWriter();
+        writer.println("SKU,Product Name,Brand,Category,Warehouse,Location,Stock,Cost,Price");
+
+        for (Product product : productPage.getContent()) {
+            ProductDTO dto = toProductDto(product, warehouseId);
+            String name = dto.getName() != null ? dto.getName().replace("\"", "\"\"") : "";
+            writer.printf("%s,\"%s\",%s,%s,%s,%s,%d,%s,%s\n",
+                    dto.getSku(),
+                    name,
+                    dto.getBrand() != null ? dto.getBrand() : "",
+                    dto.getCategory() != null ? dto.getCategory() : "",
+                    dto.getWarehouseId() != null ? dto.getWarehouseId() : "",
+                    dto.getLocation() != null ? dto.getLocation() : "",
+                    dto.getStock(),
+                    dto.getCost() != null ? dto.getCost().toString() : "",
+                    dto.getPrice() != null ? dto.getPrice().toString() : "");
+        }
+        writer.flush();
+    }
+
+    /**
      * A product list page contains one row per product. For a warehouse-scoped
      * request its matching inventory is displayed; in the all-warehouses scope
      * stock is aggregated across inventories rather than expanding product × warehouse.

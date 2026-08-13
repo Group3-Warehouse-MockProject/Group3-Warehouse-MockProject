@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { ReceiptModal } from "@/components/receipt-modal";
 import { OutboundDetailModal } from "@/components/outbound-detail-modal";
@@ -92,17 +93,25 @@ const DEFAULT_FILTERS: Filters = {
 function OutboundPage() {
   const { activeWarehouseId, refreshTick } = useApp();
 
-  const [movements, setMovements] = useState<ReceiptMovement[]>([]);
-  const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
-  const [products, setProducts]     = useState<ProductInfo[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
-  const [stats, setStats]           = useState<{ totalReceipts: number; totalRevenue: number; pendingRequests: number; approvedRequests: number } | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: warehouses = [] } = useQuery<WarehouseInfo[]>({
+    queryKey: ["warehouses"],
+    queryFn: async () => (await api.get<WarehouseInfo[]>("/warehouses")).data,
+    staleTime: 10 * 60_000,
+  });
+
+  const { data: products = [] } = useQuery<ProductInfo[]>({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const res = await api.get<{ content: ProductInfo[] }>("/products", { params: { page: 0, size: 15 } });
+      return res.data?.content ?? (res.data as any) ?? [];
+    },
+    staleTime: 10 * 60_000,
+  });
 
   // Server-side pagination state
   const [page, setPage]             = useState(0); // 0-indexed for backend
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalElements, setTotalElements] = useState(0);
   const limit = 15;
 
   // Search & filter state
@@ -126,21 +135,8 @@ function OutboundPage() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  useEffect(() => {
-    Promise.all([
-      api.get<WarehouseInfo[]>("/warehouses"),
-      api.get<{ content: ProductInfo[] }>("/products", { params: { page: 0, size: 15 } })
-    ]).then(([wRes, pRes]) => {
-      setWarehouses(wRes.data);
-      setProducts(pRes.data?.content ?? (pRes.data as any));
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick, searchQuery, filters]);
-
-  function fetchReceipts(currentPage: number = page) {
-    setLoading(true); setError(null);
-    const params: Record<string, string | number> = { type: "OUTBOUND", page: currentPage, size: limit };
+  const receiptParams = useMemo(() => {
+    const params: Record<string, string | number> = { type: "OUTBOUND", page, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
     if (searchQuery.trim()) params.search = searchQuery.trim();
     if (filters.status) params.status = filters.status;
@@ -148,38 +144,46 @@ function OutboundPage() {
     if (filters.warehouse) params.warehouseIdParam = filters.warehouse;
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
-    api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params })
-      .then((res) => {
-        setMovements(res.data?.content ?? (res.data as any));
-        setTotalPages(res.data?.totalPages ?? 1);
-        setTotalElements(res.data?.totalElements ?? 0);
-      })
-      .catch(() => setError("Failed to load outbound requests. Please try again."))
-      .finally(() => setLoading(false));
+    return params;
+  }, [page, activeWarehouseId, searchQuery, filters, limit]);
 
-    const { page: _p, size: _s, ...statParams } = params;
-    api.get<{ totalReceipts: number; totalRevenue: number; pendingRequests: number; approvedRequests: number }>("/receipts/stats", { params: statParams })
-      .then((res) => setStats(res.data))
-      .catch(() => {});
+  const { data: receiptData, isLoading: loading, error: fetchError } = useQuery({
+    queryKey: ["receipts", "OUTBOUND", receiptParams, refreshTick],
+    queryFn: async () => {
+      const res = await api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params: receiptParams });
+      return res.data;
+    },
+  });
+  const movements = receiptData?.content ?? [];
+  const totalPages = receiptData?.totalPages ?? 1;
+  const totalElements = receiptData?.totalElements ?? 0;
+  const error = fetchError ? "Failed to load outbound requests. Please try again." : null;
+
+  const { page: _p, size: _s, ...statParamsRaw } = receiptParams;
+  const { data: stats } = useQuery({
+    queryKey: ["receipts-stats", "OUTBOUND", statParamsRaw, refreshTick],
+    queryFn: async () => {
+      const res = await api.get<{ totalReceipts: number; totalRevenue: number; pendingRequests: number; approvedRequests: number }>("/receipts/stats", { params: statParamsRaw });
+      return res.data;
+    },
+  });
+
+  function refetchReceipts() {
+    queryClient.invalidateQueries({ queryKey: ["receipts", "OUTBOUND"] });
+    queryClient.invalidateQueries({ queryKey: ["receipts-stats", "OUTBOUND"] });
   }
 
   function handleUpdated(updated: ReceiptMovement[]) {
     if (!updated.length) return;
+    queryClient.invalidateQueries({ queryKey: ["receipts", "OUTBOUND"] });
+    queryClient.invalidateQueries({ queryKey: ["receipts-stats", "OUTBOUND"] });
     const rid = updated[0].receiptId;
-    setMovements((prev) =>
-      [...prev.filter((m) => m.receiptId !== rid), ...updated].sort((a, b) => {
-        const timeA = a.createdAt || "";
-        const timeB = b.createdAt || "";
-        const cmp = timeB.localeCompare(timeA);
-        if (cmp !== 0) return cmp;
-        return b.id.localeCompare(a.id);
-      })
-    );
     setSelectedMovement((prev) => (prev?.receiptId === rid ? updated[0] : prev));
   }
 
   function handleDeleted(receiptId: number) {
-    setMovements((prev) => prev.filter((m) => m.receiptId !== receiptId));
+    queryClient.invalidateQueries({ queryKey: ["receipts", "OUTBOUND"] });
+    queryClient.invalidateQueries({ queryKey: ["receipts-stats", "OUTBOUND"] });
   }
 
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
@@ -487,7 +491,7 @@ function OutboundPage() {
         </div>
       </div>
 
-      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Outbound" onSaved={() => fetchReceipts()} />
+      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Outbound" onSaved={() => refetchReceipts()} />
 
       {selectedMovement && (
         <OutboundDetailModal

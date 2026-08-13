@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { ReceiptModal } from "@/components/receipt-modal";
 import { InboundDetailModal } from "@/components/inbound-detail-modal";
@@ -37,6 +38,26 @@ function StatusBadge({ status }: { status?: string }) {
   );
 }
 
+function parseRemark(remark?: string) {
+  if (!remark) return { reference: "", assignee: "", note: "" };
+  const parts = remark.split(" | ");
+  let reference = "";
+  let assignee = "";
+  let note = "";
+  parts.forEach(part => {
+    if (part.startsWith("Ref: ")) {
+      reference = part.replace("Ref: ", "");
+    } else if (part.startsWith("Assignee: ")) {
+      assignee = part.replace("Assignee: ", "");
+    } else {
+      if (!part.startsWith("Ref: ") && !part.startsWith("Assignee: ")) {
+        note = part;
+      }
+    }
+  });
+  return { reference, assignee, note };
+}
+
 interface Filters {
   warehouse: string;
   status: string;
@@ -56,17 +77,25 @@ const DEFAULT_FILTERS: Filters = {
 function InboundPage() {
   const { activeWarehouseId, canSwitchWarehouse, refreshTick } = useApp();
 
-  const [movements, setMovements] = useState<ReceiptMovement[]>([]);
-  const [warehouses, setWarehouses] = useState<WarehouseInfo[]>([]);
-  const [allUsers, setAllUsers]     = useState<{ id: number; fullName: string; role: string; warehouseId?: number | null }[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
-  const [stats, setStats]           = useState<{ totalReceipts: number; totalUnits: number; totalPartners: number } | null>(null);
-  
+  const queryClient = useQueryClient();
+
+  const { data: warehouses = [] } = useQuery<WarehouseInfo[]>({
+    queryKey: ["warehouses"],
+    queryFn: async () => (await api.get<WarehouseInfo[]>("/warehouses")).data,
+    staleTime: 10 * 60_000,
+  });
+
+  const { data: allUsers = [] } = useQuery<any[]>({
+    queryKey: ["users", "all"],
+    queryFn: async () => {
+      const res = await api.get<any>("/users");
+      return Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+    },
+    staleTime: 5 * 60_000,
+  });
+
   // Server-side pagination state
   const [page, setPage]             = useState(0); // 0-indexed for backend
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalElements, setTotalElements] = useState(0);
   const limit = 15;
 
   // Search & filter state
@@ -91,16 +120,8 @@ function InboundPage() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  useEffect(() => {
-    api.get<WarehouseInfo[]>("/warehouses").then((res) => setWarehouses(res.data)).catch(() => {});
-    api.get<any>("/users").then((res) => setAllUsers(Array.isArray(res.data) ? res.data : (res.data?.content ?? []))).catch(() => {});
-  }, []);
-
-  useEffect(() => { fetchReceipts(page); }, [page, activeWarehouseId, refreshTick, searchQuery, filters]);
-
-  function fetchReceipts(currentPage: number = page) {
-    setLoading(true); setError(null);
-    const params: Record<string, string | number> = { type: "INBOUND", page: currentPage, size: limit };
+  const receiptParams = useMemo(() => {
+    const params: Record<string, string | number> = { type: "INBOUND", page, size: limit };
     if (activeWarehouseId) params.warehouseIdParam = activeWarehouseId;
     if (searchQuery.trim()) params.search = searchQuery.trim();
     if (filters.status) params.status = filters.status;
@@ -111,26 +132,41 @@ function InboundPage() {
     if (filters.qtyMax) params.qtyMax = Number(filters.qtyMax);
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
-    api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params })
-      .then((res) => {
-        setMovements(res.data?.content ?? (res.data as any));
-        setTotalPages(res.data?.totalPages ?? 1);
-        setTotalElements(res.data?.totalElements ?? 0);
-      })
-      .catch(() => setError("Failed to load inbound receipts. Please try again."))
-      .finally(() => setLoading(false));
+    return params;
+  }, [page, activeWarehouseId, searchQuery, filters, limit]);
 
-    const { page: _p, size: _s, ...statParams } = params;
-    api.get<{ totalReceipts: number; totalUnits: number; totalPartners: number }>("/receipts/stats", { params: statParams })
-      .then((res) => setStats(res.data))
-      .catch(() => {});
+  const { data: receiptData, isLoading: loading, error: fetchError } = useQuery({
+    queryKey: ["receipts", "INBOUND", receiptParams, refreshTick],
+    queryFn: async () => {
+      const res = await api.get<{ content: ReceiptMovement[], totalPages: number, totalElements: number }>("/receipts", { params: receiptParams });
+      return res.data;
+    },
+  });
+  const movements = receiptData?.content ?? [];
+  const totalPages = receiptData?.totalPages ?? 1;
+  const totalElements = receiptData?.totalElements ?? 0;
+  const error = fetchError ? "Failed to load inbound receipts. Please try again." : null;
+
+  const { page: _p, size: _s, ...statParamsRaw } = receiptParams;
+  const { data: stats } = useQuery({
+    queryKey: ["receipts-stats", "INBOUND", statParamsRaw, refreshTick],
+    queryFn: async () => {
+      const res = await api.get<{ totalReceipts: number; totalUnits: number; totalPartners: number }>("/receipts/stats", { params: statParamsRaw });
+      return res.data;
+    },
+  });
+
+  function refetchReceipts() {
+    queryClient.invalidateQueries({ queryKey: ["receipts", "INBOUND"] });
+    queryClient.invalidateQueries({ queryKey: ["receipts-stats", "INBOUND"] });
   }
 
   function handleUpdated(updated: ReceiptMovement[]) {
     if (!updated.length) return;
+    queryClient.invalidateQueries({ queryKey: ["receipts", "INBOUND"] });
+    queryClient.invalidateQueries({ queryKey: ["receipts-stats", "INBOUND"] });
     const rid = updated[0].receiptId;
     setSelectedMovement((prev) => (prev?.receiptId === rid ? updated[0] : prev));
-    fetchReceipts();
   }
 
   const warehouseCode = (id: string) => warehouses.find((w) => w.id === id)?.code ?? id;
@@ -486,12 +522,14 @@ function InboundPage() {
                       const m = group[0];
                       const totalQty = group.reduce((sum, item) => sum + (item.qty ?? 0), 0);
                       const itemCount = group.length;
+                      const { reference } = parseRemark(m.remark);
+                      const displayId = reference || `R-${m.receiptId}`;
                       return (
                         <div
                           key={m.receiptId}
                           className="grid grid-cols-[90px_minmax(140px,2fr)_minmax(100px,1.5fr)_90px_60px_90px_100px_110px_110px_40px] items-center gap-2 px-4 py-3.5 hover:bg-secondary/30 transition-colors"
                         >
-                          <div className="font-mono text-xs">R-{m.receiptId}</div>
+                          <div className="font-mono text-xs">{displayId}</div>
                           <div>
                             <div className="font-medium flex items-center gap-1.5">
                               <span className="truncate">{m.product}</span>
@@ -568,9 +606,9 @@ function InboundPage() {
         </div>
       </div>
 
-      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Inbound" onSaved={() => fetchReceipts()} />
+      <ReceiptModal open={createOpen} onClose={() => setCreateOpen(false)} type="Inbound" onSaved={() => refetchReceipts()} />
 
-      <InboundImportModal open={importOpen} onClose={() => setImportOpen(false)} onSaved={() => fetchReceipts()} />
+      <InboundImportModal open={importOpen} onClose={() => setImportOpen(false)} onSaved={() => refetchReceipts()} />
 
       {selectedMovement && (
         <InboundDetailModal

@@ -30,4 +30,12 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
                                          @Param("status") Status.SupplierStatus status,
                                          @Param("country") String country,
                                          Pageable pageable);
+    @Query("SELECT COALESCE(AVG(s.rating), 0.0) FROM Supplier s")
+    double getAverageRating();
+
+    @Query("SELECT COALESCE(AVG(s.onTimeDelivery), 0.0) FROM Supplier s")
+    double getAverageOnTimeDelivery();
+
+    @Query("SELECT COUNT(DISTINCT s.country) FROM Supplier s WHERE s.country IS NOT NULL AND s.country != ''")
+    long countDistinctCountries();
 }

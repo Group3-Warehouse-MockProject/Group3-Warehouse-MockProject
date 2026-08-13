@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> {
 
-    @Query("SELECT al FROM ActivityLog al LEFT JOIN al.user u WHERE " +
+    @Query("SELECT al FROM ActivityLog al LEFT JOIN FETCH al.user u WHERE " +
             "(:actionType IS NULL OR al.actionType = :actionType) AND " +
             "(:search IS NULL OR :search = '' OR " +
             "LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +

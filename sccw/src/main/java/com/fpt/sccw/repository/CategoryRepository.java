@@ -18,4 +18,6 @@ public interface CategoryRepository extends JpaRepository<Category, Long>, JpaSp
 
     boolean existsByCode(String code);
     
+    long countByIsDeletedFalse();
+    long countByIsDeletedTrue();
 }

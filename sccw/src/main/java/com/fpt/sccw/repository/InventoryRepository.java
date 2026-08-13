@@ -92,4 +92,21 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
            "LEFT JOIN FETCH i.location " +
            "WHERE i.quantity <= i.lowStockThreshold AND i.lowStockThreshold > 0 AND i.warehouse.id = :warehouseId")
     List<Inventory> findLowStockItemsByWarehouseId(@Param("warehouseId") Long warehouseId);
+    @Query("SELECT COUNT(DISTINCT i.product.id) FROM Inventory i WHERE (:warehouseId IS NULL OR i.warehouse.id = :warehouseId)")
+    long countDistinctProducts(@Param("warehouseId") Long warehouseId);
+
+    @Query("SELECT COALESCE(SUM(i.quantity), 0) FROM Inventory i WHERE (:warehouseId IS NULL OR i.warehouse.id = :warehouseId)")
+    long sumQuantity(@Param("warehouseId") Long warehouseId);
+
+    @Query("SELECT COALESCE(SUM(i.quantity * i.product.cost), 0) FROM Inventory i WHERE (:warehouseId IS NULL OR i.warehouse.id = :warehouseId)")
+    java.math.BigDecimal sumInventoryValue(@Param("warehouseId") Long warehouseId);
+
+    @Query("SELECT COUNT(i) FROM Inventory i WHERE i.lowStockThreshold IS NOT NULL AND i.lowStockThreshold > 0 AND i.quantity IS NOT NULL AND i.quantity <= i.lowStockThreshold AND (:warehouseId IS NULL OR i.warehouse.id = :warehouseId)")
+    long countLowStock(@Param("warehouseId") Long warehouseId);
+
+    @Query("SELECT i.product.category.name, COALESCE(SUM(i.quantity), 0) FROM Inventory i WHERE (:warehouseId IS NULL OR i.warehouse.id = :warehouseId) GROUP BY i.product.category.name ORDER BY SUM(i.quantity) DESC")
+    List<Object[]> aggregateCategoryShare(@Param("warehouseId") Long warehouseId);
+
+    @Query("SELECT COALESCE(SUM(i.quantity), 0) FROM Inventory i WHERE i.product.isDeleted = false AND i.product.category.isDeleted = false")
+    long sumActiveUnitsInStock();
 }

@@ -8,7 +8,7 @@ import jakarta.validation.constraints.*;
 import lombok.*;
 
 @Entity
-@Table(name = "products")
+@Table(name = "products", indexes = {@Index(name = "idx_product_is_deleted", columnList = "is_deleted")})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -54,6 +54,7 @@ public class Product extends BaseEntity {
     private Supplier supplier;
 
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @org.hibernate.annotations.BatchSize(size = 20)
     @Builder.Default
     private List<Inventory> inventories = new ArrayList<>();
 

@@ -147,4 +147,6 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
             @Param("types") List<Status.TransferType> types,
             @Param("keyword") String keyword,
             Pageable pageable);
+    @Query("SELECT COUNT(t) FROM Transfer t WHERE t.status = com.fpt.sccw.entity.Status.TransactionStatus.PENDING AND (:warehouseId IS NULL OR t.warehouse.id = :warehouseId OR t.warehouseDestination.id = :warehouseId)")
+    long countPending(@Param("warehouseId") Long warehouseId);
 }

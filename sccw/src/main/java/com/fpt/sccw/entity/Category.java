@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 @Entity
-@Table(name = "categories")
+@Table(name = "categories", indexes = {@Index(name = "idx_category_is_deleted", columnList = "is_deleted")})
 @Getter
 @Setter
 @NoArgsConstructor

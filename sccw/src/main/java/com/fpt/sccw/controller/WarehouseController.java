@@ -15,6 +15,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,6 +30,7 @@ public class WarehouseController {
     private final UserRepository userRepository;
     private final com.fpt.sccw.repository.InventoryRepository inventoryRepository;
 
+    @Cacheable("warehouses")
     @GetMapping
     @Transactional(readOnly = true)
     public ResponseEntity<List<WarehouseDTO>> getAllWarehouses() {
@@ -51,6 +54,7 @@ public class WarehouseController {
         return ResponseEntity.ok(result);
     }
 
+    @CacheEvict(value = "warehouses", allEntries = true)
     @PostMapping
     @Transactional
     public ResponseEntity<?> createWarehouse(@Valid @RequestBody CreateWarehouseRequest request) {
@@ -113,6 +117,7 @@ public class WarehouseController {
         return ResponseEntity.ok(WarehouseDTO.fromEntity(saved, managerName));
     }
 
+    @CacheEvict(value = "warehouses", allEntries = true)
     @PutMapping("/{id}")
     @Transactional
     public ResponseEntity<?> updateWarehouse(
@@ -198,6 +203,7 @@ public class WarehouseController {
         return ResponseEntity.ok(WarehouseDTO.fromEntity(saved, managerName));
     }
 
+    @CacheEvict(value = "warehouses", allEntries = true)
     @PatchMapping("/{id}/status")
     @Transactional
     public ResponseEntity<?> toggleWarehouseStatus(@PathVariable Long id) {
